@@ -1,0 +1,1 @@
+Place your login background image here and name it 'login_bg.jpg' or 'login_bg.png'.

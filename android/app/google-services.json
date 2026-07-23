@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "1038614173194",
+    "project_id": "bharatpray-f164b",
+    "storage_bucket": "bharatpray-f164b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1038614173194:android:7842261b49096eb749b1f3",
+        "android_client_info": {
+          "package_name": "com.bharatpray.bharat_pray"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1038614173194-hvio1ihm7l62o82pi1pntqcrlghkc24p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.bharatpray.bharat_pray",
+            "certificate_hash": "36e040c0a145f69cd40e25d89345a0f6d641e36b"
+          }
+        },
+        {
+          "client_id": "1038614173194-qu4t9avhcflv94okurjdlrup2vaebiiu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhluxRDK4uIZE4yeMShiliv8LYqPXF6gA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1038614173194-qu4t9avhcflv94okurjdlrup2vaebiiu.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
