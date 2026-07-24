@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'upload_god_photo_screen.dart';
 import 'dart:math' as math;
 import 'dart:io';
+import 'package:audioplayers/audioplayers.dart';
 
 // ─────────────────────────────────────────────
 // Data model for a single Jap entry
@@ -14,6 +15,7 @@ class JapEntry {
   final String mantra;
   final String imagePath;
   final String? detailImagePath;
+  final String? audioUrl;
   final int target;
   int progress; // how many japs done so far
 
@@ -22,6 +24,7 @@ class JapEntry {
     required this.mantra,
     required this.imagePath,
     this.detailImagePath,
+    this.audioUrl,
     this.target = 108,
     this.progress = 0,
   });
@@ -48,6 +51,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       mantra: 'ॐ नमः शिवाय',
       imagePath: 'assets/images/image_4.png',
       detailImagePath: 'assets/images/download_1.png',
+      audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
       target: 108,
       progress: 0,
     ),
@@ -577,6 +581,8 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   late List<int> _shuffledIndices;   // random reveal order (seeded per entry)
   late List<Offset> _jitteredPoints; // organic points corresponding to grid cells
 
+  late final AudioPlayer _audioPlayer;
+
   // Single controller drives the "currently revealing" tile expansion
   late final AnimationController _revealController;
   int? _revealingTile;               // tile index being animated right now
@@ -636,6 +642,13 @@ class _JapDetailScreenState extends State<JapDetailScreen>
 
     _shuffledIndices = _buildShuffled(_completedMalas);
     _jitteredPoints = _generateJitteredPoints(_completedMalas);
+
+    _audioPlayer = AudioPlayer();
+    _audioPlayer.onPlayerComplete.listen((_) {
+      if (mounted) {
+        setState(() => _canTap = true);
+      }
+    });
 
     // Continuous ambient loop for floating embers, halo rotation, flower petals
     _ambientController = AnimationController(
@@ -756,6 +769,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
 
   @override
   void dispose() {
+    _audioPlayer.dispose();
     _revealController.dispose();
     _ambientController.dispose();
     super.dispose();
@@ -812,9 +826,19 @@ class _JapDetailScreenState extends State<JapDetailScreen>
       HapticFeedback.heavyImpact();
     }
 
-    // Cooldown: 500ms cooldown + 500ms animation = 1 second total between japs
-    await Future.delayed(const Duration(milliseconds: 500));
-    if (mounted) setState(() => _canTap = true);
+    // Cooldown: wait for audio to finish, or 500ms if no audio
+    if (widget.entry.audioUrl != null && widget.entry.audioUrl!.isNotEmpty) {
+      try {
+        await _audioPlayer.play(UrlSource(widget.entry.audioUrl!));
+      } catch (e) {
+        debugPrint("Error playing audio: $e");
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) setState(() => _canTap = true);
+      }
+    } else {
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (mounted) setState(() => _canTap = true);
+    }
   }
 
   void _startNextMala() {
@@ -1009,32 +1033,34 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                                             child: child,
                                           );
                                         },
-                                        child: widget.entry.detailImagePath != null
-                                            ? Image.asset(
-                                                widget.entry.detailImagePath!,
-                                                fit: BoxFit.cover,
-                                                gaplessPlayback: true,
-                                                errorBuilder: (context, error, stackTrace) {
-                                                  return _buildFallbackImage();
-                                                },
-                                              )
-                                            : widget.entry.imagePath.startsWith('assets/')
-                                                ? Image.asset(
-                                                    widget.entry.imagePath,
-                                                    fit: BoxFit.cover,
-                                                    gaplessPlayback: true,
-                                                    errorBuilder: (context, error, stackTrace) {
-                                                      return _buildFallbackImage();
-                                                    },
-                                                  )
-                                                : Image.file(
-                                                    File(widget.entry.imagePath),
-                                                    fit: BoxFit.cover,
-                                                    gaplessPlayback: true,
-                                                    errorBuilder: (context, error, stackTrace) {
-                                                      return _buildFallbackImage();
-                                                    },
-                                                  ),
+                                        child: RepaintBoundary(
+                                          child: widget.entry.detailImagePath != null
+                                              ? Image.asset(
+                                                  widget.entry.detailImagePath!,
+                                                  fit: BoxFit.cover,
+                                                  gaplessPlayback: true,
+                                                  errorBuilder: (context, error, stackTrace) {
+                                                    return _buildFallbackImage();
+                                                  },
+                                                )
+                                              : widget.entry.imagePath.startsWith('assets/')
+                                                  ? Image.asset(
+                                                      widget.entry.imagePath,
+                                                      fit: BoxFit.cover,
+                                                      gaplessPlayback: true,
+                                                      errorBuilder: (context, error, stackTrace) {
+                                                        return _buildFallbackImage();
+                                                      },
+                                                    )
+                                                  : Image.file(
+                                                      File(widget.entry.imagePath),
+                                                      fit: BoxFit.cover,
+                                                      gaplessPlayback: true,
+                                                      errorBuilder: (context, error, stackTrace) {
+                                                        return _buildFallbackImage();
+                                                      },
+                                                    ),
+                                        ),
                                       ),
                                     ),
 
