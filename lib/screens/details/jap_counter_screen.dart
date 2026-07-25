@@ -618,8 +618,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   late int _target;
   int _completedMalas = 0;
 
-  static const int _totalTiles = 108;
-  static const int _cols = 6;
+
 
   late List<int> _shuffledIndices;   // random reveal order (seeded per entry)
   late List<Offset> _jitteredPoints; // organic points corresponding to grid cells
@@ -628,12 +627,12 @@ class _JapDetailScreenState extends State<JapDetailScreen>
 
   // Single controller drives the "currently revealing" tile expansion
   late final AnimationController _revealController;
+  late final AnimationController _completionController;
   int? _revealingTile;               // tile index being animated right now
 
   bool _canTap = true;
   double _audioProgress = 0.0;
   Duration _audioDuration = Duration.zero;
-  Duration _audioPosition = Duration.zero;
   double _buttonScale = 1.0;
 
   ImageProvider? _imageProvider;
@@ -654,25 +653,34 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   // Build a fresh shuffled order seeded by entry name + mala number
   List<int> _buildShuffled(int malaSeed) {
     final rng = math.Random(widget.entry.name.hashCode ^ malaSeed);
-    return List.generate(_totalTiles, (i) => i)..shuffle(rng);
+    return List.generate(_target, (i) => i)..shuffle(rng);
   }
 
-  // Generate 108 jittered points so they cover the 336x630 area evenly but randomly
+  // Generate N jittered points (N = _target) so they cover the 336x630 area evenly but randomly
   List<Offset> _generateJitteredPoints(int malaSeed) {
     final rng = math.Random(widget.entry.name.hashCode ^ (malaSeed + 123));
     List<Offset> points = [];
-    for (int i = 0; i < _totalTiles; i++) {
-      final col = i % _cols;
-      final row = i ~/ _cols;
-      
-      final cellCenterX = col * 56.0 + 28.0;
-      final cellCenterY = row * 35.0 + 17.5;
-      
-      // Jitter offsets (bounded to keep point within cell but random)
-      final dx = (rng.nextDouble() * 26.0) - 13.0; // [-13, 13]
-      final dy = (rng.nextDouble() * 16.0) - 8.0;  // [-8, 8]
-      
-      points.add(Offset(cellCenterX + dx, cellCenterY + dy));
+
+    final int cols = math.max(1, math.sqrt(_target / 1.875).round());
+    final int rows = (_target / cols).ceil();
+
+    final double cellWidth = 336.0 / cols;
+    final double cellHeight = 630.0 / rows;
+
+    for (int i = 0; i < _target; i++) {
+      final col = i % cols;
+      final row = i ~/ cols;
+
+      final cellCenterX = col * cellWidth + (cellWidth / 2.0);
+      final cellCenterY = row * cellHeight + (cellHeight / 2.0);
+
+      final dx = (rng.nextDouble() * (cellWidth * 0.4)) - (cellWidth * 0.2);
+      final dy = (rng.nextDouble() * (cellHeight * 0.4)) - (cellHeight * 0.2);
+
+      points.add(Offset(
+        (cellCenterX + dx).clamp(10.0, 326.0),
+        (cellCenterY + dy).clamp(10.0, 620.0),
+      ));
     }
     return points;
   }
@@ -698,7 +706,6 @@ class _JapDetailScreenState extends State<JapDetailScreen>
     _audioPlayer.onPositionChanged.listen((p) {
       if (mounted) {
         setState(() {
-          _audioPosition = p;
           if (_audioDuration.inMilliseconds > 0) {
             _audioProgress = p.inMilliseconds / _audioDuration.inMilliseconds;
           }
@@ -732,9 +739,15 @@ class _JapDetailScreenState extends State<JapDetailScreen>
       duration: const Duration(milliseconds: 500),
     );
 
+    // 1200 ms controller for smooth veil dissolve on completion
+    _completionController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+
     // Restore last reveal point if we are continuing a partially completed mala
     if (_count > 0 && _count < _target) {
-      final lastRevealPos = (_count - 1) % _totalTiles;
+      final lastRevealPos = (_count - 1) % _target;
       final tileIdx = _shuffledIndices[lastRevealPos];
       _lastRevealPoint = _jitteredPoints[tileIdx];
     }
@@ -838,6 +851,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   void dispose() {
     _audioPlayer.dispose();
     _revealController.dispose();
+    _completionController.dispose();
     _ambientController.dispose();
     super.dispose();
   }
@@ -853,7 +867,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
     HapticFeedback.lightImpact();
 
     // Pick the next point in the shuffled order
-    final revealPos = _count % _totalTiles;
+    final revealPos = _count % _target;
     final tileIdx = _shuffledIndices[revealPos];
     final revealPt = _jitteredPoints[tileIdx];
 
@@ -886,9 +900,10 @@ class _JapDetailScreenState extends State<JapDetailScreen>
       });
     });
 
-    // Mala complete?
+    // Mala complete? Smooth 1.2s completion fade & golden sweep transition
     if (_count >= _target) {
-      await Future.delayed(const Duration(milliseconds: 1000));
+      _completionController.forward(from: 0.0);
+      await Future.delayed(const Duration(milliseconds: 1200));
       if (!mounted) return;
       HapticFeedback.heavyImpact();
     }
@@ -924,6 +939,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
     HapticFeedback.mediumImpact();
     setState(() {
       _count = 0;
+      _completedMalas = 0;
       _revealingTile = null;
       _petals.clear();
       _glowRings.clear();
@@ -968,8 +984,8 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   @override
   Widget build(BuildContext context) {
     final bool isCompleted = _completedMalas > 0 || _count >= _target;
-    final int revealedCount = isCompleted ? _totalTiles : _count;
-    final int revealPct = (revealedCount / _totalTiles * 100).toInt();
+    final int revealedCount = isCompleted ? _target : _count;
+    final int revealPct = (_count / _target * 100).toInt();
 
     return PopScope(
       canPop: false,
@@ -1155,7 +1171,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                                     // Particle Canvas & Organic Erase Mask Layer (DivineCardPainter)
                                     Positioned.fill(
                                       child: AnimatedBuilder(
-                                        animation: Listenable.merge([_ambientController, _revealController]),
+                                        animation: Listenable.merge([_ambientController, _revealController, _completionController]),
                                         builder: (context, _) {
                                           return CustomPaint(
                                             painter: DivineCardPainter(
@@ -1165,6 +1181,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                                               target: _target,
                                               revealingTileIndex: _revealingTile,
                                               currentRevealProgress: _revealController.value,
+                                              completionFadeProgress: _completionController.value,
                                               smokeParticles: _smokeParticles,
                                               glowRings: _glowRings,
                                               timeSeconds: _ambientController.value * 10.0,
@@ -1276,35 +1293,79 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                             width: 353,
                             height: 56,
                             child: isCompleted
-                                // Next Jap Button (when completed)
-                                ? GestureDetector(
-                                    onTap: _startNextMala,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        gradient: const LinearGradient(
-                                          colors: [Color(0xFFFF9933), Color(0xFFFF5500)],
-                                        ),
-                                        borderRadius: BorderRadius.circular(12),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: const Color(0xFFFF5500).withValues(alpha: 0.3),
-                                            blurRadius: 12,
-                                            offset: const Offset(0, 4),
+                                ? Row(
+                                    children: [
+                                      Expanded(
+                                        child: GestureDetector(
+                                          onTap: _resetCurrentMala,
+                                          child: Container(
+                                            height: 56,
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF7F2EC),
+                                              borderRadius: BorderRadius.circular(12),
+                                              border: Border.all(
+                                                color: const Color(0xFFFF7700),
+                                                width: 1.5,
+                                              ),
+                                            ),
+                                            child: Center(
+                                              child: Row(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  const Icon(
+                                                    Icons.refresh_rounded,
+                                                    color: Color(0xFFFF7700),
+                                                    size: 20,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    'Retry / Restart',
+                                                    style: GoogleFonts.outfit(
+                                                      color: const Color(0xFFFF7700),
+                                                      fontSize: 14,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
                                           ),
-                                        ],
+                                        ),
                                       ),
-                                      child: Center(
-                                        child: Text(
-                                          'Next Jap',
-                                          style: GoogleFonts.outfit(
-                                            color: Colors.white,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            letterSpacing: 0.5,
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: GestureDetector(
+                                          onTap: _startNextMala,
+                                          child: Container(
+                                            height: 56,
+                                            decoration: BoxDecoration(
+                                              gradient: const LinearGradient(
+                                                colors: [Color(0xFFFF9933), Color(0xFFFF5500)],
+                                              ),
+                                              borderRadius: BorderRadius.circular(12),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: const Color(0xFFFF5500).withValues(alpha: 0.3),
+                                                  blurRadius: 12,
+                                                  offset: const Offset(0, 4),
+                                                ),
+                                              ],
+                                            ),
+                                            child: Center(
+                                              child: Text(
+                                                'Next Jap',
+                                                style: GoogleFonts.outfit(
+                                                  color: Colors.white,
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.bold,
+                                                  letterSpacing: 0.5,
+                                                ),
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
+                                    ],
                                   )
                                 // Standard Note Container (when in progress)
                                 : Container(
@@ -1761,6 +1822,7 @@ class DivineCardPainter extends CustomPainter {
   final int target;
   final int? revealingTileIndex;
   final double currentRevealProgress;
+  final double completionFadeProgress;
   final List<SmokeParticle> smokeParticles;
   final List<GlowRing> glowRings;
   final double timeSeconds;
@@ -1773,6 +1835,7 @@ class DivineCardPainter extends CustomPainter {
     required this.target,
     required this.revealingTileIndex,
     required this.currentRevealProgress,
+    this.completionFadeProgress = 0.0,
     required this.smokeParticles,
     required this.glowRings,
     required this.timeSeconds,
@@ -1888,13 +1951,17 @@ class DivineCardPainter extends CustomPainter {
       }
     }
 
+    final double mistOpacity = isCompleted
+        ? (1.0 - completionFadeProgress).clamp(0.0, 1.0)
+        : 1.0;
+
     // 1. Draw Mist Cover Layer & Organic Erase mask
-    if (!isCompleted) {
-      canvas.saveLayer(Offset.zero & size, Paint());
+    if (mistOpacity > 0.0) {
+      canvas.saveLayer(Offset.zero & size, Paint()..color = Colors.white.withValues(alpha: mistOpacity));
 
       // Warm cream mist canvas
       final paintMist = Paint()
-        ..color = const Color(0xFFF7F2EC)
+        ..color = const Color(0xFFF7F2EC).withValues(alpha: mistOpacity)
         ..style = PaintingStyle.fill;
       canvas.drawRect(Offset.zero & size, paintMist);
 
@@ -1902,7 +1969,7 @@ class DivineCardPainter extends CustomPainter {
       final paintMistTexture = Paint()
         ..shader = RadialGradient(
           colors: [
-            const Color(0xFFEADBCE).withValues(alpha: 0.85),
+            const Color(0xFFEADBCE).withValues(alpha: 0.85 * mistOpacity),
             const Color(0xFFF7F2EC).withValues(alpha: 0.0),
           ],
         ).createShader(Rect.fromCircle(center: Offset(size.width / 2, size.height / 2), radius: 300));
@@ -1912,8 +1979,10 @@ class DivineCardPainter extends CustomPainter {
         ..blendMode = BlendMode.dstOut
         ..style = PaintingStyle.fill;
 
-      // Reduced reveal radius to 45.0 for tighter, more detailed reveal
-      const double baseRevealRadius = 45.0;
+      // Calculate dynamic reveal radius based on target count so N taps reveal the full image proportionally
+      final double cardArea = size.width * size.height;
+      final double areaPerPoint = cardArea / math.max(1, target);
+      final double baseRevealRadius = math.max(28.0, math.sqrt(areaPerPoint / math.pi) * 1.35);
 
       // Draw all previously revealed organic cloud points
       final completedLimit = revealingTileIndex != null ? count - 1 : count;
