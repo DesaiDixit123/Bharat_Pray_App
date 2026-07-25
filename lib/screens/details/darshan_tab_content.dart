@@ -228,22 +228,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
   }
 
   String _resolveImageUrl(String? url) {
-    if (url == null || url.isEmpty) return '';
-    
-    // Replace production domain or localhost with current backend IP
-    final baseDomain = ApiService.baseUrl.replaceAll('/user', ''); // http://192.168.29.116:3020
-    
-    String resolved = url;
-    if (resolved.contains('localhost:3020')) {
-      resolved = resolved.replaceAll('http://localhost:3020', baseDomain);
-    } else if (resolved.contains('api.bharatpray.com')) {
-      resolved = resolved.replaceAll('https://api.bharatpray.com', baseDomain);
-    } else if (!resolved.startsWith('http')) {
-      final isUploads = resolved.contains('uploads/');
-      resolved = '$baseDomain${isUploads ? "" : "/uploads"}/${resolved.startsWith("/") ? resolved.substring(1) : resolved}';
-    }
-    
-    return resolved;
+    return ApiService.resolveImageUrl(url);
   }
 
   Widget _buildRecentSearchChip(String label) {

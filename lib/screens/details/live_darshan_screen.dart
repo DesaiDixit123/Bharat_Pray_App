@@ -396,19 +396,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
   }
 
   String _resolveImageUrl(String url) {
-    if (url.isEmpty) return '';
-    final baseDomain = ApiService.baseUrl.replaceAll('/user', ''); // http://192.168.29.250:3020
-    
-    String resolved = url;
-    if (resolved.contains('localhost:3020')) {
-      resolved = resolved.replaceAll('http://localhost:3020', baseDomain);
-    } else if (resolved.contains('api.bharatpray.com')) {
-      resolved = resolved.replaceAll('https://api.bharatpray.com', baseDomain);
-    } else if (!resolved.startsWith('http')) {
-      final isUploads = resolved.contains('uploads/');
-      resolved = '$baseDomain${isUploads ? "" : "/uploads"}/${resolved.startsWith("/") ? resolved.substring(1) : resolved}';
-    }
-    return resolved;
+    return ApiService.resolveImageUrl(url);
   }
 
   @override

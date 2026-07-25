@@ -4,18 +4,70 @@ import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
 
 class ApiService {
-  // Local Backend Configuration:
-  // - Android Emulator / APK: http://10.0.2.2:3020/user
-  // - Physical Device APK on local Wi-Fi: http://10.192.149.19:3020/user
-  // - Desktop/iOS/Web: http://localhost:3020/user
+  // Hosts for Android:
+  // 1. '127.0.0.1' (Direct USB tunnel via adb reverse tcp:3020 tcp:3020 - 100% reliable)
+  // 2. '192.168.29.113' (Wi-Fi LAN)
+  // 3. '10.0.2.2' (Android Emulator)
+  static String _activeAndroidHost = '127.0.0.1';
+
   static String get baseUrl {
     if (Platform.isAndroid) {
-      // Using physical device IP instead of emulator IP (10.0.2.2)
-      return 'http://10.192.149.19:3020/user';
+      return 'http://$_activeAndroidHost:3020/user';
     }
     return 'http://localhost:3020/user';
   }
 
+  static void _switchHost() {
+    if (_activeAndroidHost == '127.0.0.1') {
+      _activeAndroidHost = '192.168.29.113';
+    } else if (_activeAndroidHost == '192.168.29.113') {
+      _activeAndroidHost = '10.0.2.2';
+    } else {
+      _activeAndroidHost = '127.0.0.1';
+    }
+  }
+
+  static String resolveImageUrl(String? url) {
+    if (url == null || url.trim().isEmpty) return '';
+    final trimmed = url.trim();
+    final baseDomain = baseUrl.replaceAll('/user', '');
+    
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed.replaceFirst(RegExp(r'http://[0-9.]+:3020'), baseDomain)
+                    .replaceFirst(RegExp(r'http://localhost:3020'), baseDomain)
+                    .replaceFirst(RegExp(r'https://api.bharatpray.com'), baseDomain);
+    }
+    
+    final isUploads = trimmed.contains('uploads/');
+    final pathPrefix = trimmed.startsWith('/') ? '' : '/';
+    return '$baseDomain${isUploads ? "" : "/uploads"}$pathPrefix$trimmed';
+  }
+
+  static Future<http.Response> _safeGet(Uri uri, {Map<String, String>? headers}) async {
+    try {
+      return await http.get(uri, headers: headers).timeout(const Duration(seconds: 4));
+    } catch (e) {
+      if (Platform.isAndroid) {
+        _switchHost();
+        final fallbackUri = Uri.parse(uri.toString().replaceFirst(RegExp(r'http://[0-9.]+:3020'), 'http://$_activeAndroidHost:3020'));
+        return await http.get(fallbackUri, headers: headers).timeout(const Duration(seconds: 6));
+      }
+      rethrow;
+    }
+  }
+
+  static Future<http.Response> _safePost(Uri uri, {Map<String, String>? headers, Object? body}) async {
+    try {
+      return await http.post(uri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+    } catch (e) {
+      if (Platform.isAndroid) {
+        _switchHost();
+        final fallbackUri = Uri.parse(uri.toString().replaceFirst(RegExp(r'http://[0-9.]+:3020'), 'http://$_activeAndroidHost:3020'));
+        return await http.post(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 6));
+      }
+      rethrow;
+    }
+  }
 
   // Helper to handle http responses
   static Map<String, dynamic> _processResponse(http.Response response) {
@@ -132,12 +184,40 @@ class ApiService {
 
   // GET /user/darshan/home
   static Future<Map<String, dynamic>> getDarshanHome(String token) async {
-    final response = await http.get(
+    final response = await _safeGet(
       Uri.parse('$baseUrl/darshan/home'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
+    );
+    return _processResponse(response)['Data'];
+  }
+
+  // GET /user/jap/list
+  static Future<List<dynamic>> getJapList(String token) async {
+    final response = await _safeGet(
+      Uri.parse('$baseUrl/jap/list'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    return _processResponse(response)['Data'];
+  }
+
+  // POST /user/jap/sync-progress
+  static Future<Map<String, dynamic>> syncJapProgress(String token, String japId, int count) async {
+    final response = await _safePost(
+      Uri.parse('$baseUrl/jap/sync-progress'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({
+        'japId': japId,
+        'count': count
+      }),
     );
     return _processResponse(response)['Data'];
   }
@@ -319,34 +399,6 @@ class ApiService {
         'darshan_id': darshanId,
         'type': 'share',
         'action': 'increment'
-      }),
-    );
-    return _processResponse(response)['Data'];
-  }
-
-  // GET /user/jap/list
-  static Future<List<dynamic>> getJapList(String token) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/jap/list'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
-    return _processResponse(response)['Data'];
-  }
-
-  // POST /user/jap/sync-progress
-  static Future<Map<String, dynamic>> syncJapProgress(String token, String japId, int count) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/jap/sync-progress'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: json.encode({
-        'japId': japId,
-        'count': count
       }),
     );
     return _processResponse(response)['Data'];
