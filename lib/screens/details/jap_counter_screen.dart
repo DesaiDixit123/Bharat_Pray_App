@@ -6,11 +6,14 @@ import 'upload_god_photo_screen.dart';
 import 'dart:math' as math;
 import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/api_service.dart';
 
 // ─────────────────────────────────────────────
 // Data model for a single Jap entry
 // ─────────────────────────────────────────────
 class JapEntry {
+  final String id;
   final String name;
   final String mantra;
   final String imagePath;
@@ -20,6 +23,7 @@ class JapEntry {
   int progress; // how many japs done so far
 
   JapEntry({
+    required this.id,
     required this.name,
     required this.mantra,
     required this.imagePath,
@@ -28,6 +32,19 @@ class JapEntry {
     this.target = 108,
     this.progress = 0,
   });
+
+  factory JapEntry.fromJson(Map<String, dynamic> json) {
+    return JapEntry(
+      id: json['_id'] ?? '',
+      name: json['name'] ?? '',
+      mantra: json['shlokText'] ?? '',
+      imagePath: json['thumbnail'] ?? '',
+      detailImagePath: json['darshanImage'] ?? json['thumbnail'] ?? '',
+      audioUrl: json['shlokAudio'] ?? '',
+      target: json['targetCount'] ?? 108,
+      progress: json['progress'] ?? 0,
+    );
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -44,42 +61,40 @@ class JapCounterScreen extends StatefulWidget {
 class _JapCounterScreenState extends State<JapCounterScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  
+  bool _isLoading = true;
+  String _token = '';
+  List<JapEntry> _allJaps = [];
 
-  final List<JapEntry> _allJaps = [
-    JapEntry(
-      name: "Shivji's Jap",
-      mantra: 'ॐ नमः शिवाय',
-      imagePath: 'assets/images/image_4.png',
-      detailImagePath: 'assets/images/download_1.png',
-      audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-      target: 108,
-      progress: 0,
-    ),
-    JapEntry(
-      name: "Kali Mataji's Jap",
-      mantra: 'ॐ क्रीं कालिकायै नमः',
-      imagePath: 'assets/images/image_4_1.png',
-      detailImagePath: 'assets/images/image_4_1.png',
-      target: 108,
-      progress: 54,
-    ),
-    JapEntry(
-      name: "Shivji's Jap",
-      mantra: 'ॐ नमः शिवाय',
-      imagePath: 'assets/images/image_4.png',
-      detailImagePath: 'assets/images/download_1.png',
-      target: 108,
-      progress: 108,
-    ),
-    JapEntry(
-      name: "Shivji's Jap",
-      mantra: 'ॐ नमः शिवाय',
-      imagePath: 'assets/images/image_4.png',
-      detailImagePath: 'assets/images/download_1.png',
-      target: 108,
-      progress: 80,
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _fetchJaps();
+  }
+
+  Future<void> _fetchJaps() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _token = prefs.getString('auth_token') ?? '';
+      
+      if (_token.isNotEmpty) {
+        final data = await ApiService.getJapList(_token);
+        if (mounted) {
+          setState(() {
+            _allJaps = data.map((e) => JapEntry.fromJson(e)).toList();
+            _isLoading = false;
+          });
+        }
+      } else {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      debugPrint('Error fetching japs: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   List<JapEntry> get _filteredJaps {
     if (_searchQuery.isEmpty) return _allJaps;
@@ -108,6 +123,15 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       setState(() {
         entry.progress = updatedProgress;
       });
+      
+      // Sync to backend if it's a valid remote Jap (valid MongoDB ObjectId length)
+      if (_token.isNotEmpty && entry.id.isNotEmpty && entry.id.length == 24) {
+        try {
+          await ApiService.syncJapProgress(_token, entry.id, updatedProgress);
+        } catch (e) {
+          debugPrint('Error syncing progress: $e');
+        }
+      }
     }
   }
 
@@ -263,6 +287,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                       _allJaps.insert(
                         0,
                         JapEntry(
+                          id: DateTime.now().millisecondsSinceEpoch.toString(),
                           name: result.name,
                           mantra: result.mantra,
                           imagePath: result.imagePath,
@@ -313,35 +338,51 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
 
             // ── Card List ────────────────────────────
             Expanded(
-              child: filtered.isEmpty
-                  ? Center(
-                      child: Text('No results found',
-                          style: GoogleFonts.outfit(
-                              color: const Color(0xFF2E2A36)
-                                  .withValues(alpha: 0.4),
-                              fontSize: 15)),
-                    )
-                  : ListView.separated(
-                      physics: const BouncingScrollPhysics(),
-                      padding: EdgeInsets.fromLTRB(
-                          16,
-                          0,
-                          16,
-                          widget.isTab
-                              ? 140 +
-                                  MediaQuery.of(context).padding.bottom
-                              : 20),
-                      itemCount: filtered.length,
-                      separatorBuilder: (ctx, idx) =>
-                          const SizedBox(height: 14),
-                      itemBuilder: (context, index) {
-                        final jap = filtered[index];
-                        return _JapCard(
-                          entry: jap,
-                          onTap: () => _openJapDetail(jap),
-                        );
-                      },
-                    ),
+              child: RefreshIndicator(
+                color: const Color(0xFFFF7700),
+                onRefresh: _fetchJaps,
+                child: _isLoading 
+                    ? const Center(
+                        child: CircularProgressIndicator(color: Color(0xFFFF7700)),
+                      )
+                    : filtered.isEmpty
+                    ? ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: [
+                          SizedBox(
+                            height: 300,
+                            child: Center(
+                              child: Text('No results found',
+                                  style: GoogleFonts.outfit(
+                                      color: const Color(0xFF2E2A36)
+                                          .withValues(alpha: 0.4),
+                                      fontSize: 15)),
+                            ),
+                          ),
+                        ],
+                      )
+                    : ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                        padding: EdgeInsets.fromLTRB(
+                            16,
+                            0,
+                            16,
+                            widget.isTab
+                                ? 140 +
+                                    MediaQuery.of(context).padding.bottom
+                                : 20),
+                        itemCount: filtered.length,
+                        separatorBuilder: (ctx, idx) =>
+                            const SizedBox(height: 14),
+                        itemBuilder: (context, index) {
+                          final jap = filtered[index];
+                          return _JapCard(
+                            entry: jap,
+                            onTap: () => _openJapDetail(jap),
+                          );
+                        },
+                      ),
+              ),
             ),
           ],
         ),
@@ -416,9 +457,11 @@ class _JapCard extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               // Background image
-              entry.imagePath.startsWith('assets/')
-                  ? Image.asset(entry.imagePath, fit: BoxFit.cover)
-                  : Image.file(File(entry.imagePath), fit: BoxFit.cover),
+              entry.imagePath.startsWith('http')
+                  ? Image.network(entry.imagePath, fit: BoxFit.cover)
+                  : entry.imagePath.startsWith('assets/')
+                      ? Image.asset(entry.imagePath, fit: BoxFit.cover)
+                      : Image.file(File(entry.imagePath), fit: BoxFit.cover),
 
               // Gradient overlay (transparent top → black bottom)
               Container(
@@ -588,6 +631,9 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   int? _revealingTile;               // tile index being animated right now
 
   bool _canTap = true;
+  double _audioProgress = 0.0;
+  Duration _audioDuration = Duration.zero;
+  Duration _audioPosition = Duration.zero;
   double _buttonScale = 1.0;
 
   ImageProvider? _imageProvider;
@@ -644,9 +690,28 @@ class _JapDetailScreenState extends State<JapDetailScreen>
     _jitteredPoints = _generateJitteredPoints(_completedMalas);
 
     _audioPlayer = AudioPlayer();
+    
+    _audioPlayer.onDurationChanged.listen((d) {
+      if (mounted) setState(() => _audioDuration = d);
+    });
+    
+    _audioPlayer.onPositionChanged.listen((p) {
+      if (mounted) {
+        setState(() {
+          _audioPosition = p;
+          if (_audioDuration.inMilliseconds > 0) {
+            _audioProgress = p.inMilliseconds / _audioDuration.inMilliseconds;
+          }
+        });
+      }
+    });
+
     _audioPlayer.onPlayerComplete.listen((_) {
       if (mounted) {
-        setState(() => _canTap = true);
+        setState(() {
+          _canTap = true;
+          _audioProgress = 0.0;
+        });
       }
     });
 
@@ -758,7 +823,9 @@ class _JapDetailScreenState extends State<JapDetailScreen>
     super.didChangeDependencies();
     if (_imageProvider == null) {
       final path = widget.entry.detailImagePath ?? widget.entry.imagePath;
-      if (path.startsWith('assets/')) {
+      if (path.startsWith('http')) {
+        _imageProvider = NetworkImage(path);
+      } else if (path.startsWith('assets/')) {
         _imageProvider = AssetImage(path);
       } else {
         _imageProvider = FileImage(File(path));
@@ -829,7 +896,13 @@ class _JapDetailScreenState extends State<JapDetailScreen>
     // Cooldown: wait for audio to finish, or 500ms if no audio
     if (widget.entry.audioUrl != null && widget.entry.audioUrl!.isNotEmpty) {
       try {
-        await _audioPlayer.play(UrlSource(widget.entry.audioUrl!));
+        if (widget.entry.audioUrl!.startsWith('http')) {
+          await _audioPlayer.play(UrlSource(widget.entry.audioUrl!));
+        } else if (widget.entry.audioUrl!.startsWith('assets/')) {
+          await _audioPlayer.play(AssetSource(widget.entry.audioUrl!.replaceFirst('assets/', '')));
+        } else {
+          await _audioPlayer.play(DeviceFileSource(widget.entry.audioUrl!));
+        }
       } catch (e) {
         debugPrint("Error playing audio: $e");
         await Future.delayed(const Duration(milliseconds: 500));
@@ -920,15 +993,15 @@ class _JapDetailScreenState extends State<JapDetailScreen>
               ),
             ),
 
-            // ── Absolute Positioned Scrollable Content ────
+            // ── Absolute Positioned Scaled Content ────
             Positioned.fill(
               child: SafeArea(
                 child: Center(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
+                  child: FittedBox(
+                    fit: BoxFit.contain,
                     child: SizedBox(
                       width: 393,
-                      height: 1010,
+                      height: 860,
                       child: Stack(
                         clipBehavior: Clip.none,
                         children: [
@@ -1034,32 +1107,47 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                                           );
                                         },
                                         child: RepaintBoundary(
-                                          child: widget.entry.detailImagePath != null
-                                              ? Image.asset(
-                                                  widget.entry.detailImagePath!,
-                                                  fit: BoxFit.cover,
-                                                  gaplessPlayback: true,
-                                                  errorBuilder: (context, error, stackTrace) {
-                                                    return _buildFallbackImage();
-                                                  },
-                                                )
-                                              : widget.entry.imagePath.startsWith('assets/')
-                                                  ? Image.asset(
+                                          child: widget.entry.detailImagePath != null && widget.entry.detailImagePath!.isNotEmpty
+                                              ? (widget.entry.detailImagePath!.startsWith('http')
+                                                  ? Image.network(
+                                                      widget.entry.detailImagePath!,
+                                                      fit: BoxFit.cover,
+                                                      gaplessPlayback: true,
+                                                      errorBuilder: (context, error, stackTrace) => _buildFallbackImage(),
+                                                    )
+                                                  : widget.entry.detailImagePath!.startsWith('assets/')
+                                                      ? Image.asset(
+                                                          widget.entry.detailImagePath!,
+                                                          fit: BoxFit.cover,
+                                                          gaplessPlayback: true,
+                                                          errorBuilder: (context, error, stackTrace) => _buildFallbackImage(),
+                                                        )
+                                                      : Image.file(
+                                                          File(widget.entry.detailImagePath!),
+                                                          fit: BoxFit.cover,
+                                                          gaplessPlayback: true,
+                                                          errorBuilder: (context, error, stackTrace) => _buildFallbackImage(),
+                                                        ))
+                                              : (widget.entry.imagePath.startsWith('http')
+                                                  ? Image.network(
                                                       widget.entry.imagePath,
                                                       fit: BoxFit.cover,
                                                       gaplessPlayback: true,
-                                                      errorBuilder: (context, error, stackTrace) {
-                                                        return _buildFallbackImage();
-                                                      },
+                                                      errorBuilder: (context, error, stackTrace) => _buildFallbackImage(),
                                                     )
-                                                  : Image.file(
-                                                      File(widget.entry.imagePath),
-                                                      fit: BoxFit.cover,
-                                                      gaplessPlayback: true,
-                                                      errorBuilder: (context, error, stackTrace) {
-                                                        return _buildFallbackImage();
-                                                      },
-                                                    ),
+                                                  : widget.entry.imagePath.startsWith('assets/')
+                                                      ? Image.asset(
+                                                          widget.entry.imagePath,
+                                                          fit: BoxFit.cover,
+                                                          gaplessPlayback: true,
+                                                          errorBuilder: (context, error, stackTrace) => _buildFallbackImage(),
+                                                        )
+                                                      : Image.file(
+                                                          File(widget.entry.imagePath),
+                                                          fit: BoxFit.cover,
+                                                          gaplessPlayback: true,
+                                                          errorBuilder: (context, error, stackTrace) => _buildFallbackImage(),
+                                                        )),
                                         ),
                                       ),
                                     ),
@@ -1284,7 +1372,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
 
                           // ── Bottom Reveal Panel ──────────────
                           Positioned(
-                            top: 868,
+                            top: 730,
                             left: 20,
                             width: 353,
                             height: 131,
@@ -1329,15 +1417,29 @@ class _JapDetailScreenState extends State<JapDetailScreen>
 
                           // ── Orange Circle TAP Button ─────────
                           Positioned(
-                            top: 821,
-                            left: 147,
-                            width: 100,
-                            height: 100,
+                            top: 678, // Adjusted slightly for ring
+                            left: 142, // Adjusted slightly for ring
+                            width: 110,
+                            height: 110,
                             child: GestureDetector(
                               onTap: _increment,
-                              child: Transform.scale(
-                                scale: _buttonScale,
-                                child: Container(
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  if (!_canTap && _audioDuration.inMilliseconds > 0)
+                                    SizedBox(
+                                      width: 110,
+                                      height: 110,
+                                      child: CircularProgressIndicator(
+                                        value: _audioProgress,
+                                        color: const Color(0xFFFF9933),
+                                        backgroundColor: Colors.grey.shade800,
+                                        strokeWidth: 4,
+                                      ),
+                                    ),
+                                  Transform.scale(
+                                    scale: _buttonScale,
+                                    child: Container(
                                   width: 100,
                                   height: 100,
                                   decoration: BoxDecoration(
@@ -1377,13 +1479,15 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                                         fontSize: 22,
                                         fontWeight: FontWeight.bold,
                                         letterSpacing: 1,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
+                                      ), // closes TextStyle
+                                    ), // closes Text
+                                  ), // closes Center
+                                ), // closes Container
+                              ), // closes Transform.scale
+                            ], // closes children
+                          ), // closes Stack
+                        ), // closes GestureDetector
+                      ), // closes Positioned
 
                           // ── Divine Overlay Painter (Floating Embers & Petals over all UI elements) ──
                           Positioned(

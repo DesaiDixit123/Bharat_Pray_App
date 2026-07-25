@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../login_screen.dart';
+import '../../services/api_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   final bool isTab;
@@ -56,7 +57,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (storedPath.startsWith('http')) {
       return storedPath;
     }
-    return 'http://127.0.0.1:3020/uploads/$storedPath';
+    final baseDomain = ApiService.baseUrl.replaceAll('/user', '');
+    return '$baseDomain/uploads/$storedPath';
   }
 
   void _showLogoutConfirmDialog() {

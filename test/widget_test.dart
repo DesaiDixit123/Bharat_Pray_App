@@ -11,7 +11,7 @@ import 'package:bharat_pray/main.dart';
 void main() {
   testWidgets('Bharat Pray App Login screen smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const BharatPrayApp(isLoggedIn: false));
+    await tester.pumpWidget(const BharatPrayApp());
 
     // Verify that the Login screen element is displayed.
     expect(find.text('Email Address'), findsOneWidget);

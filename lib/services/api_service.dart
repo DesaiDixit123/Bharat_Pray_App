@@ -4,8 +4,17 @@ import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
 
 class ApiService {
-  // static const String baseUrl = 'http://192.168.29.205:3021/user';
-   static const String baseUrl = 'https://api.bharatpray.com/user';
+  // Local Backend Configuration:
+  // - Android Emulator / APK: http://10.0.2.2:3020/user
+  // - Physical Device APK on local Wi-Fi: http://10.192.149.19:3020/user
+  // - Desktop/iOS/Web: http://localhost:3020/user
+  static String get baseUrl {
+    if (Platform.isAndroid) {
+      // Using physical device IP instead of emulator IP (10.0.2.2)
+      return 'http://10.192.149.19:3020/user';
+    }
+    return 'http://localhost:3020/user';
+  }
 
 
   // Helper to handle http responses
@@ -310,6 +319,34 @@ class ApiService {
         'darshan_id': darshanId,
         'type': 'share',
         'action': 'increment'
+      }),
+    );
+    return _processResponse(response)['Data'];
+  }
+
+  // GET /user/jap/list
+  static Future<List<dynamic>> getJapList(String token) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/jap/list'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    return _processResponse(response)['Data'];
+  }
+
+  // POST /user/jap/sync-progress
+  static Future<Map<String, dynamic>> syncJapProgress(String token, String japId, int count) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/jap/sync-progress'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({
+        'japId': japId,
+        'count': count
       }),
     );
     return _processResponse(response)['Data'];

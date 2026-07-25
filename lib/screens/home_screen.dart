@@ -296,7 +296,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _startCarouselTimer() {
     _carouselTimer?.cancel();
     _carouselTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
-      if (mounted) {
+      if (mounted && _pageController.hasClients) {
         int nextPage = (_currentPage + 1) % _heroBanners.length;
         _pageController.animateToPage(
           nextPage,
