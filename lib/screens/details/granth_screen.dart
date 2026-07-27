@@ -10,7 +10,7 @@ class GranthScreen extends StatefulWidget {
 
 class _GranthScreenState extends State<GranthScreen> {
   bool _showingChapterDetail = false;
-  String _selectedGranth = "Bhagavad Gita";
+  final String _selectedGranth = "Bhagavad Gita";
   Map<String, dynamic>? _selectedChapter;
 
   final List<Map<String, dynamic>> _gitaChapters = [
@@ -115,7 +115,7 @@ class _GranthScreenState extends State<GranthScreen> {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFFFF7700).withOpacity(0.25),
+                    color: const Color(0xFFFF7700).withValues(alpha: 0.25),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -154,7 +154,7 @@ class _GranthScreenState extends State<GranthScreen> {
                           style: GoogleFonts.outfit(
                             fontSize: 13,
                             fontStyle: FontStyle.italic,
-                            color: Colors.white.withOpacity(0.9),
+                            color: Colors.white.withValues(alpha: 0.9),
                           ),
                         ),
                       ],
@@ -193,7 +193,7 @@ class _GranthScreenState extends State<GranthScreen> {
                   border: Border.all(color: const Color(0xFFEFE6DB)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.02),
+                      color: Colors.black.withValues(alpha: 0.02),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -205,7 +205,7 @@ class _GranthScreenState extends State<GranthScreen> {
                     height: 40,
                     width: 40,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFF7700).withOpacity(0.1),
+                      color: const Color(0xFFFF7700).withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
                     child: Center(
@@ -230,7 +230,7 @@ class _GranthScreenState extends State<GranthScreen> {
                   subtitle: Text(
                     chapter['translation'],
                     style: GoogleFonts.outfit(
-                      color: const Color(0xFF2E2A36).withOpacity(0.5),
+                      color: const Color(0xFF2E2A36).withValues(alpha: 0.5),
                       fontSize: 12,
                     ),
                   ),
@@ -271,13 +271,13 @@ class _GranthScreenState extends State<GranthScreen> {
         // Sub-title bar with font resizing controls
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          color: const Color(0xFFFFEAD2).withOpacity(0.4),
+          color: const Color(0xFFFFEAD2).withValues(alpha: 0.4),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 "Chapter ${_selectedChapter!['number']}: ${_selectedChapter!['translation']}",
-                style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF2E2A36).withOpacity(0.7), fontWeight: FontWeight.bold),
+                style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF2E2A36).withValues(alpha: 0.7), fontWeight: FontWeight.bold),
               ),
               Row(
                 children: [
@@ -324,7 +324,7 @@ class _GranthScreenState extends State<GranthScreen> {
                   border: Border.all(color: const Color(0xFFEFE6DB)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.02),
+                      color: Colors.black.withValues(alpha: 0.02),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -348,7 +348,7 @@ class _GranthScreenState extends State<GranthScreen> {
                       verse['english']!,
                       style: GoogleFonts.outfit(
                         fontSize: _readerFontSize - 3,
-                        color: const Color(0xFF2E2A36).withOpacity(0.75),
+                        color: const Color(0xFF2E2A36).withValues(alpha: 0.75),
                         height: 1.5,
                       ),
                       textAlign: TextAlign.left,

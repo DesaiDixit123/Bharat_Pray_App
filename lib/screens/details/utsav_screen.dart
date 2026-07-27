@@ -71,7 +71,7 @@ class UtsavScreen extends StatelessWidget {
                     border: Border.all(color: const Color(0xFFEFE6DB)),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.02),
+                        color: Colors.black.withValues(alpha: 0.02),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -94,7 +94,7 @@ class UtsavScreen extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFF7700).withOpacity(0.1),
+                              color: const Color(0xFFFF7700).withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -152,7 +152,7 @@ class UtsavScreen extends StatelessWidget {
                         border: Border.all(color: const Color(0xFFEFE6DB)),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.02),
+                            color: Colors.black.withValues(alpha: 0.02),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -218,7 +218,7 @@ class UtsavScreen extends StatelessWidget {
                                 fest['significance'],
                                 style: GoogleFonts.outfit(
                                   fontSize: 13,
-                                  color: const Color(0xFF2E2A36).withOpacity(0.7),
+                                  color: const Color(0xFF2E2A36).withValues(alpha: 0.7),
                                   height: 1.3,
                                 ),
                               ),
@@ -235,7 +235,7 @@ class UtsavScreen extends StatelessWidget {
                                     fest['muhurat'],
                                     style: GoogleFonts.outfit(
                                       fontSize: 12,
-                                      color: const Color(0xFF2E2A36).withOpacity(0.6),
+                                      color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
@@ -285,7 +285,7 @@ class UtsavScreen extends StatelessWidget {
           label,
           style: GoogleFonts.outfit(
             fontSize: 11,
-            color: const Color(0xFF2E2A36).withOpacity(0.4),
+            color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
           ),
         ),
       ],

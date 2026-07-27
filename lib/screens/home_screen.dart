@@ -84,9 +84,11 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token') ?? '';
+      debugPrint('🔑 Retrieved Auth Token from storage: $token');
       if (token.isNotEmpty) {
         final homeData = await ApiService.getDarshanHome(token);
         if (mounted) {
+          debugPrint('👤 Home Screen User Data (ID): ${homeData['user']}');
           setState(() {
             _profileName = homeData['user']['name'] ?? 'User';
             _profilePic = homeData['user']['profile_pic'] ?? '';
@@ -166,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: const Color(0xFFFF7700).withOpacity(0.2),
+                        color: const Color(0xFFFF7700).withValues(alpha: 0.2),
                         width: 1.5,
                       ),
                     ),
@@ -231,7 +233,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         '$greeting, $_profileName $icon',
                         style: GoogleFonts.outfit(
                           fontSize: 13,
-                          color: const Color(0xFF2E2A36).withOpacity(0.6),
+                          color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -322,7 +324,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         borderRadius: BorderRadius.circular(30),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.03),
+                            color: Colors.black.withValues(alpha: 0.03),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -337,12 +339,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         decoration: InputDecoration(
                           hintText: 'Search gods, temples, bhajans...',
                           hintStyle: GoogleFonts.outfit(
-                            color: const Color(0xFF2E2A36).withOpacity(0.4),
+                            color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
                             fontSize: 14,
                           ),
                           prefixIcon: Icon(
                             Icons.search_rounded,
-                            color: const Color(0xFF2E2A36).withOpacity(0.4),
+                            color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
                           ),
                           border: InputBorder.none,
                           contentPadding: const EdgeInsets.symmetric(vertical: 13),
@@ -360,7 +362,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFFF7700).withOpacity(0.3),
+                          color: const Color(0xFFFF7700).withValues(alpha: 0.3),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -673,7 +675,7 @@ class _HomeScreenState extends State<HomeScreen> {
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.dark,
         statusBarBrightness: Brightness.light,
-        systemNavigationBarColor: const Color(0xFFFFE8D6),
+        systemNavigationBarColor: Color(0xFFFFE8D6),
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: Scaffold(
@@ -712,7 +714,7 @@ class _HomeScreenState extends State<HomeScreen> {
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -758,7 +760,7 @@ class _HomeScreenState extends State<HomeScreen> {
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
+                color: Colors.black.withValues(alpha: 0.1),
                 blurRadius: 15,
                 offset: const Offset(0, 8),
               ),
@@ -783,8 +785,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          Colors.black.withOpacity(0.1),
-                          Colors.black.withOpacity(0.75),
+                          Colors.black.withValues(alpha: 0.1),
+                          Colors.black.withValues(alpha: 0.75),
                         ],
                       ),
                     ),
@@ -993,7 +995,7 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(12), // Figma: radius = 12px
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -1049,7 +1051,7 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -1121,7 +1123,7 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -1147,7 +1149,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       end: Alignment.bottomCenter,
                       colors: [
                         Colors.transparent,
-                        Colors.black.withOpacity(0.75),
+                        Colors.black.withValues(alpha: 0.75),
                       ],
                     ),
                   ),
@@ -1281,7 +1283,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: Container(
                 width: double.infinity,
-                color: themeColor.withOpacity(0.12),
+                color: themeColor.withValues(alpha: 0.12),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -1298,7 +1300,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text(
                       day.toUpperCase(), // e.g. "SAT"
                       style: GoogleFonts.outfit(
-                        color: themeColor.withOpacity(0.5),
+                        color: themeColor.withValues(alpha: 0.5),
                         fontSize: 5.5,
                         fontWeight: FontWeight.bold,
                         height: 1.0,
@@ -1325,7 +1327,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -1350,8 +1352,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        themeColor.withOpacity(0.0),
-                        themeColor.withOpacity(0.9), // Rich solid color fade at the bottom
+                        themeColor.withValues(alpha: 0.0),
+                        themeColor.withValues(alpha: 0.9), // Rich solid color fade at the bottom
                       ],
                     ),
                   ),
@@ -1453,7 +1455,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFFF7A00).withOpacity(0.35),
+                      color: const Color(0xFFFF7A00).withValues(alpha: 0.35),
                       blurRadius: 12,
                       offset: const Offset(0, 6),
                     ),
@@ -1606,7 +1608,7 @@ class _HomeScreenState extends State<HomeScreen> {
               content,
               style: GoogleFonts.outfit(
                 fontSize: 14,
-                color: const Color(0xFF2E2A36).withOpacity(0.8),
+                color: const Color(0xFF2E2A36).withValues(alpha: 0.8),
                 height: 1.4,
               ),
             ),
@@ -1647,7 +1649,7 @@ class ArchedNavBarPainter extends CustomPainter {
       ..strokeWidth = 1.0;
 
     final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.04)
+      ..color = Colors.black.withValues(alpha: 0.04)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
 
     // Host rect (the white bar from y=30.5 to y=79.5)

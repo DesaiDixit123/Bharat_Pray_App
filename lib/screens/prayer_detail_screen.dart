@@ -180,12 +180,12 @@ class _PrayerDetailScreenState extends State<PrayerDetailScreen>
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: const Color(0xFFFF7700).withOpacity(0.3),
+                                  color: const Color(0xFFFF7700).withValues(alpha: 0.3),
                                   width: 3.0,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFFFF7700).withOpacity(0.15),
+                                    color: const Color(0xFFFF7700).withValues(alpha: 0.15),
                                     blurRadius: 30,
                                     spreadRadius: 5,
                                   )
@@ -197,7 +197,7 @@ class _PrayerDetailScreenState extends State<PrayerDetailScreen>
                                   fit: BoxFit.cover,
                                   errorBuilder: (context, error, stackTrace) {
                                     return Container(
-                                      color: Colors.orange.withOpacity(0.2),
+                                      color: Colors.orange.withValues(alpha: 0.2),
                                       child: const Center(
                                         child: Text(
                                           '🕉️',
@@ -228,7 +228,7 @@ class _PrayerDetailScreenState extends State<PrayerDetailScreen>
                           'Meditative Devotional Audio',
                           style: GoogleFonts.outfit(
                             fontSize: 14,
-                            color: themeColor.withOpacity(0.5),
+                            color: themeColor.withValues(alpha: 0.5),
                           ),
                         ),
 
@@ -265,11 +265,11 @@ class _PrayerDetailScreenState extends State<PrayerDetailScreen>
                             children: [
                               Text(
                                 _formatDuration(_position),
-                                style: GoogleFonts.outfit(color: themeColor.withOpacity(0.6), fontSize: 12),
+                                style: GoogleFonts.outfit(color: themeColor.withValues(alpha: 0.6), fontSize: 12),
                               ),
                               Text(
                                 _formatDuration(_duration),
-                                style: GoogleFonts.outfit(color: themeColor.withOpacity(0.6), fontSize: 12),
+                                style: GoogleFonts.outfit(color: themeColor.withValues(alpha: 0.6), fontSize: 12),
                               ),
                             ],
                           ),
@@ -348,7 +348,7 @@ class _PrayerDetailScreenState extends State<PrayerDetailScreen>
                                     'Prayer Text (मंत्र)',
                                     style: GoogleFonts.outfit(
                                       fontWeight: FontWeight.bold,
-                                      color: !_showTranslation ? themeColor : themeColor.withOpacity(0.4),
+                                      color: !_showTranslation ? themeColor : themeColor.withValues(alpha: 0.4),
                                     ),
                                     textAlign: TextAlign.center,
                                   ),
@@ -374,7 +374,7 @@ class _PrayerDetailScreenState extends State<PrayerDetailScreen>
                                     'Meaning (अर्थ)',
                                     style: GoogleFonts.outfit(
                                       fontWeight: FontWeight.bold,
-                                      color: _showTranslation ? themeColor : themeColor.withOpacity(0.4),
+                                      color: _showTranslation ? themeColor : themeColor.withValues(alpha: 0.4),
                                     ),
                                     textAlign: TextAlign.center,
                                   ),
@@ -399,7 +399,7 @@ class _PrayerDetailScreenState extends State<PrayerDetailScreen>
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.02),
+                                color: Colors.black.withValues(alpha: 0.02),
                                 blurRadius: 10,
                                 offset: const Offset(0, 4),
                               ),
@@ -420,7 +420,7 @@ class _PrayerDetailScreenState extends State<PrayerDetailScreen>
                               textAlign: TextAlign.left,
                               style: GoogleFonts.outfit(
                                 fontSize: _fontSize - 2,
-                                color: themeColor.withOpacity(0.8),
+                                color: themeColor.withValues(alpha: 0.8),
                                 height: 1.6,
                               ),
                             ),
@@ -456,7 +456,7 @@ class _PrayerDetailScreenState extends State<PrayerDetailScreen>
             width: 4,
             height: isPlaying ? (10 + (index * 7) % 25).toDouble() : 4.0,
             decoration: BoxDecoration(
-              color: const Color(0xFFFF7700).withOpacity(isPlaying ? 0.8 : 0.3),
+              color: const Color(0xFFFF7700).withValues(alpha: isPlaying ? 0.8 : 0.3),
               borderRadius: BorderRadius.circular(2),
             ),
           );

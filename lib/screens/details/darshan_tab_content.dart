@@ -188,8 +188,8 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFFFF7A00).withOpacity(0.05),
-            const Color(0xFFFF7A00).withOpacity(0.15),
+            const Color(0xFFFF7A00).withValues(alpha: 0.05),
+            const Color(0xFFFF7A00).withValues(alpha: 0.15),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -202,7 +202,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFFFF7A00).withOpacity(0.1),
+                color: const Color(0xFFFF7A00).withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -247,7 +247,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.access_time_rounded, size: 12, color: const Color(0xFF2E2A36).withOpacity(0.5)),
+            Icon(Icons.access_time_rounded, size: 12, color: const Color(0xFF2E2A36).withValues(alpha: 0.5)),
             const SizedBox(width: 6),
             Text(
               label,
@@ -290,7 +290,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
           border: Border.all(color: const Color(0xFFEFE6DB)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.02),
+              color: Colors.black.withValues(alpha: 0.02),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -349,7 +349,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.outfit(
                         fontSize: 11,
-                        color: const Color(0xFF2E2A36).withOpacity(0.5),
+                        color: const Color(0xFF2E2A36).withValues(alpha: 0.5),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -433,12 +433,12 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                       decoration: InputDecoration(
                         hintText: 'Search gods, temples...',
                         hintStyle: GoogleFonts.outfit(
-                          color: const Color(0xFF2E2A36).withOpacity(0.4),
+                          color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
                           fontSize: 14,
                         ),
                         prefixIcon: Icon(
                           Icons.search_rounded,
-                          color: const Color(0xFF2E2A36).withOpacity(0.4),
+                          color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
                         ),
                         suffixIcon: _searchController.text.isNotEmpty
                             ? IconButton(
@@ -486,7 +486,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                     style: GoogleFonts.outfit(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: const Color(0xFF2E2A36).withOpacity(0.4),
+                      color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -602,7 +602,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                               'No live Darshans found.',
                               style: GoogleFonts.outfit(
                                 fontSize: 16,
-                                color: const Color(0xFF2E2A36).withOpacity(0.5),
+                                color: const Color(0xFF2E2A36).withValues(alpha: 0.5),
                               ),
                             ),
                           )

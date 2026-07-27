@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../../utils/door_open_page_route.dart';
 import 'set_start_location_screen.dart';
 
 class ContactItem {
@@ -18,7 +19,22 @@ class ContactItem {
 }
 
 class AddMemberScreen extends StatefulWidget {
-  const AddMemberScreen({super.key});
+  final String selectedYatra;
+  final String groupName;
+  final String distance;
+  final String steps;
+  final String duration;
+  final String imageAsset;
+
+  const AddMemberScreen({
+    super.key,
+    this.selectedYatra = 'Somnath Temple',
+    this.groupName = 'Somnath Yatra Group',
+    this.distance = '450 KM',
+    this.steps = '1,08,000 Steps',
+    this.duration = '5 Days',
+    this.imageAsset = 'assets/images/somnath_temple_new.png',
+  });
 
   @override
   State<AddMemberScreen> createState() => _AddMemberScreenState();
@@ -130,9 +146,9 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
       ),
     ];
 
-    // Initialize the selected contacts in the desired order
-    _selectedContacts = _contacts.skip(6).where((c) => c.isSelected).toList();
-    _selectedContacts.addAll(_contacts.take(6).where((c) => c.isSelected));
+    // Initialize the selected contacts list based on the isSelected flag from the master list.
+    // This ensures the initial state is correct.
+    _selectedContacts = _contacts.where((c) => c.isSelected).toList();
   }
 
   @override
@@ -196,6 +212,7 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
       ),
       child: TextField(
         controller: _searchController,
+        textAlignVertical: TextAlignVertical.center,
         style: GoogleFonts.outfit(
           fontSize: 14,
           color: const Color(0xFF2E2A36),
@@ -206,13 +223,18 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
           });
         },
         decoration: InputDecoration(
+          isDense: true,
           hintText: 'Search by name or Phone number',
           hintStyle: GoogleFonts.outfit(
             fontSize: 13,
-            color: const Color(0xFFC8A882).withOpacity(0.6),
+            color: const Color(0xFFC8A882).withValues(alpha: 0.6),
+          ),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 42,
+            minHeight: 42,
           ),
           prefixIcon: Padding(
-            padding: const EdgeInsets.all(11),
+            padding: const EdgeInsets.all(10),
             child: SvgPicture.string(
               _searchSvg,
               width: 18,
@@ -220,7 +242,7 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
             ),
           ),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          contentPadding: const EdgeInsets.symmetric(vertical: 0),
         ),
       ),
     );
@@ -296,7 +318,27 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
           // User Avatar (CircleAvatar)
           CircleAvatar(
             radius: 20,
-            backgroundImage: NetworkImage(contact.avatarUrl),
+            backgroundColor: const Color(0xFFF3E5D7),
+            child: ClipOval(
+              child: Image.network(
+                contact.avatarUrl,
+                width: 40,
+                height: 40,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Center(
+                    child: Text(
+                      contact.name.isNotEmpty ? contact.name[0].toUpperCase() : '?',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF994700),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           // User Details Column
@@ -317,7 +359,7 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
                   contact.phone,
                   style: GoogleFonts.poppins(
                     fontSize: 11,
-                    color: const Color(0xFF2E2A36).withOpacity(0.5),
+                    color: const Color(0xFF2E2A36).withValues(alpha: 0.5),
                   ),
                 ),
               ],
@@ -327,18 +369,18 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
           GestureDetector(
             onTap: () {
               setState(() {
-                if (isSuggested) {
-                  contact.isSelected = !contact.isSelected;
-                  if (contact.isSelected) {
-                    if (!_selectedContacts.contains(contact)) {
-                      _selectedContacts.add(contact);
-                    }
-                  } else {
-                    _selectedContacts.remove(contact);
+                // Toggle selection state
+                contact.isSelected = !contact.isSelected;
+
+                // Sync the _selectedContacts list
+                if (contact.isSelected) {
+                  // Add if not already in the list to avoid duplicates
+                  if (!_selectedContacts.any((c) => c.name == contact.name)) {
+                    _selectedContacts.add(contact);
                   }
                 } else {
-                  contact.isSelected = false;
-                  _selectedContacts.remove(contact);
+                  // Remove from selected list
+                  _selectedContacts.removeWhere((c) => c.name == contact.name);
                 }
               });
             },
@@ -346,7 +388,7 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
               width: 40,
               height: 40,
               alignment: Alignment.center,
-              child: isSuggested
+              child: isSuggested // The button appearance depends on whether it's in the suggested list
                   ? (contact.isSelected ? _buildGreenTickButton() : _buildOrangePlusButton())
                   : _buildCrossButton(),
             ),
@@ -362,12 +404,18 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
       height: 54,
       child: ElevatedButton(
         onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => SetStartLocationScreen(
-                selectedContacts: _selectedContacts,
-              ),
+          Navigator.of(context).push(
+            DoorOpenPageRoute(
+              page: SetStartLocationScreen(
+                  selectedContacts: _selectedContacts,
+                  selectedYatra: widget.selectedYatra,
+                  groupName: widget.groupName,
+                  distance: widget.distance,
+                  steps: widget.steps,
+                  duration: widget.duration,
+                  imageAsset: widget.imageAsset,
+                  isFromCreateGroup: true,
+                ),
             ),
           );
         },
@@ -401,11 +449,16 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
             c.name.toLowerCase().contains(_searchQuery) ||
             c.phone.contains(_searchQuery)).toList();
 
+    // Ensure the isSelected state is always correct by checking against the _selectedContacts list
+    for (var contact in _contacts) {
+      contact.isSelected = _selectedContacts.any((c) => c.name == contact.name);
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFFFE8D6),
       resizeToAvoidBottomInset: true,
       body: SafeArea(
-        bottom: true,
+        bottom: false, // Let the Column handle padding at the bottom
         child: LayoutBuilder(
           builder: (context, constraints) {
             return SingleChildScrollView(
@@ -415,71 +468,73 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
                   minHeight: constraints.maxHeight,
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: IntrinsicHeight(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 15),
-                        // 1. Header (Back button + Title)
-                        _buildHeader(),
-                        
-                        const SizedBox(height: 15),
-                        
-                        // 2. Search Bar
-                        _buildSearchBar(),
-                        
-                        const SizedBox(height: 20),
-                        
-                        // 3. Suggested Section Header
-                        _buildSectionHeader('Suggested'),
-                        
-                        const SizedBox(height: 12),
-                        
-                        // 4. Suggested List Column
-                        ...suggestedList.map((contact) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _buildContactRow(contact, isSuggested: true),
-                        )),
-                        
-                        const SizedBox(height: 15),
-                        
-                        // 5. Selected Section Header
-                        _buildSectionHeader('Selected (${_selectedContacts.length})'),
-                        
-                        const SizedBox(height: 12),
-                        
-                        // 6. Selected List Column
-                        if (_selectedContacts.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            child: Center(
-                              child: Text(
-                                'No members selected yet',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 13,
-                                  color: const Color(0xFF2E2A36).withOpacity(0.4),
-                                ),
-                              ),
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 15),
+                      // 1. Header (Back button + Title)
+                      _buildHeader(),
+
+                      const SizedBox(height: 15),
+
+                      // 2. Search Bar
+                      _buildSearchBar(),
+
+                      const SizedBox(height: 20),
+
+                      // 3. Suggested Section Header
+                      _buildSectionHeader('Suggested'),
+
+                      const SizedBox(height: 12),
+
+                      // 4. Suggested List Column
+                      ...suggestedList.map((contact) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _buildContactRow(contact, isSuggested: true),
+                      )),
+
+                      const SizedBox(height: 15),
+
+                      // 5. Selected Section Header
+                      _buildSectionHeader('Selected (${_selectedContacts.length})'),
+
+                      const SizedBox(height: 12),
+
+                      // 6. Selected List Column
+                      if (_selectedContacts.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Text(
+                            'No members selected yet',
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
                             ),
-                          )
-                        else
-                          ..._selectedContacts.map((contact) => Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: _buildContactRow(contact, isSuggested: false),
-                          )),
-                        
-                        // Spacer pushes Next button to bottom of scroll view content
-                        const Spacer(),
-                        
-                        const SizedBox(height: 15),
-                        
-                        // 7. Next Button
-                        _buildNextButton(),
-                        
-                        const SizedBox(height: 20),
-                      ],
-                    ),
+                          ),
+                        )
+                      else
+                        // Use ListView.builder for dynamic lists for better performance
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _selectedContacts.length,
+                          itemBuilder: (context, index) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _buildContactRow(_selectedContacts[index], isSuggested: false),
+                            );
+                          },
+                        ),
+
+                      const SizedBox(height: 20),
+
+                      // 7. Next Button
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 15.0),
+                        child: _buildNextButton(),
+                      ),
+                    ],
                   ),
                 ),
               ),

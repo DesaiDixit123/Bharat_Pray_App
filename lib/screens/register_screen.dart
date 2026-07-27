@@ -60,7 +60,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           color: const Color(0xFF181818),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: const Color(0xFFFF7A00).withOpacity(0.15),
+            color: const Color(0xFFFF7A00).withValues(alpha: 0.15),
             width: 1.0,
           ),
         ),
@@ -73,7 +73,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -91,13 +91,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
               'Choose how you want to add your photo',
               style: GoogleFonts.outfit(
                 fontSize: 12,
-                color: Colors.white.withOpacity(0.40),
+                color: Colors.white.withValues(alpha: 0.40),
               ),
             ),
             const SizedBox(height: 20),
             // Divider
             Divider(
-              color: Colors.white.withOpacity(0.07),
+              color: Colors.white.withValues(alpha: 0.07),
               height: 1,
               indent: 20,
               endIndent: 20,
@@ -113,7 +113,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFF7A00).withOpacity(0.15),
+                  color: const Color(0xFFFF7A00).withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -134,13 +134,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 'Take a new photo',
                 style: GoogleFonts.outfit(
                   fontSize: 12,
-                  color: Colors.white.withOpacity(0.40),
+                  color: Colors.white.withValues(alpha: 0.40),
                 ),
               ),
               trailing: Icon(
                 Icons.arrow_forward_ios_rounded,
                 size: 14,
-                color: Colors.white.withOpacity(0.25),
+                color: Colors.white.withValues(alpha: 0.25),
               ),
             ),
             // Gallery option
@@ -153,7 +153,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFF7A00).withOpacity(0.15),
+                  color: const Color(0xFFFF7A00).withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -174,13 +174,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 'Choose from your photos',
                 style: GoogleFonts.outfit(
                   fontSize: 12,
-                  color: Colors.white.withOpacity(0.40),
+                  color: Colors.white.withValues(alpha: 0.40),
                 ),
               ),
               trailing: Icon(
                 Icons.arrow_forward_ios_rounded,
                 size: 14,
-                color: Colors.white.withOpacity(0.25),
+                color: Colors.white.withValues(alpha: 0.25),
               ),
             ),
             const SizedBox(height: 16),
@@ -316,7 +316,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: Image.asset(
                 'assets/images/login_bg.png',
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
+                errorBuilder: (_, _, _) => Container(
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
@@ -330,7 +330,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
             // Dark vignette
             Positioned.fill(
-              child: Container(color: Colors.black.withOpacity(0.35)),
+              child: Container(color: Colors.black.withValues(alpha: 0.35)),
             ),
 
             // Back button
@@ -340,10 +340,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: SafeArea(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.3),
+                    color: Colors.black.withValues(alpha: 0.3),
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: Colors.white.withOpacity(0.12),
+                      color: Colors.white.withValues(alpha: 0.12),
                       width: 1.0,
                     ),
                   ),
@@ -370,10 +370,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         padding: const EdgeInsets.only(
                             top: 36, left: 28, right: 28, bottom: 32),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.45),
+                          color: Colors.black.withValues(alpha: 0.45),
                           borderRadius: BorderRadius.circular(24),
                           border: Border.all(
-                            color: Colors.white.withOpacity(0.12),
+                            color: Colors.white.withValues(alpha: 0.12),
                             width: 1.0,
                           ),
                         ),
@@ -403,7 +403,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     CircleAvatar(
                                       radius: 40,
                                       backgroundColor:
-                                          Colors.white.withOpacity(0.08),
+                                          Colors.white.withValues(alpha: 0.08),
                                       backgroundImage: _profilePicFile != null
                                           ? FileImage(_profilePicFile!)
                                           : null,
@@ -412,7 +412,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                               Icons.person_rounded,
                                               size: 40,
                                               color:
-                                                  Colors.white.withOpacity(0.4),
+                                                  Colors.white.withValues(alpha: 0.4),
                                             )
                                           : null,
                                     ),
@@ -442,10 +442,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               height: 48,
                               padding: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.25),
+                                color: Colors.black.withValues(alpha: 0.25),
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: Colors.white.withOpacity(0.10),
+                                  color: Colors.white.withValues(alpha: 0.10),
                                   width: 1.0,
                                 ),
                               ),
@@ -476,7 +476,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               controller: _nameController,
                               hint: 'Enter your full name',
                               icon: Icons.person_outline_rounded,
-                              iconColor: Colors.white.withOpacity(0.4),
+                              iconColor: Colors.white.withValues(alpha: 0.4),
                             ),
                             const SizedBox(height: 16),
 
@@ -550,7 +550,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   text: TextSpan(
                                     text: 'Already have an account? ',
                                     style: GoogleFonts.outfit(
-                                      color: Colors.white.withOpacity(0.5),
+                                      color: Colors.white.withValues(alpha: 0.5),
                                       fontSize: 13,
                                     ),
                                     children: [
@@ -603,7 +603,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             boxShadow: selected
                 ? [
                     BoxShadow(
-                      color: const Color(0xFFFF7A00).withOpacity(0.30),
+                      color: const Color(0xFFFF7A00).withValues(alpha: 0.30),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -618,7 +618,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 size: 16,
                 color: selected
                     ? Colors.white
-                    : Colors.white.withOpacity(0.45),
+                    : Colors.white.withValues(alpha: 0.45),
               ),
               const SizedBox(width: 6),
               Text(
@@ -628,7 +628,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
                   color: selected
                       ? Colors.white
-                      : Colors.white.withOpacity(0.50),
+                      : Colors.white.withValues(alpha: 0.50),
                 ),
               ),
             ],
@@ -661,10 +661,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Container(
       height: 48,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
+        color: Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha: 0.1),
           width: 1.0,
         ),
       ),
@@ -678,7 +678,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           counterText: '',
           hintText: hint,
           hintStyle: GoogleFonts.outfit(
-            color: Colors.white.withOpacity(0.3),
+            color: Colors.white.withValues(alpha: 0.3),
             fontSize: 15,
           ),
           prefixIcon: Icon(icon, color: iconColor, size: 20),

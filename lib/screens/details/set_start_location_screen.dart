@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'add_member_screen.dart'; // To access ContactItem
+import 'start_yatra_overview_screen.dart';
 
 class LocationBadgeStyle {
   final Color backgroundColor;
@@ -11,10 +12,24 @@ class LocationBadgeStyle {
 
 class SetStartLocationScreen extends StatefulWidget {
   final List<ContactItem> selectedContacts;
+  final String selectedYatra;
+  final String groupName;
+  final String distance;
+  final String steps;
+  final String duration;
+  final String imageAsset;
+  final bool isFromCreateGroup;
 
   const SetStartLocationScreen({
     super.key,
     required this.selectedContacts,
+    this.selectedYatra = 'Somnath Temple',
+    this.groupName = 'Somnath Yatra Group',
+    this.distance = '450 KM',
+    this.steps = '1,08,000 Steps',
+    this.duration = '5 Days',
+    this.imageAsset = 'assets/images/somnath_temple_new.png',
+    this.isFromCreateGroup = false,
   });
 
   @override
@@ -315,13 +330,19 @@ class _SetStartLocationScreenState extends State<SetStartLocationScreen> {
       height: 54,
       child: ElevatedButton(
         onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Yatra Group created successfully!'),
-              backgroundColor: Color(0xFFFF7A00),
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => StartYatraOverviewScreen(
+                title: widget.selectedYatra,
+                distance: widget.distance,
+                steps: widget.steps,
+                duration: widget.duration,
+                sangha: widget.groupName,
+                imageAsset: widget.imageAsset,
+                isFromCreateGroup: widget.isFromCreateGroup,
+              ),
             ),
           );
-          Navigator.of(context).popUntil((route) => route.isFirst);
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFFFF7A00),

@@ -26,6 +26,36 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
 </svg>''';
 
   @override
+  void initState() {
+    super.initState();
+    _groupNameController.text = 'Somnath Yatra Group';
+    _descriptionController.text = 'Let’s walk together towards Somnath🙏';
+    _selectedYatra = 'Somnath Temple';
+    _distanceController.text = '450 KM';
+    _stepsController.text = '1,08,000 Steps';
+  }
+
+  String _resolveImageAsset(String? yatraName) {
+    switch (yatraName) {
+      case 'Dwarkadhish Temple':
+        return 'assets/images/dwarka_temple.jpg';
+      case 'Somnath Temple':
+      default:
+        return 'assets/images/somnath_temple_new.png';
+    }
+  }
+
+  String _resolveDuration(String? yatraName) {
+    switch (yatraName) {
+      case 'Dwarkadhish Temple':
+        return '4 Days';
+      case 'Somnath Temple':
+      default:
+        return '5 Days';
+    }
+  }
+
+  @override
   void dispose() {
     _groupNameController.dispose();
     _descriptionController.dispose();
@@ -128,7 +158,7 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
         hintText: hint,
         hintStyle: GoogleFonts.outfit(
           fontSize: 14,
-          color: const Color(0xFFC8A882).withOpacity(0.6),
+          color: const Color(0xFFC8A882).withValues(alpha: 0.6),
         ),
         fillColor: Colors.white,
         filled: true,
@@ -152,13 +182,13 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
     required ValueChanged<String?> onChanged,
   }) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       dropdownColor: Colors.white, // Style dropdown menu background to solid white
       hint: Text(
         hint,
         style: GoogleFonts.outfit(
           fontSize: 14,
-          color: const Color(0xFFC8A882).withOpacity(0.6),
+          color: const Color(0xFFC8A882).withValues(alpha: 0.6),
         ),
       ),
       style: GoogleFonts.outfit(
@@ -219,7 +249,7 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
                 hintText: 'Name',
                 hintStyle: GoogleFonts.outfit(
                   fontSize: 14,
-                  color: const Color(0xFFC8A882).withOpacity(0.6),
+                  color: const Color(0xFFC8A882).withValues(alpha: 0.6),
                 ),
                 fillColor: Colors.white,
                 filled: true,
@@ -246,10 +276,21 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
       height: 54,
       child: ElevatedButton(
         onPressed: () {
-          Navigator.push(
-            context,
+          final selectedYatra = _selectedYatra ?? 'Somnath Temple';
+          final groupName = _groupNameController.text.trim();
+          final distance = _distanceController.text.trim();
+          final steps = _stepsController.text.trim();
+
+          Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (context) => const AddMemberScreen(),
+              builder: (context) => AddMemberScreen(
+                selectedYatra: selectedYatra,
+                groupName: groupName.isEmpty ? 'Somnath Yatra Group' : groupName,
+                distance: distance.isEmpty ? '450 KM' : distance,
+                steps: steps.isEmpty ? '1,08,000 Steps' : steps,
+                duration: _resolveDuration(selectedYatra),
+                imageAsset: _resolveImageAsset(selectedYatra),
+              ),
             ),
           );
         },

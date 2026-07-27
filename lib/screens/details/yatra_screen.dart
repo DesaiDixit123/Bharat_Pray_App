@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'create_yatra_group_screen.dart';
+import 'start_yatra_overview_screen.dart';
 
 
 class YatraItem {
@@ -37,6 +38,21 @@ class YatraScreen extends StatefulWidget {
 
 class _YatraScreenState extends State<YatraScreen> {
   String _profileName = 'Shiv';
+
+  void _openStartYatraOverview(YatraItem item) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => StartYatraOverviewScreen(
+          title: item.title,
+          distance: item.distance,
+          steps: item.steps,
+          duration: item.duration,
+          sangha: item.groupSize,
+          imageAsset: item.image,
+        ),
+      ),
+    );
+  }
 
   static const String _pinSvg = '''<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g clip-path="url(#clip0_279_1650)">
@@ -138,7 +154,7 @@ class _YatraScreenState extends State<YatraScreen> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
-                color: const Color(0xFFFF7A00).withOpacity(0.2),
+                color: const Color(0xFFFF7A00).withValues(alpha: 0.2),
                 width: 1.5,
               ),
             ),
@@ -174,7 +190,7 @@ class _YatraScreenState extends State<YatraScreen> {
                   'Good Morning, $_profileName ☀️',
                   style: GoogleFonts.outfit(
                     fontSize: 13,
-                    color: const Color(0xFF2E2A36).withOpacity(0.6),
+                    color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
                   ),
                 ),
               ],
@@ -264,7 +280,7 @@ class _YatraScreenState extends State<YatraScreen> {
                   hintText: 'Search your yatra destination',
                   hintStyle: GoogleFonts.outfit(
                     fontSize: 13,
-                    color: const Color(0xFFC8A882).withOpacity(0.6),
+                    color: const Color(0xFFC8A882).withValues(alpha: 0.6),
                   ),
                   prefixIcon: Padding(
                     padding: const EdgeInsets.all(12),
@@ -308,7 +324,7 @@ class _YatraScreenState extends State<YatraScreen> {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFFF7A00).withOpacity(0.35),
+                color: const Color(0xFFFF7A00).withValues(alpha: 0.35),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -474,7 +490,7 @@ class _YatraScreenState extends State<YatraScreen> {
             border: Border.all(color: const Color(0xFFEFE6DB), width: 1.0),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -527,7 +543,7 @@ class _YatraScreenState extends State<YatraScreen> {
                       child: Container(
                         padding: const EdgeInsets.only(top: 4, right: 10, bottom: 4, left: 10),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFF7A00).withOpacity(0.08), // var(--color-orange-50) translucent background
+                          color: const Color(0xFFFF7A00).withValues(alpha: 0.08), // var(--color-orange-50) translucent background
                           borderRadius: BorderRadius.circular(9999),
                           border: Border.all(color: const Color(0xFFFF7A00), width: 1.0),
                         ),
@@ -610,7 +626,11 @@ class _YatraScreenState extends State<YatraScreen> {
               const SizedBox(width: 16),
               // Button
               GestureDetector(
-                onTap: () {},
+                onTap: () {
+                  if (isPopular) {
+                    _openStartYatraOverview(item);
+                  }
+                },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   alignment: Alignment.center,
@@ -619,7 +639,7 @@ class _YatraScreenState extends State<YatraScreen> {
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFFF7A00).withOpacity(0.2),
+                        color: const Color(0xFFFF7A00).withValues(alpha: 0.2),
                         blurRadius: 6,
                         offset: const Offset(0, 3),
                       ),

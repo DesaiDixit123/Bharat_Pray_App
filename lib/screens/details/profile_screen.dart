@@ -76,14 +76,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         content: Text(
           "Are you sure you want to log out of Bharat Pray?",
-          style: GoogleFonts.outfit(color: const Color(0xFF2E2A36).withOpacity(0.8)),
+          style: GoogleFonts.outfit(color: const Color(0xFF2E2A36).withValues(alpha: 0.8)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text(
               "Cancel",
-              style: GoogleFonts.outfit(color: const Color(0xFF2E2A36).withOpacity(0.6), fontWeight: FontWeight.bold),
+              style: GoogleFonts.outfit(color: const Color(0xFF2E2A36).withValues(alpha: 0.6), fontWeight: FontWeight.bold),
             ),
           ),
           ElevatedButton(
@@ -163,7 +163,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         border: Border.all(color: const Color(0xFFFF7700), width: 2.0),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFFF7700).withOpacity(0.15),
+                            color: const Color(0xFFFF7700).withValues(alpha: 0.15),
                             blurRadius: 15,
                           ),
                         ],
@@ -189,7 +189,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       '$_userEmail • $_userPhone',
                       style: GoogleFonts.outfit(
                         fontSize: 13,
-                        color: const Color(0xFF2E2A36).withOpacity(0.6),
+                        color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
                       ),
                     ),
                   ],
@@ -233,7 +233,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   border: Border.all(color: const Color(0xFFEFE6DB)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.02),
+                      color: Colors.black.withValues(alpha: 0.02),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -271,7 +271,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       subtitle: Text(
                         "Currently set to English",
-                        style: GoogleFonts.outfit(color: const Color(0xFF2E2A36).withOpacity(0.5), fontSize: 12),
+                        style: GoogleFonts.outfit(color: const Color(0xFF2E2A36).withValues(alpha: 0.5), fontSize: 12),
                       ),
                       trailing: DropdownButton<String>(
                         value: _selectedLanguage,
@@ -346,7 +346,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         Text(
           label,
-          style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF2E2A36).withOpacity(0.5)),
+          style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF2E2A36).withValues(alpha: 0.5)),
         ),
       ],
     );
@@ -366,13 +366,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       subtitle: Text(
         subtitle,
-        style: GoogleFonts.outfit(color: const Color(0xFF2E2A36).withOpacity(0.5), fontSize: 12),
+        style: GoogleFonts.outfit(color: const Color(0xFF2E2A36).withValues(alpha: 0.5), fontSize: 12),
       ),
       value: value,
-      activeColor: const Color(0xFFFF7700),
-      activeTrackColor: const Color(0xFFFF7700).withOpacity(0.2),
+      activeThumbColor: const Color(0xFFFF7700),
+      activeTrackColor: const Color(0xFFFF7700).withValues(alpha: 0.2),
       inactiveThumbColor: Colors.grey,
-      inactiveTrackColor: Colors.grey.withOpacity(0.15),
+      inactiveTrackColor: Colors.grey.withValues(alpha: 0.15),
       onChanged: onChanged,
     );
   }

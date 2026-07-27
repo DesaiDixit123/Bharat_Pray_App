@@ -26,7 +26,7 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
   };
 
   bool _isDiyaLit = false;
-  double _diyaScale = 1.0;
+  final double _diyaScale = 1.0;
 
   final List<String> _vidhiSteps = [
     "Step 1: Clean the prayer altar and place a red cloth on it.",
@@ -66,7 +66,7 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Colors.black.withOpacity(0.4),
+                            Colors.black.withValues(alpha: 0.4),
                             Colors.transparent,
                             const Color(0xFFFFE8D6),
                           ],
@@ -117,7 +117,7 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
                     border: Border.all(color: const Color(0xFFEFE6DB)),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.02),
+                        color: Colors.black.withValues(alpha: 0.02),
                         blurRadius: 12,
                         offset: const Offset(0, 5),
                       ),
@@ -171,7 +171,7 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
                                       ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.orange.withOpacity(0.8),
+                                          color: Colors.orange.withValues(alpha: 0.8),
                                           blurRadius: 15,
                                           spreadRadius: 3,
                                         ),
@@ -276,7 +276,7 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
                               step,
                               style: GoogleFonts.outfit(
                                 fontSize: 13,
-                                color: const Color(0xFF2E2A36).withOpacity(0.8),
+                                color: const Color(0xFF2E2A36).withValues(alpha: 0.8),
                                 height: 1.4,
                               ),
                             ),

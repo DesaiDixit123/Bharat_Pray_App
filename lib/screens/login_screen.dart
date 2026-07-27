@@ -127,9 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
       GoogleSignInAccount? googleUser = await _googleSignIn.signInSilently();
 
       // If silent sign-in is not possible, trigger interactive sign-in dialog
-      if (googleUser == null) {
-        googleUser = await _googleSignIn.signIn();
-      }
+      googleUser ??= await _googleSignIn.signIn();
 
       if (googleUser == null) {
         setState(() {
@@ -147,7 +145,9 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       final token = response['Data']['accesstoken'];
+      debugPrint('✅ Google Sign-In successful. Auth Token: $token');
       final userData = response['Data']['userdata'];
+      debugPrint('👤 Google Sign-In User Data (ID): $userData');
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('is_logged_in', true);
@@ -181,7 +181,7 @@ class _LoginScreenState extends State<LoginScreen> {
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.light,
         statusBarBrightness: Brightness.dark,
-        systemNavigationBarColor: const Color(0xFF1A1225),
+        systemNavigationBarColor: Color(0xFF1A1225),
         systemNavigationBarIconBrightness: Brightness.light,
       ),
       child: Scaffold(
@@ -212,7 +212,7 @@ class _LoginScreenState extends State<LoginScreen> {
             // Dark vignette overlay
             Positioned.fill(
               child: Container(
-                color: Colors.black.withOpacity(0.35),
+                color: Colors.black.withValues(alpha: 0.35),
               ),
             ),
 
@@ -234,10 +234,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           bottom: 32,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.45),
+                          color: Colors.black.withValues(alpha: 0.45),
                           borderRadius: BorderRadius.circular(24),
                           border: Border.all(
-                            color: Colors.white.withOpacity(0.12),
+                            color: Colors.white.withValues(alpha: 0.12),
                             width: 1.0,
                           ),
                         ),
@@ -258,10 +258,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             Container(
                               height: 52,
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.04),
+                                color: Colors.white.withValues(alpha: 0.04),
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
-                                  color: Colors.white.withOpacity(0.1),
+                                  color: Colors.white.withValues(alpha: 0.1),
                                   width: 1.0,
                                 ),
                               ),
@@ -272,12 +272,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                 decoration: InputDecoration(
                                   hintText: 'name@example.com',
                                   hintStyle: GoogleFonts.outfit(
-                                    color: Colors.white.withOpacity(0.3),
+                                    color: Colors.white.withValues(alpha: 0.3),
                                     fontSize: 16,
                                   ),
                                   prefixIcon: Icon(
                                     Icons.mail_outline_rounded,
-                                    color: Colors.white.withOpacity(0.4),
+                                    color: Colors.white.withValues(alpha: 0.4),
                                     size: 22,
                                   ),
                                   border: InputBorder.none,
@@ -366,7 +366,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               children: [
                                 Expanded(
                                   child: Divider(
-                                    color: Colors.white.withOpacity(0.12),
+                                    color: Colors.white.withValues(alpha: 0.12),
                                     thickness: 1,
                                   ),
                                 ),
@@ -375,7 +375,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   child: Text(
                                     'OR',
                                     style: GoogleFonts.outfit(
-                                      color: Colors.white.withOpacity(0.3),
+                                      color: Colors.white.withValues(alpha: 0.3),
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -383,7 +383,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 Expanded(
                                   child: Divider(
-                                    color: Colors.white.withOpacity(0.12),
+                                    color: Colors.white.withValues(alpha: 0.12),
                                     thickness: 1,
                                   ),
                                 ),
@@ -397,9 +397,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               height: 52,
                               child: OutlinedButton(
                                 style: OutlinedButton.styleFrom(
-                                  backgroundColor: Colors.white.withOpacity(0.04),
+                                  backgroundColor: Colors.white.withValues(alpha: 0.04),
                                   side: BorderSide(
-                                    color: Colors.white.withOpacity(0.12),
+                                    color: Colors.white.withValues(alpha: 0.12),
                                     width: 1.0,
                                   ),
                                   shape: RoundedRectangleBorder(
@@ -447,7 +447,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   text: TextSpan(
                                     text: "Don't have an account? ",
                                     style: GoogleFonts.outfit(
-                                      color: Colors.white.withOpacity(0.6),
+                                      color: Colors.white.withValues(alpha: 0.6),
                                       fontSize: 14,
                                     ),
                                     children: [

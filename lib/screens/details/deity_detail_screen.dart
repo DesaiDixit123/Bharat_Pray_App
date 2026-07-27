@@ -70,7 +70,7 @@ class _DeityDetailScreenState extends State<DeityDetailScreen> with SingleTicker
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Colors.black.withOpacity(0.4),
+                            Colors.black.withValues(alpha: 0.4),
                             Colors.transparent,
                             const Color(0xFFFFE8D6),
                           ],
@@ -114,7 +114,7 @@ class _DeityDetailScreenState extends State<DeityDetailScreen> with SingleTicker
                             Text(
                               "Virtual Darshan Portal",
                               style: GoogleFonts.outfit(
-                                color: const Color(0xFF2E2A36).withOpacity(0.6),
+                                color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
                                 fontWeight: FontWeight.w500,
                                 fontSize: 13,
                               ),
@@ -138,7 +138,7 @@ class _DeityDetailScreenState extends State<DeityDetailScreen> with SingleTicker
                     border: Border.all(color: const Color(0xFFEFE6DB)),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.02),
+                        color: Colors.black.withValues(alpha: 0.02),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -230,7 +230,7 @@ class _DeityDetailScreenState extends State<DeityDetailScreen> with SingleTicker
           widget.description,
           style: GoogleFonts.outfit(
             fontSize: 14,
-            color: const Color(0xFF2E2A36).withOpacity(0.8),
+            color: const Color(0xFF2E2A36).withValues(alpha: 0.8),
             height: 1.5,
           ),
         ),
@@ -255,7 +255,7 @@ class _DeityDetailScreenState extends State<DeityDetailScreen> with SingleTicker
                   r,
                   style: GoogleFonts.outfit(
                     fontSize: 13,
-                    color: const Color(0xFF2E2A36).withOpacity(0.7),
+                    color: const Color(0xFF2E2A36).withValues(alpha: 0.7),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -331,7 +331,7 @@ class _DeityDetailScreenState extends State<DeityDetailScreen> with SingleTicker
               height: 50,
               width: 50,
               decoration: BoxDecoration(
-                color: isActive ? const Color(0xFFFF7700).withOpacity(0.15) : const Color(0xFFFFE8D6),
+                color: isActive ? const Color(0xFFFF7700).withValues(alpha: 0.15) : const Color(0xFFFFE8D6),
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: isActive ? const Color(0xFFFF7700) : const Color(0xFFEFE6DB),

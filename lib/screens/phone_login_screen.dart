@@ -2,7 +2,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'otp_verification_screen.dart';
 import 'register_screen.dart';
 import '../services/api_service.dart';
@@ -31,7 +30,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.light,
         statusBarBrightness: Brightness.dark,
-        systemNavigationBarColor: const Color(0xFF1A1225),
+        systemNavigationBarColor: Color(0xFF1A1225),
         systemNavigationBarIconBrightness: Brightness.light,
       ),
       child: Scaffold(
@@ -62,7 +61,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
           // Vignette overlay
           Positioned.fill(
             child: Container(
-              color: Colors.black.withOpacity(0.35),
+              color: Colors.black.withValues(alpha: 0.35),
             ),
           ),
 
@@ -73,10 +72,10 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
             child: SafeArea(
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.3),
+                  color: Colors.black.withValues(alpha: 0.3),
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: Colors.white.withOpacity(0.12),
+                    color: Colors.white.withValues(alpha: 0.12),
                     width: 1.0,
                   ),
                 ),
@@ -101,10 +100,10 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(28.0),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.45),
+                        color: Colors.black.withValues(alpha: 0.45),
                         borderRadius: BorderRadius.circular(32),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.12),
+                          color: Colors.white.withValues(alpha: 0.12),
                           width: 1.2,
                         ),
                       ),
@@ -127,10 +126,10 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                           // Phone Text Field (Figma: Max 10 digits, numeric only)
                           Container(
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.04),
+                              color: Colors.white.withValues(alpha: 0.04),
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: Colors.white.withOpacity(0.1),
+                                color: Colors.white.withValues(alpha: 0.1),
                                 width: 1.0,
                               ),
                             ),
@@ -146,7 +145,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                                 counterText: '',
                                 hintText: 'Enter your number',
                                 hintStyle: GoogleFonts.outfit(
-                                  color: Colors.white.withOpacity(0.3),
+                                  color: Colors.white.withValues(alpha: 0.3),
                                   fontSize: 16,
                                 ),
                                 prefixIcon: const Icon(
@@ -314,7 +313,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                                 text: TextSpan(
                                   text: "Don't have an account? ",
                                   style: GoogleFonts.outfit(
-                                    color: Colors.white.withOpacity(0.6),
+                                    color: Colors.white.withValues(alpha: 0.6),
                                     fontSize: 14,
                                   ),
                                   children: [

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -266,9 +265,9 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        Colors.black.withOpacity(0.55),
-                        Colors.black.withOpacity(0.75),
-                        const Color(0xFF07040D).withOpacity(0.98),
+                        Colors.black.withValues(alpha: 0.55),
+                        Colors.black.withValues(alpha: 0.75),
+                        const Color(0xFF07040D).withValues(alpha: 0.98),
                       ],
                     ),
                   ),
@@ -300,8 +299,8 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                                     shape: BoxShape.circle,
                                     gradient: RadialGradient(
                                       colors: [
-                                        const Color(0xFFFF7A00).withOpacity(0.6),
-                                        const Color(0xFFFF4500).withOpacity(0.15),
+                                        const Color(0xFFFF7A00).withValues(alpha: 0.6),
+                                        const Color(0xFFFF4500).withValues(alpha: 0.15),
                                         Colors.transparent,
                                       ],
                                     ),
@@ -330,7 +329,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                                     shape: BoxShape.circle,
                                     boxShadow: [
                                       BoxShadow(
-                                        color: const Color(0xFFFF7A00).withOpacity(0.35),
+                                        color: const Color(0xFFFF7A00).withValues(alpha: 0.35),
                                         blurRadius: 28,
                                         spreadRadius: 2,
                                         offset: const Offset(0, 10),
@@ -418,7 +417,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                                 style: GoogleFonts.outfit(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w400,
-                                  color: Colors.white.withOpacity(0.5),
+                                  color: Colors.white.withValues(alpha: 0.5),
                                   letterSpacing: 1.5,
                                 ),
                               ),

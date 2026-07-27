@@ -75,7 +75,7 @@ class _BhajanScreenState extends State<BhajanScreen> {
                   border: Border.all(color: const Color(0xFFEFE6DB)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.02),
+                      color: Colors.black.withValues(alpha: 0.02),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -90,12 +90,12 @@ class _BhajanScreenState extends State<BhajanScreen> {
                   decoration: InputDecoration(
                     hintText: 'Search bhajans, chalisa, chants...',
                     hintStyle: GoogleFonts.outfit(
-                      color: const Color(0xFF2E2A36).withOpacity(0.4),
+                      color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
                       fontSize: 14,
                     ),
                     prefixIcon: Icon(
                       Icons.search_rounded,
-                      color: const Color(0xFF2E2A36).withOpacity(0.4),
+                      color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
                     ),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(vertical: 13),
@@ -135,7 +135,7 @@ class _BhajanScreenState extends State<BhajanScreen> {
                           boxShadow: isSelected
                               ? [
                                   BoxShadow(
-                                    color: const Color(0xFFFF7700).withOpacity(0.2),
+                                    color: const Color(0xFFFF7700).withValues(alpha: 0.2),
                                     blurRadius: 8,
                                     offset: const Offset(0, 3),
                                   )
@@ -173,7 +173,7 @@ class _BhajanScreenState extends State<BhajanScreen> {
                           Text(
                             "No Bhajans Found",
                             style: GoogleFonts.outfit(
-                              color: const Color(0xFF2E2A36).withOpacity(0.6),
+                              color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
                               fontSize: 16,
                             ),
                           ),
@@ -194,7 +194,7 @@ class _BhajanScreenState extends State<BhajanScreen> {
                             border: Border.all(color: const Color(0xFFEFE6DB)),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.02),
+                                color: Colors.black.withValues(alpha: 0.02),
                                 blurRadius: 8,
                                 offset: const Offset(0, 3),
                               ),
@@ -214,7 +214,7 @@ class _BhajanScreenState extends State<BhajanScreen> {
                                   bhajan.imageUrl,
                                   fit: BoxFit.cover,
                                   errorBuilder: (c, o, s) => Container(
-                                    color: Colors.orange.withOpacity(0.1),
+                                    color: Colors.orange.withValues(alpha: 0.1),
                                     child: const Center(child: Text("🕉️")),
                                   ),
                                 ),
@@ -233,7 +233,7 @@ class _BhajanScreenState extends State<BhajanScreen> {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFFF7700).withOpacity(0.1),
+                                    color: const Color(0xFFFF7700).withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
@@ -246,13 +246,13 @@ class _BhajanScreenState extends State<BhajanScreen> {
                                   ),
                                 ),
                                 const SizedBox(width: 10),
-                                Icon(Icons.access_time_rounded, size: 12, color: const Color(0xFF2E2A36).withOpacity(0.4)),
+                                Icon(Icons.access_time_rounded, size: 12, color: const Color(0xFF2E2A36).withValues(alpha: 0.4)),
                                 const SizedBox(width: 4),
                                 Text(
                                   bhajan.duration,
                                   style: GoogleFonts.outfit(
                                     fontSize: 11,
-                                    color: const Color(0xFF2E2A36).withOpacity(0.4),
+                                    color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
                                   ),
                                 )
                               ],
