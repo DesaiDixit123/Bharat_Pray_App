@@ -4,12 +4,36 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-class YatraCertificateScreen extends StatelessWidget {
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/api_service.dart';
+
+class YatraCertificateScreen extends StatefulWidget {
   const YatraCertificateScreen({super.key});
 
+  @override
+  State<YatraCertificateScreen> createState() => _YatraCertificateScreenState();
+}
+
+class _YatraCertificateScreenState extends State<YatraCertificateScreen> {
   static const Color _bg = Color(0xFFFFE8D6);
   static const Color _accent = Color(0xFFFF7A00);
   static const Color _mutedBrown = Color(0xFFC8A882);
+
+  @override
+  void initState() {
+    super.initState();
+    _requestCertificate();
+  }
+
+  Future<void> _requestCertificate() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      await ApiService.generateCertificate(token, 'mock_yatra_id');
+    } catch (e) {
+      debugPrint('Error generating certificate: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

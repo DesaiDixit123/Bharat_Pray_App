@@ -5,8 +5,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'add_temple_on_route_screen.dart';
 import 'yatra_completed_screen.dart';
 import 'yatra_live_sangha_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/api_service.dart';
 
-class YatraRouteSummaryScreen extends StatelessWidget {
+class YatraRouteSummaryScreen extends StatefulWidget {
   static const Color _accentOrange = Color(0xFFFF7A00);
   static const Color _mutedBrown = Color(0xFFC8A882);
   static const Color _statValueColor = Color(0xFF2E2A36);
@@ -31,25 +33,70 @@ class YatraRouteSummaryScreen extends StatelessWidget {
     required this.selectedTemples,
   });
 
+  @override
+  State<YatraRouteSummaryScreen> createState() => _YatraRouteSummaryScreenState();
+}
+
+class _YatraRouteSummaryScreenState extends State<YatraRouteSummaryScreen> {
+  bool _isLoading = true;
+  late String _distance;
+  late String _steps;
+  late String _duration;
+  late String _sangha;
+  String _overview = 'The Somnath Yatra is more than a physical journey; it is a pilgrimage to the "First among Twelve Jyotirlingas." Traversing through the rugged beauty of the Saurashtra coast, devotees walk in the footsteps of ancient sages, seeking the eternal blessings of Lord Shiva. Experience the transformative power of the Pancha Mahabhuta as the ocean winds carry the chants of Om Namah Shivaya.';
+
   String get _shortTitle {
-    if (title.trim().isEmpty) return 'Yatra';
-    return title.split(' ').first;
+    if (widget.title.trim().isEmpty) return 'Yatra';
+    return widget.title.split(' ').first;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _distance = widget.distance;
+    _steps = widget.steps;
+    _duration = widget.duration;
+    _sangha = widget.sangha;
+    _fetchSummary();
+  }
+
+  Future<void> _fetchSummary() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      final summary = await ApiService.getJourneySummary(token);
+      if (summary.isNotEmpty && mounted) {
+        setState(() {
+          _distance = '${summary['totalDistance'] ?? _distance}';
+          _steps = '${summary['totalSteps'] ?? _steps}';
+          _duration = '${summary['duration'] ?? _duration}';
+          _overview = summary['overview'] ?? _overview;
+          _isLoading = false;
+        });
+      } else if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _lightBackground,
+      backgroundColor: YatraRouteSummaryScreen._lightBackground,
       bottomNavigationBar: SafeArea(
         top: false,
         child: Container(
-          color: _lightBackground,
+          color: YatraRouteSummaryScreen._lightBackground,
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
           child: SizedBox(
             width: double.infinity,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: _accentOrange,
+                backgroundColor: YatraRouteSummaryScreen._accentOrange,
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -61,19 +108,19 @@ class YatraRouteSummaryScreen extends StatelessWidget {
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (context) => YatraLiveSanghaScreen(
-                      title: title,
-                      distance: distance,
-                      steps: steps,
-                      duration: duration,
-                      sangha: sangha,
-                      imageAsset: imageAsset,
-                      selectedTemples: selectedTemples,
+                      title: widget.title,
+                      distance: _distance,
+                      steps: _steps,
+                      duration: _duration,
+                      sangha: _sangha,
+                      imageAsset: widget.imageAsset,
+                      selectedTemples: widget.selectedTemples,
                       completedScreen: YatraCompletedScreen(
-                        title: title,
-                        distance: distance,
-                        steps: steps,
-                        duration: duration,
-                        imageAsset: imageAsset,
+                        title: widget.title,
+                        distance: _distance,
+                        steps: _steps,
+                        duration: _duration,
+                        imageAsset: widget.imageAsset,
                       ),
                     ),
                   ),
@@ -109,10 +156,17 @@ class YatraRouteSummaryScreen extends StatelessWidget {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            Image.asset(
-                              imageAsset,
-                              fit: BoxFit.cover,
-                            ),
+                            widget.imageAsset.startsWith('http')
+                                ? Image.network(
+                                    widget.imageAsset,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) =>
+                                        const ColoredBox(color: Colors.black),
+                                  )
+                                : Image.asset(
+                                    widget.imageAsset,
+                                    fit: BoxFit.cover,
+                                  ),
                             DecoratedBox(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
@@ -145,10 +199,10 @@ class YatraRouteSummaryScreen extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: _StatsGrid(
-                  distance: distance,
-                  steps: steps,
-                  duration: duration,
-                  sangha: sangha,
+                  distance: _distance,
+                  steps: _steps,
+                  duration: _duration,
+                  sangha: _sangha,
                 ),
               ),
               Padding(
@@ -166,10 +220,7 @@ class YatraRouteSummaryScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'The Somnath Yatra is more than a physical journey; it is a pilgrimage to the "First among Twelve Jyotirlingas." '
-                      'Traversing through the rugged beauty of the Saurashtra coast, devotees walk in the footsteps of ancient sages, '
-                      'seeking the eternal blessings of Lord Shiva. Experience the transformative power of the Pancha Mahabhuta '
-                      'as the ocean winds carry the chants of Om Namah Shivaya.',
+                      _overview,
                       style: GoogleFonts.outfit(
                         color: const Color(0xFF8C7660),
                         fontSize: 16,
@@ -187,7 +238,7 @@ class YatraRouteSummaryScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    _RouteTimeline(temples: selectedTemples),
+                    _RouteTimeline(temples: widget.selectedTemples),
                   ],
                 ),
               ),

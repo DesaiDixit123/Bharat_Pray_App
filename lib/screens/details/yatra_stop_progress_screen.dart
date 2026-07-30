@@ -3,10 +3,31 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-class YatraStopProgressScreen extends StatelessWidget {
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/api_service.dart';
+
+class YatraStopProgressScreen extends StatefulWidget {
+  final String journeyId;
   final VoidCallback? onContinue;
 
-  const YatraStopProgressScreen({super.key, this.onContinue});
+  const YatraStopProgressScreen({
+    super.key,
+    required this.journeyId,
+    this.onContinue,
+  });
+
+  @override
+  State<YatraStopProgressScreen> createState() => _YatraStopProgressScreenState();
+}
+
+class _YatraStopProgressScreenState extends State<YatraStopProgressScreen> {
+  bool _isLoading = true;
+  double _progress = 0.75;
+  String _distanceCovered = '337.5 km';
+  String _distanceRemaining = '112.5 km';
+  String _stepsToday = '12,457';
+  String _totalSteps = '1,08,000';
+  String _yatraTitle = 'Yatra to Chidambaram';
 
   static const Color _bg = Color(0xFFFFE8D6);
   static const Color _card = Colors.white;
@@ -20,6 +41,43 @@ class YatraStopProgressScreen extends StatelessWidget {
   static const String _backArrowSvg = '''<svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
 <path d="M2.87301 8.24994L8.56917 13.9461L7.49996 14.9999L0 7.49996L7.49996 0L8.56917 1.05382L2.87301 6.74998H14.9999V8.24994H2.87301Z" fill="#C8A882"/>
 </svg>''';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchProgressData();
+  }
+
+  Future<void> _fetchProgressData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      
+      final progressData = await ApiService.getJourneyProgress(token, widget.journeyId);
+      final distanceData = await ApiService.getJourneyDistanceRemaining(token, widget.journeyId);
+
+      if (progressData.isNotEmpty || distanceData.isNotEmpty) {
+        setState(() {
+          _progress = (progressData['progress'] ?? 75) / 100.0;
+          _distanceCovered = '${progressData['distanceCovered'] ?? 337.5} km';
+          _stepsToday = '${progressData['stepsToday'] ?? '12,457'}';
+          _totalSteps = '${progressData['totalSteps'] ?? '1,08,000'}';
+          _yatraTitle = progressData['yatraTitle'] ?? 'Yatra to Chidambaram';
+          
+          _distanceRemaining = '${distanceData['distanceRemaining'] ?? 112.5} km';
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,9 +100,9 @@ class YatraStopProgressScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              onPressed: onContinue ?? () => Navigator.of(context).pop(),
+              onPressed: widget.onContinue ?? () => Navigator.of(context).pop(),
               child: Text(
-                'Continue',
+                'Close',
                 style: GoogleFonts.outfit(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
@@ -55,7 +113,9 @@ class YatraStopProgressScreen extends StatelessWidget {
         ),
       ),
       body: SafeArea(
-        child: Padding(
+        child: _isLoading 
+          ? const Center(child: CircularProgressIndicator(color: _accent))
+          : Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -86,7 +146,7 @@ class YatraStopProgressScreen extends StatelessWidget {
                       CustomPaint(
                         size: const Size(300, 300),
                         painter: _ProgressRingPainter(
-                          progress: 0.75,
+                          progress: _progress,
                           progressColor: _accent,
                           trackColor: _ringTrack,
                         ),
@@ -95,7 +155,7 @@ class YatraStopProgressScreen extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            '75%',
+                            '${(_progress * 100).toInt()}%',
                             style: GoogleFonts.outfit(
                               color: _textPrimary,
                               fontSize: 36,
@@ -119,7 +179,7 @@ class YatraStopProgressScreen extends StatelessWidget {
               const SizedBox(height: 8),
               Center(
                 child: Text(
-                  'Yatra to Chidambaram',
+                  _yatraTitle,
                   style: GoogleFonts.outfit(
                     color: _textPrimary,
                     fontSize: 30,
@@ -163,7 +223,7 @@ class YatraStopProgressScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            '337.5 km',
+                            _distanceCovered,
                             style: GoogleFonts.outfit(
                               color: _green,
                               fontSize: 15,
@@ -188,7 +248,7 @@ class YatraStopProgressScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            '112.5 km',
+                            _distanceRemaining,
                             style: GoogleFonts.outfit(
                               color: _red,
                               fontSize: 15,
@@ -208,7 +268,7 @@ class YatraStopProgressScreen extends StatelessWidget {
                     child: _InfoMiniCard(
                       icon: Icons.directions_walk_rounded,
                       title: 'Steps Today',
-                      value: '12,457',
+                      value: _stepsToday,
                       subtitle: 'Goal: 15,000',
                     ),
                   ),
@@ -217,7 +277,7 @@ class YatraStopProgressScreen extends StatelessWidget {
                     child: _InfoMiniCard(
                       icon: Icons.bar_chart_rounded,
                       title: 'Total Steps',
-                      value: '1,08,000',
+                      value: _totalSteps,
                       subtitle: 'Steps',
                     ),
                   ),

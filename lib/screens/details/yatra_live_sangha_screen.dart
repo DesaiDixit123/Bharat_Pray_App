@@ -9,9 +9,12 @@ import 'add_temple_on_route_screen.dart';
 import 'individual_progress_screen.dart';
 import 'yatra_chat_screen.dart';
 import 'yatra_stop_progress_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/api_service.dart';
 import 'package:bharat_pray/screens/details/app_icons.dart';
 
 class YatraLiveSanghaScreen extends StatefulWidget {
+  final String journeyId;
   final String title;
   final String distance;
   final String steps;
@@ -24,6 +27,7 @@ class YatraLiveSanghaScreen extends StatefulWidget {
 
   const YatraLiveSanghaScreen({
     super.key,
+    this.journeyId = '',
     this.title = 'Somnath',
     this.distance = '450 km',
     this.steps = '108k',
@@ -45,6 +49,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
   late final Future<Uint8List?> _backgroundBytesFuture;
   bool _isRunning = false;
   bool _hasShownTempleAlertInRun = false;
+  Timer? _liveWalkingTimer;
   static const String _routeBackgroundSvg =
       'assets/images/ChatGPT Image May 30, 2026, 06_05_16 PM 1.svg';
 
@@ -80,6 +85,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
 
   @override
   void dispose() {
+    _liveWalkingTimer?.cancel();
     _runController.dispose();
     super.dispose();
   }
@@ -91,11 +97,35 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     });
     _runController.repeat();
     _scheduleTempleAlertPreview();
+
+    // Start live pedometer simulation
+    _liveWalkingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final token = prefs.getString('auth_token') ?? '';
+        if (token.isNotEmpty && widget.journeyId.isNotEmpty) {
+          // Simulate 500 steps and 400 meters walked every 3 seconds
+          await ApiService.updateJourneyLocation(token, widget.journeyId, 500, 400.0);
+          
+          final progressData = await ApiService.getJourneyProgress(token, widget.journeyId);
+          if (progressData.isNotEmpty) {
+            final progress = (progressData['progress'] ?? 0) / 100.0;
+            if (progress >= 1.0) {
+              _stopRun(isComplete: true);
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Error in live walking timer: $e');
+      }
+    });
   }
 
-  void _stopRun() {
+  void _stopRun({bool isComplete = false}) async {
     if (!_isRunning) return;
 
+    _liveWalkingTimer?.cancel();
+    
     if (_isRunning) {
       _runController.stop();
       _runController.reset();
@@ -103,23 +133,38 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
         _isRunning = false;
         _hasShownTempleAlertInRun = false;
       });
+      
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final token = prefs.getString('auth_token') ?? '';
+        if (token.isNotEmpty && widget.journeyId.isNotEmpty) {
+          await ApiService.stopJourney(token, widget.journeyId);
+        }
+      } catch (e) {
+        debugPrint('Failed to stop journey in backend: $e');
+      }
     }
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => YatraStopProgressScreen(
-          onContinue: widget.completedScreen == null
-              ? null
-              : () {
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(
-                      builder: (_) => widget.completedScreen!,
-                    ),
-                  );
-                },
+    if (!mounted) return;
+    
+    if (isComplete && widget.completedScreen != null) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => widget.completedScreen!,
         ),
-      ),
-    );
+      );
+    } else {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => YatraStopProgressScreen(
+            journeyId: widget.journeyId,
+            onContinue: () {
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            },
+          ),
+        ),
+      );
+    }
   }
 
   void _scheduleTempleAlertPreview() {

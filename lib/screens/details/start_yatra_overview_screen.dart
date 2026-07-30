@@ -2,16 +2,19 @@ import 'package:bharat_pray/screens/details/app_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/api_service.dart';
 import 'add_temple_on_route_screen.dart';
 import 'yatra_live_sangha_screen.dart';
 import 'yatra_completed_screen.dart';
 
-class StartYatraOverviewScreen extends StatelessWidget {
-  static const Color _accentOrange = Color(0xFFFF7A00);
-  static const Color _mutedBrown = Color(0xFFC8A882);
-  static const Color _statValueColor = Color(0xFF2E2A36);
-  static const Color _lightBackground = Color(0xFFFFE8D6);
+class StartYatraOverviewScreen extends StatefulWidget {
+  static const Color accentOrange = Color(0xFFFF7A00);
+  static const Color mutedBrown = Color(0xFFC8A882);
+  static const Color statValueColor = Color(0xFF2E2A36);
+  static const Color lightBackground = Color(0xFFFFE8D6);
 
+  final String id;
   final String title;
   final String distance;
   final String steps;
@@ -22,6 +25,7 @@ class StartYatraOverviewScreen extends StatelessWidget {
 
   const StartYatraOverviewScreen({
     super.key,
+    this.id = '',
     required this.title,
     required this.distance,
     required this.steps,
@@ -32,13 +36,63 @@ class StartYatraOverviewScreen extends StatelessWidget {
   });
 
   @override
+  State<StartYatraOverviewScreen> createState() => _StartYatraOverviewScreenState();
+}
+
+class _StartYatraOverviewScreenState extends State<StartYatraOverviewScreen> {
+
+  bool _isLoading = false;
+
+  void _startLiveYatra() async {
+    setState(() { _isLoading = true; });
+    String journeyId = '';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      if (token.isNotEmpty) {
+        final result = await ApiService.startYatra(token, widget.id);
+        journeyId = result['_id'] ?? '';
+      }
+    } catch (e) {
+      debugPrint('Error starting yatra: $e');
+    } finally {
+      if (mounted) {
+        setState(() { _isLoading = false; });
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => YatraLiveSanghaScreen(
+              journeyId: journeyId,
+              title: widget.title,
+              distance: widget.distance,
+              steps: widget.steps,
+              duration: widget.duration,
+              sangha: widget.sangha,
+              imageAsset: widget.imageAsset,
+              isFromCreateGroup: widget.isFromCreateGroup,
+              selectedTemples: const <TempleRouteItem>[],
+              completedScreen: YatraCompletedScreen(
+                journeyId: journeyId,
+                title: widget.title,
+                distance: widget.distance,
+                steps: widget.steps,
+                duration: widget.duration,
+                imageAsset: widget.imageAsset,
+              ),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _lightBackground,
+      backgroundColor: StartYatraOverviewScreen.lightBackground,
       bottomNavigationBar: SafeArea(
         top: false,
         child: Container(
-          color: _lightBackground,
+          color: StartYatraOverviewScreen.lightBackground,
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -49,12 +103,12 @@ class StartYatraOverviewScreen extends StatelessWidget {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => AddTempleOnRouteScreen(
-                        title: title,
-                        distance: distance,
-                        steps: steps,
-                        duration: duration,
-                        sangha: sangha,
-                        imageAsset: imageAsset,
+                        title: widget.title,
+                        distance: widget.distance,
+                        steps: widget.steps,
+                        duration: widget.duration,
+                        sangha: widget.sangha,
+                        imageAsset: widget.imageAsset,
                       ),
                     ),
                   );
@@ -63,29 +117,8 @@ class StartYatraOverviewScreen extends StatelessWidget {
               const SizedBox(height: 12),
               _PrimaryActionButton(
                 label: 'Confirm Your Distance',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => YatraLiveSanghaScreen(
-                        title: title,
-                        distance: distance,
-                        steps: steps,
-                        duration: duration,
-                        sangha: sangha,
-                        imageAsset: imageAsset,
-                        isFromCreateGroup: isFromCreateGroup,
-                        selectedTemples: const <TempleRouteItem>[],
-                        completedScreen: YatraCompletedScreen(
-                          title: title,
-                          distance: distance,
-                          steps: steps,
-                          duration: duration,
-                          imageAsset: imageAsset,
-                        ),
-                      ),
-                    ),
-                  );
-                },
+                isLoading: _isLoading,
+                onTap: _startLiveYatra,
               ),
             ],
           ),
@@ -110,10 +143,17 @@ class StartYatraOverviewScreen extends StatelessWidget {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            Image.asset(
-                              imageAsset,
-                              fit: BoxFit.cover,
-                            ),
+                            widget.imageAsset.startsWith('http')
+                                ? Image.network(
+                                    widget.imageAsset,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) =>
+                                        const ColoredBox(color: Colors.black),
+                                  )
+                                : Image.asset(
+                                    widget.imageAsset,
+                                    fit: BoxFit.cover,
+                                  ),
                             DecoratedBox(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
@@ -146,12 +186,12 @@ class StartYatraOverviewScreen extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: _StatsGrid(
-                  distance: distance,
-                  steps: steps,
-                  duration: duration,
-                  sangha: sangha,
-                  mutedBrown: _mutedBrown,
-                  valueColor: _statValueColor,
+                  distance: widget.distance,
+                  steps: widget.steps,
+                  duration: widget.duration,
+                  sangha: widget.sangha,
+                  mutedBrown: StartYatraOverviewScreen.mutedBrown,
+                  valueColor: StartYatraOverviewScreen.statValueColor,
                 ),
               ),
               Padding(
@@ -394,7 +434,7 @@ class _OutlineActionButton extends StatelessWidget {
       width: double.infinity,
       child: OutlinedButton.icon(
         style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: StartYatraOverviewScreen._accentOrange, width: 1.2),
+          side: const BorderSide(color: StartYatraOverviewScreen.accentOrange, width: 1.2),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -404,7 +444,7 @@ class _OutlineActionButton extends StatelessWidget {
         onPressed: onTap,
         icon: const Icon(
           Icons.add_circle_outline_rounded,
-          color: StartYatraOverviewScreen._accentOrange,
+          color: StartYatraOverviewScreen.accentOrange,
         ),
         label: Text(
           label,
@@ -422,10 +462,12 @@ class _OutlineActionButton extends StatelessWidget {
 class _PrimaryActionButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
+  final bool isLoading;
 
   const _PrimaryActionButton({
     required this.label,
     required this.onTap,
+    this.isLoading = false,
   });
 
   @override
@@ -434,7 +476,7 @@ class _PrimaryActionButton extends StatelessWidget {
       width: double.infinity,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: StartYatraOverviewScreen._accentOrange,
+          backgroundColor: StartYatraOverviewScreen.accentOrange,
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -442,14 +484,23 @@ class _PrimaryActionButton extends StatelessWidget {
           ),
           padding: const EdgeInsets.symmetric(vertical: 16),
         ),
-        onPressed: onTap,
-        child: Text(
-          label,
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.bold,
-            fontSize: 15,
-          ),
-        ),
+        onPressed: isLoading ? null : onTap,
+        child: isLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2.0,
+                ),
+              )
+            : Text(
+                label,
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
       ),
     );
   }

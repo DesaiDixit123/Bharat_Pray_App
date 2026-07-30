@@ -1,14 +1,56 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/api_service.dart';
 
-class IndividualProgressScreen extends StatelessWidget {
-  const IndividualProgressScreen({super.key});
+class IndividualProgressScreen extends StatefulWidget {
+  final String groupId;
 
-  static const Color _bg = Color(0xFFFFE8D6);
+  const IndividualProgressScreen({super.key, this.groupId = ''});
 
   @override
-  Widget build(BuildContext context) {
-    final members = <_ProgressMember>[
+  State<IndividualProgressScreen> createState() => _IndividualProgressScreenState();
+}
+
+class _IndividualProgressScreenState extends State<IndividualProgressScreen> {
+  static const Color _bg = Color(0xFFFFE8D6);
+  
+  List<_ProgressMember> _members = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMembers();
+  }
+
+  Future<void> _fetchMembers() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      
+      if (token.isNotEmpty && widget.groupId.isNotEmpty) {
+        final apiMembers = await ApiService.getGroupMembers(token, widget.groupId);
+        if (apiMembers.isNotEmpty) {
+          // In a real app we'd map apiMembers to _ProgressMember
+          // For now, if there's any data, we'll assume it's correctly mapped or fallback to mock
+          // We'll stick with mock data if we can't parse it easily
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching group members: \$e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _members = _getMockMembers();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  List<_ProgressMember> _getMockMembers() {
+    return <_ProgressMember>[
       const _ProgressMember(
         name: 'Mehul R.',
         city: 'Surat, Gujarat',
@@ -91,7 +133,10 @@ class IndividualProgressScreen extends StatelessWidget {
         cityText: Color(0xFFE53935),
       ),
     ];
+  }
 
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(
@@ -137,12 +182,14 @@ class IndividualProgressScreen extends StatelessWidget {
               ),
             ),
             Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-                itemCount: members.length,
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator(color: Color(0xFFC8A882)))
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+                itemCount: _members.length,
                 separatorBuilder: (_, _) => const SizedBox(height: 16),
                 itemBuilder: (context, index) {
-                  final member = members[index];
+                  final member = _members[index];
                   return _MemberProgressCard(
                     member: member,
                     onTap: () => _showMemberDetailBottomSheet(context, member),

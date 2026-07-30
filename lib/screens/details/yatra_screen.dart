@@ -2,31 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../models/yatra_model.dart';
+import '../../services/api_service.dart';
 import 'create_yatra_group_screen.dart';
 import 'start_yatra_overview_screen.dart';
+import 'yatra_live_sangha_screen.dart';
+import 'yatra_completed_screen.dart';
 
 
-class YatraItem {
-  final String title;
-  final String distance;
-  final String steps;
-  final String duration;
-  final String groupSize;
-  final String image;
-  final String tag;
-  final double progress;
-
-  const YatraItem({
-    required this.title,
-    required this.distance,
-    required this.steps,
-    required this.duration,
-    required this.groupSize,
-    required this.image,
-    required this.tag,
-    required this.progress,
-  });
-}
+// Using YatraModel from api_service.dart
 
 class YatraScreen extends StatefulWidget {
   final bool isTab;
@@ -38,21 +22,6 @@ class YatraScreen extends StatefulWidget {
 
 class _YatraScreenState extends State<YatraScreen> {
   String _profileName = 'Shiv';
-
-  void _openStartYatraOverview(YatraItem item) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => StartYatraOverviewScreen(
-          title: item.title,
-          distance: item.distance,
-          steps: item.steps,
-          duration: item.duration,
-          sangha: item.groupSize,
-          imageAsset: item.image,
-        ),
-      ),
-    );
-  }
 
   static const String _pinSvg = '''<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g clip-path="url(#clip0_279_1650)">
@@ -82,56 +51,101 @@ class _YatraScreenState extends State<YatraScreen> {
 <path d="M18 17V18C17.9976 18.7949 17.6808 19.5566 17.1187 20.1187C16.5566 20.6808 15.7949 20.9976 15 21H9C8.20508 20.9976 7.4434 20.6808 6.8813 20.1187C6.31921 19.5566 6.00237 18.7949 6 18V17C6 15.6739 6.52678 14.4021 7.46447 13.4645C8.40215 12.5268 9.67392 12 11 12H13C14.3261 12 15.5979 12.5268 16.5355 13.4645C17.4732 14.4021 18 15.6739 18 17Z" fill="#C8A882"/>
 </svg>''';
 
-  final List<YatraItem> _popularYatras = const [
-    YatraItem(
-      title: "Somnath Temple",
-      distance: "450 KM",
-      steps: "108k Steps",
-      duration: "5 Days",
-      groupSize: "12.5 k",
-      image: "assets/images/somnath_temple_new.png",
-      tag: "Popular Yatra",
-      progress: 0.0,
-    ),
-    YatraItem(
-      title: "Dwarkadhish Temple",
-      distance: "220 KM",
-      steps: "80k Steps",
-      duration: "4 Days",
-      groupSize: "8.2 k",
-      image: "assets/images/dwarka_temple.jpg",
-      tag: "Popular Yatra",
-      progress: 0.0,
-    ),
-  ];
-
-  final List<YatraItem> _continueYatras = const [
-    YatraItem(
-      title: "Somnath Temple",
-      distance: "112 KM",
-      steps: "54k Steps",
-      duration: "2.5 Days",
-      groupSize: "2.5 k",
-      image: "assets/images/somnath_temple_new.png",
-      tag: "Popular Yatra",
-      progress: 0.35,
-    ),
-    YatraItem(
-      title: "Dwarkadhish Temple",
-      distance: "140 KM",
-      steps: "45k Steps",
-      duration: "2.0 Days",
-      groupSize: "3.1 k",
-      image: "assets/images/dwarka_temple.jpg",
-      tag: "Popular Yatra",
-      progress: 0.65,
-    ),
-  ];
+  List<YatraModel> _popularYatras = [];
+  List<YatraModel> _continueYatras = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _loadProfileName();
+    _fetchYatras();
+  }
+
+  Future<void> _fetchYatras() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token') ?? '';
+    
+    if (token.isNotEmpty) {
+      try {
+        final popularData = await ApiService.getPopularYatras(token);
+        print('POPULAR YATRAS RESPONSE: $popularData');
+        final continueData = await ApiService.getContinueYatras(token);
+        
+        final parsedPopular = popularData.map((e) {
+          print('PARSING YATRA: ${e["title"]}, IMAGE: ${e["image"]}');
+          return YatraModel.fromJson(e);
+        }).toList();
+        final parsedContinue = continueData.map((e) => YatraModel.fromJson(e)).toList();
+
+        if (mounted) {
+          setState(() {
+            _popularYatras = parsedPopular;
+            _continueYatras = parsedContinue;
+            _isLoading = false;
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _popularYatras = [];
+            _continueYatras = [];
+            _isLoading = false;
+          });
+        }
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _popularYatras = [];
+          _continueYatras = [];
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  List<YatraModel> _getMockPopularYatras() {
+    return [
+      YatraModel(
+        id: '1',
+        title: "Somnath Temple",
+        distance: "450 KM",
+        steps: "108k Steps",
+        duration: "5 Days",
+        groupSize: "12.5 k",
+        image: "assets/images/somnath_temple_new.png",
+        tag: "Popular Yatra",
+        progress: 0.0,
+      ),
+      YatraModel(
+        id: '2',
+        title: "Dwarkadhish Temple",
+        distance: "220 KM",
+        steps: "80k Steps",
+        duration: "4 Days",
+        groupSize: "8.2 k",
+        image: "assets/images/dwarka_temple.jpg",
+        tag: "Popular Yatra",
+        progress: 0.0,
+      ),
+    ];
+  }
+
+  List<YatraModel> _getMockContinueYatras() {
+    return [
+      YatraModel(
+        id: '1',
+        title: "Somnath Temple",
+        distance: "112 KM",
+        steps: "54k Steps",
+        duration: "2.5 Days",
+        groupSize: "2.5 k",
+        image: "assets/images/somnath_temple_new.png",
+        tag: "Popular Yatra",
+        progress: 0.35,
+      ),
+    ];
   }
 
   Future<void> _loadProfileName() async {
@@ -351,6 +365,10 @@ class _YatraScreenState extends State<YatraScreen> {
   }
 
   Widget _buildPopularYatraSection() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    
     return SizedBox(
       width: double.infinity,
       child: Column(
@@ -411,6 +429,14 @@ class _YatraScreenState extends State<YatraScreen> {
   }
 
   Widget _buildContinueYatraSection() {
+    if (_isLoading) {
+      return const SizedBox.shrink(); // Avoid double loaders
+    }
+
+    if (_continueYatras.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     return SizedBox(
       width: double.infinity,
       child: Column(
@@ -470,7 +496,7 @@ class _YatraScreenState extends State<YatraScreen> {
     );
   }
 
-  Widget _buildYatraCard(YatraItem item, {required bool isPopular}) {
+  Widget _buildYatraCard(YatraModel item, {required bool isPopular}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -512,10 +538,25 @@ class _YatraScreenState extends State<YatraScreen> {
                     SizedBox(
                       width: 333,
                       height: 200,
-                      child: Image.asset(
-                        item.image,
-                        fit: BoxFit.cover,
-                      ),
+                      child: item.image.startsWith('http')
+                          ? Image.network(
+                              item.image,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Image.asset(
+                                'assets/images/somnath_temple_new.png',
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                          : Image.asset(
+                              item.image.isNotEmpty ? item.image : 'assets/images/somnath_temple_new.png',
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Image.asset(
+                                'assets/images/somnath_temple_new.png',
+                                fit: BoxFit.cover,
+                              ),
+                            ),
                     ),
                     // Dark bottom gradient overlay (Figma Match)
                     Positioned.fill(
@@ -629,6 +670,8 @@ class _YatraScreenState extends State<YatraScreen> {
                 onTap: () {
                   if (isPopular) {
                     _openStartYatraOverview(item);
+                  } else {
+                    _openContinueYatra(item);
                   }
                 },
                 child: Container(
@@ -659,6 +702,47 @@ class _YatraScreenState extends State<YatraScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  void _openStartYatraOverview(YatraModel item) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => StartYatraOverviewScreen(
+          id: item.id,
+          title: item.title,
+          distance: item.distance,
+          steps: item.steps,
+          duration: item.duration,
+          sangha: item.groupSize,
+          imageAsset: item.image,
+        ),
+      ),
+    );
+  }
+
+  void _openContinueYatra(YatraModel item) {
+    // Navigate directly to the live screen
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => YatraLiveSanghaScreen(
+          journeyId: item.journeyId ?? '',
+          title: item.title,
+          distance: item.distance,
+          steps: item.steps,
+          duration: item.duration,
+          sangha: item.groupSize,
+          imageAsset: item.image.isNotEmpty ? item.image : 'assets/images/somnath_temple_new.png',
+          completedScreen: YatraCompletedScreen(
+            journeyId: item.journeyId ?? '',
+            title: item.title,
+            distance: item.distance,
+            steps: item.steps,
+            duration: item.duration,
+            imageAsset: item.image.isNotEmpty ? item.image : 'assets/images/somnath_temple_new.png',
+          ),
+        ),
+      ),
     );
   }
 

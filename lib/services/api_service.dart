@@ -5,10 +5,11 @@ import '../models/user_model.dart';
 
 class ApiService {
   // Hosts for Android:
-  // 1. '127.0.0.1' (Direct USB tunnel via adb reverse tcp:3020 tcp:3020 - 100% reliable)
+  // 1. '10.0.2.2' (Direct USB tunnel via adb reverse tcp:3020 tcp:3020 - 100% reliable)
   // 2. '192.168.29.113' (Wi-Fi LAN)
   // 3. '10.0.2.2' (Android Emulator)
-  static String _activeAndroidHost = '127.0.0.1';
+  // Changed to the Wi-Fi IPv4 address for local testing on physical devices
+  static String _activeAndroidHost = '192.168.29.113';
 
   static String get baseUrl {
     if (Platform.isAndroid) {
@@ -30,12 +31,15 @@ class ApiService {
   static String resolveImageUrl(String? url) {
     if (url == null || url.trim().isEmpty) return '';
     final trimmed = url.trim();
+    if (trimmed.startsWith('assets/')) return trimmed; // Keep local assets as is
+    
     final baseDomain = baseUrl.replaceAll('/user', '');
     
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       return trimmed.replaceFirst(RegExp(r'http://[0-9.]+:3020'), baseDomain)
                     .replaceFirst(RegExp(r'http://localhost:3020'), baseDomain)
-                    .replaceFirst(RegExp(r'https://api.bharatpray.com'), baseDomain);
+                    .replaceFirst(RegExp(r'https://api.bharatpray.com'), baseDomain)
+                    .replaceFirst(RegExp(r'https://apis.bambamcabs.com'), baseDomain);
     }
     
     final isUploads = trimmed.contains('uploads/');
@@ -402,5 +406,306 @@ class ApiService {
       }),
     );
     return _processResponse(response)['Data'];
+  }
+
+  // ==========================================
+  // Yatra Flow APIs
+  // ==========================================
+
+  // GET /user/yatra/list (Popular Yatras)
+  static Future<List<dynamic>> getPopularYatras(String token) async {
+    try {
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/yatra/list'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      return _processResponse(response)['Data'] ?? [];
+    } catch (e) {
+      print('Error fetching popular yatras: $e');
+      return []; // Return empty list gracefully if endpoint is missing
+    }
+  }
+
+  // GET /user/yatra/journey/current (Continue Yatras)
+  static Future<List<dynamic>> getContinueYatras(String token) async {
+    try {
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/yatra/journey/current'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      return _processResponse(response)['Data'] ?? [];
+    } catch (e) {
+      print('Error fetching continue yatras: $e');
+      return [];
+    }
+  }
+
+  // POST /user/yatra/journey/start
+  static Future<Map<String, dynamic>> startYatra(String token, String yatraId) async {
+    final response = await _safePost(
+      Uri.parse('$baseUrl/yatra/journey/start'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({'routeId': yatraId}),
+    );
+    return _processResponse(response)['Data'] ?? {};
+  }
+
+  // GET /user/yatra/progress/user
+  static Future<Map<String, dynamic>> getUserProgress(String token) async {
+    try {
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/yatra/progress/user'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('Error fetching user progress: $e');
+      return {};
+    }
+  }
+
+  // GET /user/yatra/group/:groupId/members
+  static Future<List<dynamic>> getGroupMembers(String token, String groupId) async {
+    try {
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/yatra/group/$groupId/members'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      return _processResponse(response)['Data'] ?? [];
+    } catch (e) {
+      print('Error fetching group members: $e');
+      return [];
+    }
+  }
+
+  // POST /user/yatra/group/start
+  static Future<Map<String, dynamic>> createGroupJourney(String token, Map<String, dynamic> data) async {
+    try {
+      final response = await _safePost(
+        Uri.parse('$baseUrl/yatra/group/start'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode(data),
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('Error creating group journey: $e');
+      return {};
+    }
+  }
+
+  // POST /user/yatra/journey/stop
+  static Future<Map<String, dynamic>> stopJourney(String token, String journeyId) async {
+    try {
+      final response = await _safePost(
+        Uri.parse('$baseUrl/yatra/journey/stop'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({'journeyId': journeyId}),
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('Error stopping journey: $e');
+      return {};
+    }
+  }
+
+  // POST /user/yatra/journey/complete
+  static Future<Map<String, dynamic>> completeJourney(String token, String journeyId) async {
+    try {
+      final response = await _safePost(
+        Uri.parse('$baseUrl/yatra/journey/complete'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({'journeyId': journeyId}),
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('Error completing journey: $e');
+      return {};
+    }
+  }
+
+  // GET /user/yatra/journey/progress
+  static Future<Map<String, dynamic>> getJourneyProgress(String token, String journeyId) async {
+    try {
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/yatra/journey/progress?journeyId=$journeyId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('Error fetching journey progress: $e');
+      return {};
+    }
+  }
+
+  // GET /user/yatra/journey/distance-remaining
+  static Future<Map<String, dynamic>> getJourneyDistanceRemaining(String token, String journeyId) async {
+    try {
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/yatra/journey/distance-remaining?journeyId=$journeyId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('Error fetching journey distance remaining: $e');
+      return {};
+    }
+  }
+
+  // POST /user/yatra/journey/location (Sync progress)
+  static Future<bool> updateJourneyLocation(String token, String journeyId, int stepsIncrement, double distanceMeters) async {
+    try {
+      final response = await _safePost(
+        Uri.parse('$baseUrl/yatra/journey/location'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'journeyId': journeyId,
+          'latitude': 20.8880,
+          'longitude': 70.4012,
+          'stepsIncrement': stepsIncrement,
+          'distanceIncrementMeters': distanceMeters,
+        }),
+      );
+      final jsonResponse = _processResponse(response);
+      return jsonResponse['IsSuccess'] ?? false;
+    } catch (e) {
+      print('Error updating journey location: $e');
+      return false;
+    }
+  }
+
+  // GET /user/yatra/solo/nearby
+  static Future<List<dynamic>> getNearbyPilgrims(String token) async {
+    try {
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/yatra/solo/nearby'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      return _processResponse(response)['Data'] ?? [];
+    } catch (e) {
+      print('Error fetching nearby pilgrims: $e');
+      return [];
+    }
+  }
+
+  // GET /user/yatra/group-chat/:groupId/messages
+  static Future<List<dynamic>> getGroupMessages(String token, String groupId) async {
+    try {
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/yatra/group-chat/$groupId/messages'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      return _processResponse(response)['Data'] ?? [];
+    } catch (e) {
+      print('Error fetching group messages: $e');
+      return [];
+    }
+  }
+
+  // GET /user/yatra/personal-chat/:chatId/messages
+  static Future<List<dynamic>> getPersonalMessages(String token, String chatId) async {
+    try {
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/yatra/personal-chat/$chatId/messages'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      return _processResponse(response)['Data'] ?? [];
+    } catch (e) {
+      print('Error fetching personal messages: $e');
+      return [];
+    }
+  }
+
+  // POST /user/yatra/certificate/generate
+  static Future<Map<String, dynamic>> generateCertificate(String token, String yatraId) async {
+    try {
+      final response = await _safePost(
+        Uri.parse('$baseUrl/yatra/certificate/generate'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({'yatraId': yatraId}),
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('Error generating certificate: $e');
+      return {};
+    }
+  }
+
+  // GET /user/yatra/journey/summary
+  static Future<Map<String, dynamic>> getJourneySummary(String token) async {
+    try {
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/yatra/journey/summary'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('Error fetching journey summary: $e');
+      return {};
+    }
+  }
+
+  // GET /user/yatra/journey/timeline
+  static Future<List<dynamic>> getJourneyTimeline(String token) async {
+    try {
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/yatra/journey/timeline'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      return _processResponse(response)['Data'] ?? [];
+    } catch (e) {
+      print('Error fetching journey timeline: $e');
+      return [];
+    }
   }
 }

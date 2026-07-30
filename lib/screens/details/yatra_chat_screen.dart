@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/api_service.dart';
 
 enum YatraChatType { single, group }
 
@@ -42,7 +44,7 @@ class YatraChatScreen extends StatefulWidget {
 }
 
 class _YatraChatScreenState extends State<YatraChatScreen> {
-  late final List<YatraChatMessage> _messages;
+  late List<YatraChatMessage> _messages;
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
@@ -81,7 +83,35 @@ class _YatraChatScreenState extends State<YatraChatScreen> {
   void initState() {
     super.initState();
     _messages = List<YatraChatMessage>.from(widget.messages);
+    _fetchMessages();
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+  }
+
+  Future<void> _fetchMessages() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      
+      final isGroup = widget.chatType == YatraChatType.group;
+      final apiMessages = isGroup
+          ? await ApiService.getGroupMessages(token, 'mock_group_id')
+          : await ApiService.getPersonalMessages(token, 'mock_chat_id');
+
+      if (apiMessages.isNotEmpty && mounted) {
+        setState(() {
+          _messages = apiMessages.map((m) => YatraChatMessage(
+            senderName: m['senderName'] ?? 'Unknown',
+            text: m['text'] ?? '',
+            time: m['time'] ?? 'Now',
+            isCurrentUser: m['isCurrentUser'] ?? false,
+            avatarAsset: m['avatarUrl'],
+          )).toList();
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+      }
+    } catch (e) {
+      debugPrint('Error fetching chat messages: $e');
+    }
   }
 
   @override

@@ -3,9 +3,13 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'yatra_door_live_screen.dart';
 
-class YatraCompletedScreen extends StatelessWidget {
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/api_service.dart';
+
+class YatraCompletedScreen extends StatefulWidget {
   const YatraCompletedScreen({
     super.key,
+    this.journeyId = '',
     required this.title,
     required this.distance,
     required this.steps,
@@ -13,18 +17,42 @@ class YatraCompletedScreen extends StatelessWidget {
     required this.imageAsset,
   });
 
+  final String journeyId;
   final String title;
   final String distance;
   final String steps;
   final String duration;
   final String imageAsset;
 
+  @override
+  State<YatraCompletedScreen> createState() => _YatraCompletedScreenState();
+}
+
+class _YatraCompletedScreenState extends State<YatraCompletedScreen> {
   static const Color _bg = Color(0xFFFFE8D6);
   static const Color _accentOrange = Color(0xFFFF7A00);
 
   static const String _backArrowSvg = '''<svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
 <path d="M2.87301 8.24994L8.56917 13.9461L7.49996 14.9999L0 7.49996L7.49996 0L8.56917 1.05382L2.87301 6.74998H14.9999V8.24994H2.87301Z" fill="#FFFFFF"/>
 </svg>''';
+
+  @override
+  void initState() {
+    super.initState();
+    _completeJourneyApi();
+  }
+
+  Future<void> _completeJourneyApi() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      if (token.isNotEmpty && widget.journeyId.isNotEmpty) {
+        await ApiService.completeJourney(token, widget.journeyId);
+      }
+    } catch (e) {
+      debugPrint('Error completing journey: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -83,7 +111,14 @@ class YatraCompletedScreen extends StatelessWidget {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            Image.asset(imageAsset, fit: BoxFit.cover),
+                            widget.imageAsset.startsWith('http')
+                                ? Image.network(
+                                    widget.imageAsset,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) =>
+                                        const ColoredBox(color: Colors.black),
+                                  )
+                                : Image.asset(widget.imageAsset, fit: BoxFit.cover),
                             DecoratedBox(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
@@ -145,7 +180,7 @@ class YatraCompletedScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'You have successfully completed your\nSacred Yatra to $title.',
+                            'You have successfully completed your\nSacred Yatra to $widget.title.',
                             style: GoogleFonts.outfit(
                               color: Colors.white.withValues(alpha: 0.92),
                               fontSize: 14,
@@ -174,19 +209,19 @@ class YatraCompletedScreen extends StatelessWidget {
                       Expanded(
                         child: _CompactStat(
                           icon: Icons.location_on_rounded,
-                          value: distance,
+                          value: widget.distance,
                         ),
                       ),
                       Expanded(
                         child: _CompactStat(
                           icon: Icons.directions_walk_rounded,
-                          value: steps,
+                          value: widget.steps,
                         ),
                       ),
                       Expanded(
                         child: _CompactStat(
                           icon: Icons.access_time_filled_rounded,
-                          value: duration,
+                          value: widget.duration,
                         ),
                       ),
                     ],
