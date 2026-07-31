@@ -46,12 +46,14 @@ class YatraLiveSanghaScreen extends StatefulWidget {
 class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _runController;
-  late final Future<Uint8List?> _backgroundBytesFuture;
   bool _isRunning = false;
   bool _hasShownTempleAlertInRun = false;
   Timer? _liveWalkingTimer;
-  static const String _routeBackgroundSvg =
-      'assets/images/ChatGPT Image May 30, 2026, 06_05_16 PM 1.svg';
+  
+  // Live stats tracking
+  int _liveSteps = 0;
+  double _liveDistanceKm = 0.0;
+  int _onlineDevotees = 1240;
 
   static const String _backArrowSvg = '''<svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
 <path d="M2.87301 8.24994L8.56917 13.9461L7.49996 14.9999L0 7.49996L7.49996 0L8.56917 1.05382L2.87301 6.74998H14.9999V8.24994H2.87301Z" fill="#FFFFFF"/>
@@ -60,27 +62,10 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
   @override
   void initState() {
     super.initState();
-    _backgroundBytesFuture = _loadEmbeddedBackgroundBytes();
     _runController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     );
-  }
-
-  Future<Uint8List?> _loadEmbeddedBackgroundBytes() async {
-    try {
-      final svgText = await rootBundle.loadString(_routeBackgroundSvg);
-      final match = RegExp(
-        "data:image/[^;]+;base64,([^\"']+)",
-        caseSensitive: false,
-      ).firstMatch(svgText);
-      if (match == null || match.groupCount < 1) return null;
-      final base64Payload = match.group(1);
-      if (base64Payload == null || base64Payload.isEmpty) return null;
-      return base64Decode(base64Payload);
-    } catch (_) {
-      return null;
-    }
   }
 
   @override
@@ -90,8 +75,20 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     super.dispose();
   }
 
-  void _startRun() {
+  void _startRun() async {
     if (_isRunning) return;
+
+    // Call API to ensure backend state is STARTED
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      if (token.isNotEmpty && widget.journeyId.isNotEmpty) {
+        await ApiService.resumeJourney(token, widget.journeyId);
+      }
+    } catch (e) {
+      debugPrint('Failed to resume journey on backend: $e');
+    }
+
     setState(() {
       _isRunning = true;
     });
@@ -106,6 +103,13 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
         if (token.isNotEmpty && widget.journeyId.isNotEmpty) {
           // Simulate 500 steps and 400 meters walked every 3 seconds
           await ApiService.updateJourneyLocation(token, widget.journeyId, 500, 400.0);
+          
+          if (mounted) {
+            setState(() {
+              _liveSteps += 500;
+              _liveDistanceKm += 0.4;
+            });
+          }
           
           final progressData = await ApiService.getJourneyProgress(token, widget.journeyId);
           if (progressData.isNotEmpty) {
@@ -519,24 +523,69 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     );
   }
 
-  Widget _buildAnimatedBackground(Widget child) {
+  Widget _buildParallaxBackground() {
     return AnimatedBuilder(
       animation: _runController,
-      child: child,
-      builder: (context, animatedChild) {
-        if (!_isRunning) return animatedChild ?? const SizedBox.shrink();
-
-        final phase = _runController.value;
-        final scale = 1.03 + (0.02 * math.sin(phase * math.pi * 2));
-        final dx = 4 * math.cos(phase * math.pi * 2);
-        final dy = 8 * math.sin(phase * math.pi * 2);
-
-        return Transform.translate(
-          offset: Offset(dx, dy),
-          child: Transform.scale(
-            scale: scale,
-            child: animatedChild,
-          ),
+      builder: (context, _) {
+        final offset = _runController.value;
+        final bobbingOffset = _isRunning ? math.sin(offset * math.pi * 4) * 8 : 0.0;
+        
+        // Fix for physical devices trying to load localhost images from DB
+        final String resolvedImageUrl = widget.imageAsset.replaceAll('127.0.0.1', '192.168.29.113');
+        
+        return Stack(
+          children: [
+            // Bottom image scrolling down
+            Positioned.fill(
+              child: FractionalTranslation(
+                translation: Offset(0, offset),
+                child: resolvedImageUrl.startsWith('http')
+                    ? Image.network(
+                        resolvedImageUrl,
+                        fit: BoxFit.cover,
+                        alignment: Alignment.bottomCenter,
+                      )
+                    : Image.asset(
+                        resolvedImageUrl.isNotEmpty ? resolvedImageUrl : 'assets/images/yatra_road_bg.png',
+                        fit: BoxFit.cover,
+                        alignment: Alignment.bottomCenter,
+                      ),
+              ),
+            ),
+            // Top image coming in to replace it
+            Positioned.fill(
+              child: FractionalTranslation(
+                translation: Offset(0, offset - 1.0),
+                child: resolvedImageUrl.startsWith('http')
+                    ? Image.network(
+                        resolvedImageUrl,
+                        fit: BoxFit.cover,
+                        alignment: Alignment.bottomCenter,
+                      )
+                    : Image.asset(
+                        resolvedImageUrl.isNotEmpty ? resolvedImageUrl : 'assets/images/yatra_road_bg.png',
+                        fit: BoxFit.cover,
+                        alignment: Alignment.bottomCenter,
+                      ),
+              ),
+            ),
+            // Pilgrim Character
+            Align(
+              alignment: const Alignment(0, 0.4),
+              child: Transform.translate(
+                offset: Offset(0, bobbingOffset),
+                child: ColorFiltered(
+                  colorFilter: const ColorFilter.mode(Colors.white, BlendMode.multiply),
+                  child: Image.asset(
+                    'assets/images/pilgrim_character.png',
+                    width: 140,
+                    height: 140,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -548,36 +597,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
       body: Stack(
         children: [
           Positioned.fill(
-            child: FutureBuilder<Uint8List?>(
-              future: _backgroundBytesFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return Container(color: const Color(0xFF1A1A1A));
-                }
-
-                final bytes = snapshot.data;
-                if (bytes != null) {
-                  return _buildAnimatedBackground(
-                    Image.memory(
-                      bytes,
-                      fit: BoxFit.cover,
-                      gaplessPlayback: true,
-                    ),
-                  );
-                }
-
-                // Fallback to regular SVG rendering if no embedded image is found.
-                return _buildAnimatedBackground(
-                  SvgPicture.asset(
-                    _routeBackgroundSvg,
-                    fit: BoxFit.cover,
-                    placeholderBuilder: (context) => Container(
-                      color: const Color(0xFF1A1A1A),
-                    ),
-                  ),
-                );
-              },
-            ),
+            child: _buildParallaxBackground(),
           ),
           SafeArea(
             child: Padding(
@@ -607,8 +627,10 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
                     ),
                   ),
                   if (!widget.isFromCreateGroup) ...[
-                    const SizedBox(height: 18),
-                    _LiveSanghaCard(),
+                    _LiveSanghaCard(
+                      onlineDevotees: _onlineDevotees,
+                      distanceKm: _liveDistanceKm,
+                    ),
                     const Spacer(),
                     Align(
                       alignment: Alignment.centerLeft,
@@ -765,6 +787,14 @@ class _TotalGroupProgressCard extends StatelessWidget {
 }
 
 class _LiveSanghaCard extends StatelessWidget {
+  final int onlineDevotees;
+  final double distanceKm;
+
+  const _LiveSanghaCard({
+    required this.onlineDevotees,
+    required this.distanceKm,
+  });
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -809,7 +839,7 @@ class _LiveSanghaCard extends StatelessWidget {
                 child: Column(
                   children: [
                     Text(
-                      '1,240',
+                      '$onlineDevotees',
                       style: GoogleFonts.outfit(
                         color: const Color(0xFF5F5F5F),
                         fontSize: 24,
@@ -831,7 +861,7 @@ class _LiveSanghaCard extends StatelessWidget {
                 child: Column(
                   children: [
                     Text(
-                      '42',
+                      '${distanceKm.toStringAsFixed(1)}',
                       style: GoogleFonts.outfit(
                         color: const Color(0xFF5F5F5F),
                         fontSize: 24,
@@ -839,7 +869,7 @@ class _LiveSanghaCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'Nearby',
+                      'Km Completed',
                       style: GoogleFonts.outfit(
                         color: const Color(0xFFC8A882),
                         fontSize: 12,

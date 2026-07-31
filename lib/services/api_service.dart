@@ -33,7 +33,8 @@ class ApiService {
     final trimmed = url.trim();
     if (trimmed.startsWith('assets/')) return trimmed; // Keep local assets as is
     
-    final baseDomain = baseUrl.replaceAll('/user', '');
+    // Extract base domain without /api or /user
+    final baseDomain = baseUrl.replaceAll(RegExp(r'/api.*|/user.*'), '');
     
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       return trimmed.replaceFirst(RegExp(r'http://[0-9.]+:3020'), baseDomain)
@@ -508,6 +509,24 @@ class ApiService {
     } catch (e) {
       print('Error creating group journey: $e');
       return {};
+    }
+  }
+
+  // POST /user/yatra/journey/resume
+  static Future<Map<String, dynamic>> resumeJourney(String token, String journeyId) async {
+    try {
+      final response = await _safePost(
+        Uri.parse('$baseUrl/yatra/journey/resume'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({'journeyId': journeyId}),
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('Error resuming journey: $e');
+      rethrow;
     }
   }
 
