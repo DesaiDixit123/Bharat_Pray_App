@@ -43,6 +43,7 @@ dependencies:
   youtube_player_flutter: ^10.0.1
   flame: ^1.38.0
   video_player: ^2.13.0
+  geolocator: ^13.0.0
 
 dev_dependencies:
   flutter_test:

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
+import 'dart:math' show asin, cos, sin, sqrt, pi;
 import 'add_temple_on_route_screen.dart';
 import 'individual_progress_screen.dart';
 import 'yatra_chat_screen.dart';
@@ -9,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/api_service.dart';
 import 'package:bharat_pray/screens/details/app_icons.dart';
 import 'package:video_player/video_player.dart';
+import 'package:geolocator/geolocator.dart';
 
 class YatraLiveSanghaScreen extends StatefulWidget {
   final String journeyId;
@@ -42,7 +44,7 @@ class YatraLiveSanghaScreen extends StatefulWidget {
   State<YatraLiveSanghaScreen> createState() => _YatraLiveSanghaScreenState();
 }
 
-enum YatraVideoMode { road, temple }
+enum YatraVideoMode { walking, templeReaching, templeEntrance }
 
 class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     with SingleTickerProviderStateMixin {
@@ -50,9 +52,21 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
   bool _isRunning = false;
   bool _hasShownTempleAlertInRun = false;
   Timer? _liveWalkingTimer;
-  VideoPlayerController? _roadVideoController;
-  VideoPlayerController? _templeVideoController;
-  YatraVideoMode _currentVideoMode = YatraVideoMode.road;
+  Timer? _loopSeekTimer;
+
+  // GPS proximity
+  StreamSubscription<Position>? _locationSubscription;
+  final Set<String> _templeAlertShownFor = {}; // track which temples already triggered
+
+  // 3 video controllers
+  VideoPlayerController? _walkingVideoControllerA;     // Continue_walking.mp4 (Ping-Pong A)
+  VideoPlayerController? _walkingVideoControllerB;     // Continue_walking.mp4 (Ping-Pong B)
+  bool _useWalkingA = true; // Tracks which walking controller is active
+
+  VideoPlayerController? _templeReachingVideoController; // Temple_reaching.mp4
+  VideoPlayerController? _templeEntranceVideoController; // Temple_entrarance.mp4
+
+  YatraVideoMode _currentVideoMode = YatraVideoMode.walking;
   
   // Live stats tracking
   double _liveDistanceKm = 0.0;
@@ -70,29 +84,49 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
       duration: const Duration(milliseconds: 1400),
     );
 
-    // Video Player 1: Walking on road (Continuous loop starting from 2.0s mark)
-    _roadVideoController = VideoPlayerController.asset(
-      'assets/images/Walking_on_road.mp4',
+    // Video 1A & 1B: Continue_walking.mp4 — double buffered for 0-second seamless looping
+    _walkingVideoControllerA = VideoPlayerController.asset(
+      'assets/images/Continue_walking.mp4',
     )..initialize().then((_) {
         if (mounted) {
-          _roadVideoController!.setLooping(false); // Manual loop control for 2s trim
-          _roadVideoController!.seekTo(const Duration(seconds: 2));
-          _roadVideoController!.addListener(_onRoadVideoStatusChanged);
-          _roadVideoController!.addListener(() {
+          _walkingVideoControllerA!.setLooping(false);
+          _walkingVideoControllerA!.addListener(_onWalkingVideoPositionChanged);
+          setState(() {});
+        }
+      });
+
+    _walkingVideoControllerB = VideoPlayerController.asset(
+      'assets/images/Continue_walking.mp4',
+    )..initialize().then((_) {
+        if (mounted) {
+          _walkingVideoControllerB!.setLooping(false);
+          _walkingVideoControllerB!.addListener(_onWalkingVideoPositionChanged);
+          setState(() {});
+        }
+      });
+
+    // Video 2: Temple_reaching.mp4 — plays once then shows popup
+    _templeReachingVideoController = VideoPlayerController.asset(
+      'assets/images/Temple_reaching.mp4',
+    )..initialize().then((_) {
+        if (mounted) {
+          _templeReachingVideoController!.setLooping(false);
+          _templeReachingVideoController!.addListener(_onTempleReachingStatusChanged);
+          _templeReachingVideoController!.addListener(() {
             if (mounted) setState(() {});
           });
           setState(() {});
         }
       });
 
-    // Video Player 2: Walking to temple (Plays when user clicks View Darshan)
-    _templeVideoController = VideoPlayerController.asset(
-      'assets/images/Walking_to_temple.mp4',
+    // Video 3: Temple_entrarance.mp4 — plays when user taps View Darshan
+    _templeEntranceVideoController = VideoPlayerController.asset(
+      'assets/images/Temple_entrarance.mp4',
     )..initialize().then((_) {
         if (mounted) {
-          _templeVideoController!.setLooping(false);
-          _templeVideoController!.addListener(_onTempleVideoStatusChanged);
-          _templeVideoController!.addListener(() {
+          _templeEntranceVideoController!.setLooping(false);
+          _templeEntranceVideoController!.addListener(_onTempleEntranceStatusChanged);
+          _templeEntranceVideoController!.addListener(() {
             if (mounted) setState(() {});
           });
           setState(() {});
@@ -100,64 +134,228 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
       });
   }
 
-  void _onRoadVideoStatusChanged() {
-    if (_currentVideoMode == YatraVideoMode.road &&
-        _roadVideoController != null &&
-        _roadVideoController!.value.isInitialized) {
-      final value = _roadVideoController!.value;
-      // Loop back to 2-second mark when video nears end or stops
-      if (value.position >= value.duration - const Duration(milliseconds: 300) ||
-          (value.position >= value.duration && !value.isPlaying)) {
-        if (_isRunning) {
-          _roadVideoController!.seekTo(const Duration(seconds: 2));
-          _roadVideoController!.play();
+  // ─── Seamless loop: Ping-Pong technique for 0-second gap
+  // When active controller hits 9s, we instantly swap to the standby controller
+  // which is already queued at 4s, creating a perfect seamless loop.
+  void _onWalkingVideoPositionChanged() {
+    if (_currentVideoMode != YatraVideoMode.walking) return;
+    
+    final activeCtrl = _useWalkingA ? _walkingVideoControllerA : _walkingVideoControllerB;
+    final standbyCtrl = _useWalkingA ? _walkingVideoControllerB : _walkingVideoControllerA;
+    
+    if (activeCtrl == null || !activeCtrl.value.isInitialized) return;
+    if (standbyCtrl == null || !standbyCtrl.value.isInitialized) return;
+    
+    final pos = activeCtrl.value.position;
+    final loopEnd = activeCtrl.value.duration.inMilliseconds < 9000
+        ? activeCtrl.value.duration.inMilliseconds
+        : 9000;
+        
+    // Start the 2-second crossfade exactly 2000ms before the end
+    if (pos.inMilliseconds >= loopEnd - 2000) {
+      // 1. Play the standby video (already pre-buffered at 4s)
+      standbyCtrl.play();
+      
+      // 2. Swap UI to trigger the 2-second AnimatedOpacity crossfade
+      setState(() {
+        _useWalkingA = !_useWalkingA;
+      });
+      
+      // 3. Let the old video keep playing during the 2-second fade.
+      // After it's completely hidden, pause and rewind it for the NEXT loop.
+      Future.delayed(const Duration(milliseconds: 2050), () {
+        if (mounted) {
+          activeCtrl.pause();
+          activeCtrl.seekTo(const Duration(seconds: 4));
         }
-      }
+      });
     }
   }
 
-  void _onTempleVideoStatusChanged() {
-    if (_currentVideoMode == YatraVideoMode.temple &&
-        _templeVideoController != null &&
-        _templeVideoController!.value.isInitialized) {
-      final value = _templeVideoController!.value;
-      if (value.position >= value.duration && !value.isPlaying) {
-        _switchToRoadVideo();
-      }
+  void _onTempleReachingStatusChanged() {
+    if (_currentVideoMode != YatraVideoMode.templeReaching) return;
+    final ctrl = _templeReachingVideoController;
+    if (ctrl == null || !ctrl.value.isInitialized) return;
+    final value = ctrl.value;
+    if (!value.isPlaying &&
+        value.position.inMilliseconds >= value.duration.inMilliseconds - 200) {
+      // Temple reaching video finished → show the choice popup
+      _showTempleChoicePopup();
     }
   }
 
-  void _switchToRoadVideo() {
-    if (_currentVideoMode == YatraVideoMode.road) return;
+  void _onTempleEntranceStatusChanged() {
+    if (_currentVideoMode != YatraVideoMode.templeEntrance) return;
+    final ctrl = _templeEntranceVideoController;
+    if (ctrl == null || !ctrl.value.isInitialized) return;
+    final value = ctrl.value;
+    if (!value.isPlaying &&
+        value.position.inMilliseconds >= value.duration.inMilliseconds - 200) {
+      // Darshan video finished → loop back to walking
+      _switchToWalkingVideo();
+    }
+  }
+
+  /// Switch back to the seamless-looping walking video (4s–9s window).
+  void _switchToWalkingVideo() {
+    _templeReachingVideoController?.pause();
+    _templeEntranceVideoController?.pause();
     setState(() {
-      _currentVideoMode = YatraVideoMode.road;
+      _currentVideoMode = YatraVideoMode.walking;
     });
-    _templeVideoController?.pause();
-    if (_isRunning && _roadVideoController != null && _roadVideoController!.value.isInitialized) {
-      _roadVideoController!.seekTo(const Duration(seconds: 2));
-      _roadVideoController!.play();
+    
+    final activeCtrl = _useWalkingA ? _walkingVideoControllerA : _walkingVideoControllerB;
+    final standbyCtrl = _useWalkingA ? _walkingVideoControllerB : _walkingVideoControllerA;
+    
+    if (_isRunning) {
+      standbyCtrl?.seekTo(const Duration(seconds: 4)).then((_) => standbyCtrl.pause());
+      activeCtrl?.seekTo(const Duration(seconds: 4)).then((_) => activeCtrl.play());
     }
   }
 
-  void _switchToTempleVideo() {
+  /// Play Temple_reaching.mp4 once, then show the choice popup.
+  void _switchToTempleReachingVideo() {
+    _walkingVideoControllerA?.pause();
+    _walkingVideoControllerB?.pause();
     setState(() {
-      _currentVideoMode = YatraVideoMode.temple;
+      _currentVideoMode = YatraVideoMode.templeReaching;
     });
-    _roadVideoController?.pause();
-    if (_templeVideoController != null && _templeVideoController!.value.isInitialized) {
-      _templeVideoController!.seekTo(Duration.zero);
-      _templeVideoController!.play();
+    final ctrl = _templeReachingVideoController;
+    if (ctrl != null && ctrl.value.isInitialized) {
+      ctrl.seekTo(Duration.zero).then((_) => ctrl.play());
     }
+  }
+
+  /// Play Temple_entrarance.mp4 (View Darshan path).
+  void _switchToTempleEntranceVideo() {
+    _templeReachingVideoController?.pause();
+    setState(() {
+      _currentVideoMode = YatraVideoMode.templeEntrance;
+    });
+    final ctrl = _templeEntranceVideoController;
+    if (ctrl != null && ctrl.value.isInitialized) {
+      ctrl.seekTo(Duration.zero).then((_) => ctrl.play());
+    }
+  }
+
+  /// The popup that appears when Temple_reaching.mp4 finishes.
+  void _showTempleChoicePopup() {
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 18),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFFBFAF8),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFF8400).withValues(alpha: 0.45),
+                  blurRadius: 26,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Temple Nearby!',
+                  style: GoogleFonts.outfit(
+                    color: const Color(0xFFFF7A00),
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'A temple is approaching on your left.\nWhat would you like to do?',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.outfit(
+                    color: const Color(0xFFC1A17E),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF8A00),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _switchToTempleEntranceVideo();
+                    },
+                    child: Text(
+                      'View Darshan',
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFFF8A00),
+                      side: const BorderSide(color: Color(0xFFFF8A00), width: 1.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _switchToWalkingVideo();
+                    },
+                    child: Text(
+                      'Continue Yatra',
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
   void dispose() {
     _liveWalkingTimer?.cancel();
+    _loopSeekTimer?.cancel();
+    _locationSubscription?.cancel();
     _runController.dispose();
-    _roadVideoController?.removeListener(_onRoadVideoStatusChanged);
-    _templeVideoController?.removeListener(_onTempleVideoStatusChanged);
-    _roadVideoController?.dispose();
-    _templeVideoController?.dispose();
+    _walkingVideoControllerA?.removeListener(_onWalkingVideoPositionChanged);
+    _walkingVideoControllerB?.removeListener(_onWalkingVideoPositionChanged);
+    _templeReachingVideoController?.removeListener(_onTempleReachingStatusChanged);
+    _templeEntranceVideoController?.removeListener(_onTempleEntranceStatusChanged);
+    _walkingVideoControllerA?.dispose();
+    _walkingVideoControllerB?.dispose();
+    _templeReachingVideoController?.dispose();
+    _templeEntranceVideoController?.dispose();
     super.dispose();
   }
 
@@ -166,32 +364,30 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
 
     setState(() {
       _isRunning = true;
+      _currentVideoMode = YatraVideoMode.walking;
     });
     _runController.repeat();
 
-    // Instantly play active video controller starting from 2.0s mark
-    if (_currentVideoMode == YatraVideoMode.road) {
-      if (_roadVideoController != null && _roadVideoController!.value.isInitialized) {
-        if (_roadVideoController!.value.position < const Duration(seconds: 2)) {
-          _roadVideoController!.seekTo(const Duration(seconds: 2));
-        }
-        _roadVideoController!.play();
-      } else {
-        _roadVideoController?.initialize().then((_) {
-          if (mounted && _isRunning && _currentVideoMode == YatraVideoMode.road) {
-            _roadVideoController!.seekTo(const Duration(seconds: 2));
-            _roadVideoController!.play();
-            setState(() {});
-          }
-        });
-      }
+    // Queue standby controller at 4s, and play active controller at 4s
+    final activeCtrl = _useWalkingA ? _walkingVideoControllerA : _walkingVideoControllerB;
+    final standbyCtrl = _useWalkingA ? _walkingVideoControllerB : _walkingVideoControllerA;
+    
+    if (activeCtrl != null && activeCtrl.value.isInitialized &&
+        standbyCtrl != null && standbyCtrl.value.isInitialized) {
+      standbyCtrl.seekTo(const Duration(seconds: 4)).then((_) => standbyCtrl.pause());
+      activeCtrl.seekTo(const Duration(seconds: 4)).then((_) => activeCtrl.play());
     } else {
-      if (_templeVideoController != null && _templeVideoController!.value.isInitialized) {
-        _templeVideoController!.play();
-      }
+      activeCtrl?.initialize().then((_) {
+        if (mounted && _isRunning) {
+          standbyCtrl?.seekTo(const Duration(seconds: 4)).then((_) => standbyCtrl.pause());
+          activeCtrl.seekTo(const Duration(seconds: 4)).then((_) => activeCtrl.play());
+          setState(() {});
+        }
+      });
     }
 
-    _scheduleTempleAlertPreview();
+    // _scheduleTempleAlertPreview(); // TODO: re-enable when temple popup is needed
+    _startLocationTracking(); // Real GPS proximity tracking
     _resumeBackendJourney();
 
     // Start live pedometer simulation
@@ -239,11 +435,16 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     if (!_isRunning) return;
 
     _liveWalkingTimer?.cancel();
+    _loopSeekTimer?.cancel();
+    _locationSubscription?.cancel();
+    _locationSubscription = null;
     _runController.stop();
     _runController.reset();
 
-    _roadVideoController?.pause();
-    _templeVideoController?.pause();
+    _walkingVideoControllerA?.pause();
+    _walkingVideoControllerB?.pause();
+    _templeReachingVideoController?.pause();
+    _templeEntranceVideoController?.pause();
 
     setState(() {
       _isRunning = false;
@@ -277,201 +478,96 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     if (_hasShownTempleAlertInRun) return;
     _hasShownTempleAlertInRun = true;
 
-    Future<void>.delayed(const Duration(seconds: 2), () {
+    // After a short walking period, switch to Temple_reaching video.
+    // When that video ends, _onTempleReachingStatusChanged fires the choice popup.
+    Future<void>.delayed(const Duration(seconds: 8), () {
       if (!mounted || !_isRunning) return;
-      _showTempleOnRoutePopup(
-        const _TempleRouteAlert(
-          templeName: 'Kashtabhanjan Hanuman Temple',
-          locationName: 'Sarangpur',
-          templeImage: 'assets/images/deity_hanuman.png',
-          messageLine1: "You are passing by one of Gujarat's",
-          messageLine2: 'most revered Hanuman temples.',
-          messageLine3: 'Would you like to visit the Live Darshan before',
-          messageLine4: 'continuing your Somnath Yatra?',
-        ),
-      );
+      _switchToTempleReachingVideo();
     });
   }
 
-  void _showTempleOnRoutePopup(_TempleRouteAlert alert) {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      barrierColor: Colors.black.withValues(alpha: 0.35),
-      builder: (context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 18),
-          child: Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFFFBFAF8),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFFF8400).withValues(alpha: 0.45),
-                  blurRadius: 26,
-                  spreadRadius: 2,
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Align(
-                  alignment: Alignment.topRight,
-                  child: GestureDetector(
-                    onTap: () => Navigator.of(context).pop(),
-                    child: Icon(
-                      Icons.close,
-                      color: const Color(0xFFC9A57A),
-                      size: 22,
-                    ),
-                  ),
-                ),
-                Container(
-                  width: 150,
-                  height: 150,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: const Color(0xFFEAD7C4), width: 1),
-                  ),
-                  child: ClipOval(
-                    child: Image.asset(
-                      alert.templeImage,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const ColoredBox(color: Color(0xFFE6D6C4)),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  alert.templeName,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.outfit(
-                    color: const Color(0xFFFF7A00),
-                    fontSize: 29,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.location_on_rounded,
-                      size: 16,
-                      color: const Color(0xFFC7A684),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      alert.locationName,
-                      style: GoogleFonts.outfit(
-                        color: const Color(0xFFC7A684),
-                        fontSize: 22,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  alert.messageLine1,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.outfit(
-                    color: const Color(0xFFC1A17E),
-                    fontSize: 19,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  alert.messageLine2,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.outfit(
-                    color: const Color(0xFFC1A17E),
-                    fontSize: 19,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  alert.messageLine3,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.outfit(
-                    color: const Color(0xFFC1A17E),
-                    fontSize: 19,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  alert.messageLine4,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.outfit(
-                    color: const Color(0xFFC1A17E),
-                    fontSize: 19,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF8A00),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      _switchToTempleVideo();
-                    },
-                    child: Text(
-                      'View Darshan',
-                      style: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF8A00),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      _switchToRoadVideo();
-                    },
-                    child: Text(
-                      'Continue Yatra',
-                      style: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+  // ─── Real GPS Proximity Tracking ─────────────────────────────────────────
+  // Requests location permission, then listens to device position updates.
+  // When the user comes within 500 m of any selected temple that has lat/lng,
+  // we switch to Temple_reaching.mp4 (only once per temple per run).
+  Future<void> _startLocationTracking() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      debugPrint('Location services disabled – skipping proximity tracking.');
+      return;
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        debugPrint('Location permission denied.');
+        return;
+      }
+    }
+    if (permission == LocationPermission.deniedForever) {
+      debugPrint('Location permission permanently denied.');
+      return;
+    }
+
+    const locationSettings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 20, // metres – receive update every 20 m movement
     );
+
+    _locationSubscription =
+        Geolocator.getPositionStream(locationSettings: locationSettings)
+            .listen(_onLocationUpdate);
   }
+
+  void _onLocationUpdate(Position position) {
+    if (!_isRunning || _currentVideoMode != YatraVideoMode.walking) return;
+
+    // Check every temple on the route that has GPS coordinates.
+    for (final temple in widget.selectedTemples) {
+      if (temple.lat == null || temple.lng == null) continue;
+
+      final templeKey = '${temple.name}|${temple.lat}|${temple.lng}';
+      if (_templeAlertShownFor.contains(templeKey)) continue; // already triggered
+
+      final distanceMeters = _haversineDistanceMeters(
+        position.latitude,
+        position.longitude,
+        temple.lat!,
+        temple.lng!,
+      );
+
+      debugPrint('Distance to ${temple.name}: ${distanceMeters.toStringAsFixed(0)} m');
+
+      if (distanceMeters <= 500) {
+        // User is within 500 m – mark as shown and play the reaching video.
+        _templeAlertShownFor.add(templeKey);
+        _switchToTempleReachingVideo();
+        break; // handle one temple at a time
+      }
+    }
+  }
+
+  /// Haversine formula – returns distance in metres between two lat/lng points.
+  double _haversineDistanceMeters(
+    double lat1, double lon1,
+    double lat2, double lon2,
+  ) {
+    const double earthRadiusMeters = 6371000;
+    final double dLat = _toRadians(lat2 - lat1);
+    final double dLon = _toRadians(lon2 - lon1);
+    final double a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(_toRadians(lat1)) *
+            cos(_toRadians(lat2)) *
+            sin(dLon / 2) *
+            sin(dLon / 2);
+    final double c = 2 * asin(sqrt(a));
+    return earthRadiusMeters * c;
+  }
+
+  double _toRadians(double degrees) => degrees * pi / 180;
+
+
 
   void _showTravelerProfilePopup(_TravelerProfile traveler) {
     showDialog<void>(
@@ -632,30 +728,57 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
   }
 
 
+  Widget _buildVideoLayer(VideoPlayerController? ctrl, {required bool isVisible, bool alwaysOpaque = false}) {
+    if (ctrl == null || !ctrl.value.isInitialized) {
+      return const SizedBox.shrink();
+    }
+    return AnimatedOpacity(
+      opacity: alwaysOpaque ? 1.0 : (isVisible ? 1.0 : 0.0),
+      duration: const Duration(seconds: 2), // 2-second smooth transition
+      child: SizedBox.expand(
+        child: FittedBox(
+          fit: BoxFit.cover,
+          child: SizedBox(
+            width: ctrl.value.size.width,
+            height: ctrl.value.size.height,
+            child: VideoPlayer(ctrl),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final activeController = _currentVideoMode == YatraVideoMode.temple
-        ? _templeVideoController
-        : _roadVideoController;
-    final isInitialized = activeController != null && activeController.value.isInitialized;
-
     return Scaffold(
       body: Stack(
         children: [
-          // The FULL screen Photorealistic Video Player!
+          // The FULL screen Photorealistic Video Layers with Crossfading!
           Positioned.fill(
-            child: isInitialized
-                ? SizedBox.expand(
-                    child: FittedBox(
-                      fit: BoxFit.cover,
-                      child: SizedBox(
-                        width: activeController.value.size.width,
-                        height: activeController.value.size.height,
-                        child: VideoPlayer(activeController),
-                      ),
-                    ),
-                  )
-                : const Center(child: CircularProgressIndicator(color: Color(0xFFFF7A00))),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Render the loading indicator at the bottom if nothing is ready
+                const Center(child: CircularProgressIndicator(color: Color(0xFFFF7A00))),
+                
+                if (_currentVideoMode == YatraVideoMode.walking) ...[
+                  // Bottom layer: Video B is ALWAYS opaque. This prevents any black background 
+                  // from showing through during the crossfade.
+                  _buildVideoLayer(_walkingVideoControllerB, isVisible: true, alwaysOpaque: true),
+                  
+                  // Top layer: Video A fades in and out over Video B.
+                  // When A fades out (1 -> 0), B is revealed underneath flawlessly.
+                  // When A fades in (0 -> 1), it covers B flawlessly.
+                  _buildVideoLayer(_walkingVideoControllerA, isVisible: _useWalkingA, alwaysOpaque: false),
+                ],
+                
+                if (_currentVideoMode == YatraVideoMode.templeReaching)
+                  _buildVideoLayer(_templeReachingVideoController, isVisible: true, alwaysOpaque: true),
+                  
+                if (_currentVideoMode == YatraVideoMode.templeEntrance)
+                  _buildVideoLayer(_templeEntranceVideoController, isVisible: true, alwaysOpaque: true),
+              ],
+            ),
           ),
           SafeArea(
             child: Padding(

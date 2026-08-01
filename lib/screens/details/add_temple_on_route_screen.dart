@@ -9,6 +9,8 @@ class TempleRouteItem {
   final String imageAsset;
   final String phone;
   final String schedule;
+  final double? lat;   // GPS latitude  (optional – null = no proximity check)
+  final double? lng;   // GPS longitude
 
   const TempleRouteItem({
     required this.name,
@@ -16,6 +18,8 @@ class TempleRouteItem {
     required this.imageAsset,
     required this.phone,
     required this.schedule,
+    this.lat,
+    this.lng,
   });
 }
 
@@ -64,6 +68,8 @@ class _AddTempleOnRouteScreenState extends State<AddTempleOnRouteScreen> {
       imageAsset: 'assets/images/somnath_temple.png',
       phone: '9876543210',
       schedule: 'Day 1 • 05:00 AM',
+      lat: 21.6270,
+      lng: 72.1730,
     ),
     TempleRouteItem(
       name: 'Nageshwar Jyotirlinga',
@@ -71,6 +77,8 @@ class _AddTempleOnRouteScreenState extends State<AddTempleOnRouteScreen> {
       imageAsset: 'assets/images/dwarka_temple.jpg',
       phone: '9988776655',
       schedule: 'Day 1 • 05:00 AM',
+      lat: 22.2451,
+      lng: 68.9702,
     ),
     TempleRouteItem(
       name: 'Madhavpur Krishna Temple',
@@ -78,6 +86,8 @@ class _AddTempleOnRouteScreenState extends State<AddTempleOnRouteScreen> {
       imageAsset: 'assets/images/image_2.png',
       phone: '9090909090',
       schedule: 'Day 2 • 09:30 AM',
+      lat: 21.2985,
+      lng: 70.0147,
     ),
     TempleRouteItem(
       name: 'Kirti Mandir Porbandar',
@@ -85,6 +95,8 @@ class _AddTempleOnRouteScreenState extends State<AddTempleOnRouteScreen> {
       imageAsset: 'assets/images/image_4.png',
       phone: '9123456780',
       schedule: 'Day 4 • 08:45 AM',
+      lat: 21.6422,
+      lng: 69.6098,
     ),
   ];
 
@@ -95,6 +107,8 @@ class _AddTempleOnRouteScreenState extends State<AddTempleOnRouteScreen> {
       imageAsset: 'assets/images/download_1.png',
       phone: '9871200000',
       schedule: 'Day 3 • 04:00 PM',
+      lat: 20.9067,
+      lng: 70.3535,
     ),
     TempleRouteItem(
       name: 'Dwarkadhish Temple',
@@ -102,6 +116,8 @@ class _AddTempleOnRouteScreenState extends State<AddTempleOnRouteScreen> {
       imageAsset: 'assets/images/somnath_temple_new.png',
       phone: '9900011122',
       schedule: 'Day 5 • Evening Aarti',
+      lat: 22.2394,
+      lng: 68.9678,
     ),
   ];
 
