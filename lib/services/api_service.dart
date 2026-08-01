@@ -4,27 +4,31 @@ import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
 
 class ApiService {
-  // Hosts for Android:
-  // 1. '10.0.2.2' (Direct USB tunnel via adb reverse tcp:3020 tcp:3020 - 100% reliable)
-  // 2. '192.168.29.113' (Wi-Fi LAN)
-  // 3. '10.0.2.2' (Android Emulator)
-  // Changed to the Wi-Fi IPv4 address for local testing on physical devices
-  static String _activeAndroidHost = '192.168.29.113';
+  // Set to true to use the live production server, false for local testing
+  static const bool isLive = true;
+
+  // Hosts for Android physical device (when isLive = false):
+  // '10.192.149.19'  → Wi-Fi LAN IP of the PC running the backend
+  // '10.0.2.2'       → USB tunnel (run: adb reverse tcp:3020 tcp:3020)
+  static String _activeAndroidHost = '10.192.149.19';
 
   static String get baseUrl {
+    if (isLive) {
+      return 'https://api.bharatpray.com/user';
+    }
+    
     if (Platform.isAndroid) {
       return 'http://$_activeAndroidHost:3020/user';
     }
     return 'http://localhost:3020/user';
   }
 
+  /// Rotate between Wi-Fi IP and USB tunnel only — 127.0.0.1 excluded (unusable on physical devices).
   static void _switchHost() {
-    if (_activeAndroidHost == '127.0.0.1') {
-      _activeAndroidHost = '192.168.29.113';
-    } else if (_activeAndroidHost == '192.168.29.113') {
+    if (_activeAndroidHost == '10.192.149.19') {
       _activeAndroidHost = '10.0.2.2';
     } else {
-      _activeAndroidHost = '127.0.0.1';
+      _activeAndroidHost = '10.192.149.19';
     }
   }
 

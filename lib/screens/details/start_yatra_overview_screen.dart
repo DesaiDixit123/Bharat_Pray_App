@@ -7,6 +7,7 @@ import '../../services/api_service.dart';
 import 'add_temple_on_route_screen.dart';
 import 'yatra_live_sangha_screen.dart';
 import 'yatra_completed_screen.dart';
+import 'animated_journey/animated_journey_screen.dart';
 
 class StartYatraOverviewScreen extends StatefulWidget {
   static const Color accentOrange = Color(0xFFFF7A00);
@@ -22,6 +23,7 @@ class StartYatraOverviewScreen extends StatefulWidget {
   final String sangha;
   final String imageAsset;
   final bool isFromCreateGroup;
+  final List<dynamic>? routeTemples;
 
   const StartYatraOverviewScreen({
     super.key,
@@ -33,6 +35,7 @@ class StartYatraOverviewScreen extends StatefulWidget {
     required this.sangha,
     required this.imageAsset,
     this.isFromCreateGroup = false,
+    this.routeTemples,
   });
 
   @override
@@ -70,6 +73,7 @@ class _StartYatraOverviewScreenState extends State<StartYatraOverviewScreen> {
               imageAsset: widget.imageAsset,
               isFromCreateGroup: widget.isFromCreateGroup,
               selectedTemples: const <TempleRouteItem>[],
+              routeTemples: widget.routeTemples,
               completedScreen: YatraCompletedScreen(
                 journeyId: journeyId,
                 title: widget.title,

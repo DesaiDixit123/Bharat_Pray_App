@@ -2,16 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
-import 'dart:math' as math;
-import 'dart:convert';
-import 'package:flutter/services.dart';
 import 'add_temple_on_route_screen.dart';
 import 'individual_progress_screen.dart';
 import 'yatra_chat_screen.dart';
-import 'yatra_stop_progress_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/api_service.dart';
 import 'package:bharat_pray/screens/details/app_icons.dart';
+import 'package:video_player/video_player.dart';
 
 class YatraLiveSanghaScreen extends StatefulWidget {
   final String journeyId;
@@ -24,6 +21,7 @@ class YatraLiveSanghaScreen extends StatefulWidget {
   final List<TempleRouteItem> selectedTemples;
   final Widget? completedScreen;
   final bool isFromCreateGroup;
+  final List<dynamic>? routeTemples;
 
   const YatraLiveSanghaScreen({
     super.key,
@@ -37,11 +35,14 @@ class YatraLiveSanghaScreen extends StatefulWidget {
     this.selectedTemples = const <TempleRouteItem>[],
     this.completedScreen,
     this.isFromCreateGroup = false,
+    this.routeTemples,
   });
 
   @override
   State<YatraLiveSanghaScreen> createState() => _YatraLiveSanghaScreenState();
 }
+
+enum YatraVideoMode { road, temple }
 
 class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     with SingleTickerProviderStateMixin {
@@ -49,11 +50,13 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
   bool _isRunning = false;
   bool _hasShownTempleAlertInRun = false;
   Timer? _liveWalkingTimer;
+  VideoPlayerController? _roadVideoController;
+  VideoPlayerController? _templeVideoController;
+  YatraVideoMode _currentVideoMode = YatraVideoMode.road;
   
   // Live stats tracking
-  int _liveSteps = 0;
   double _liveDistanceKm = 0.0;
-  int _onlineDevotees = 1240;
+  final int _onlineDevotees = 1240;
 
   static const String _backArrowSvg = '''<svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
 <path d="M2.87301 8.24994L8.56917 13.9461L7.49996 14.9999L0 7.49996L7.49996 0L8.56917 1.05382L2.87301 6.74998H14.9999V8.24994H2.87301Z" fill="#FFFFFF"/>
@@ -66,47 +69,142 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     );
+
+    // Video Player 1: Walking on road (Continuous loop starting from 2.0s mark)
+    _roadVideoController = VideoPlayerController.asset(
+      'assets/images/Walking_on_road.mp4',
+    )..initialize().then((_) {
+        if (mounted) {
+          _roadVideoController!.setLooping(false); // Manual loop control for 2s trim
+          _roadVideoController!.seekTo(const Duration(seconds: 2));
+          _roadVideoController!.addListener(_onRoadVideoStatusChanged);
+          _roadVideoController!.addListener(() {
+            if (mounted) setState(() {});
+          });
+          setState(() {});
+        }
+      });
+
+    // Video Player 2: Walking to temple (Plays when user clicks View Darshan)
+    _templeVideoController = VideoPlayerController.asset(
+      'assets/images/Walking_to_temple.mp4',
+    )..initialize().then((_) {
+        if (mounted) {
+          _templeVideoController!.setLooping(false);
+          _templeVideoController!.addListener(_onTempleVideoStatusChanged);
+          _templeVideoController!.addListener(() {
+            if (mounted) setState(() {});
+          });
+          setState(() {});
+        }
+      });
+  }
+
+  void _onRoadVideoStatusChanged() {
+    if (_currentVideoMode == YatraVideoMode.road &&
+        _roadVideoController != null &&
+        _roadVideoController!.value.isInitialized) {
+      final value = _roadVideoController!.value;
+      // Loop back to 2-second mark when video nears end or stops
+      if (value.position >= value.duration - const Duration(milliseconds: 300) ||
+          (value.position >= value.duration && !value.isPlaying)) {
+        if (_isRunning) {
+          _roadVideoController!.seekTo(const Duration(seconds: 2));
+          _roadVideoController!.play();
+        }
+      }
+    }
+  }
+
+  void _onTempleVideoStatusChanged() {
+    if (_currentVideoMode == YatraVideoMode.temple &&
+        _templeVideoController != null &&
+        _templeVideoController!.value.isInitialized) {
+      final value = _templeVideoController!.value;
+      if (value.position >= value.duration && !value.isPlaying) {
+        _switchToRoadVideo();
+      }
+    }
+  }
+
+  void _switchToRoadVideo() {
+    if (_currentVideoMode == YatraVideoMode.road) return;
+    setState(() {
+      _currentVideoMode = YatraVideoMode.road;
+    });
+    _templeVideoController?.pause();
+    if (_isRunning && _roadVideoController != null && _roadVideoController!.value.isInitialized) {
+      _roadVideoController!.seekTo(const Duration(seconds: 2));
+      _roadVideoController!.play();
+    }
+  }
+
+  void _switchToTempleVideo() {
+    setState(() {
+      _currentVideoMode = YatraVideoMode.temple;
+    });
+    _roadVideoController?.pause();
+    if (_templeVideoController != null && _templeVideoController!.value.isInitialized) {
+      _templeVideoController!.seekTo(Duration.zero);
+      _templeVideoController!.play();
+    }
   }
 
   @override
   void dispose() {
     _liveWalkingTimer?.cancel();
     _runController.dispose();
+    _roadVideoController?.removeListener(_onRoadVideoStatusChanged);
+    _templeVideoController?.removeListener(_onTempleVideoStatusChanged);
+    _roadVideoController?.dispose();
+    _templeVideoController?.dispose();
     super.dispose();
   }
 
-  void _startRun() async {
+  void _startRun() {
     if (_isRunning) return;
-
-    // Call API to ensure backend state is STARTED
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token') ?? '';
-      if (token.isNotEmpty && widget.journeyId.isNotEmpty) {
-        await ApiService.resumeJourney(token, widget.journeyId);
-      }
-    } catch (e) {
-      debugPrint('Failed to resume journey on backend: $e');
-    }
 
     setState(() {
       _isRunning = true;
     });
     _runController.repeat();
+
+    // Instantly play active video controller starting from 2.0s mark
+    if (_currentVideoMode == YatraVideoMode.road) {
+      if (_roadVideoController != null && _roadVideoController!.value.isInitialized) {
+        if (_roadVideoController!.value.position < const Duration(seconds: 2)) {
+          _roadVideoController!.seekTo(const Duration(seconds: 2));
+        }
+        _roadVideoController!.play();
+      } else {
+        _roadVideoController?.initialize().then((_) {
+          if (mounted && _isRunning && _currentVideoMode == YatraVideoMode.road) {
+            _roadVideoController!.seekTo(const Duration(seconds: 2));
+            _roadVideoController!.play();
+            setState(() {});
+          }
+        });
+      }
+    } else {
+      if (_templeVideoController != null && _templeVideoController!.value.isInitialized) {
+        _templeVideoController!.play();
+      }
+    }
+
     _scheduleTempleAlertPreview();
+    _resumeBackendJourney();
 
     // Start live pedometer simulation
+    _liveWalkingTimer?.cancel();
     _liveWalkingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       try {
         final prefs = await SharedPreferences.getInstance();
         final token = prefs.getString('auth_token') ?? '';
         if (token.isNotEmpty && widget.journeyId.isNotEmpty) {
-          // Simulate 500 steps and 400 meters walked every 3 seconds
           await ApiService.updateJourneyLocation(token, widget.journeyId, 500, 400.0);
           
           if (mounted) {
             setState(() {
-              _liveSteps += 500;
               _liveDistanceKm += 0.4;
             });
           }
@@ -125,49 +223,53 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     });
   }
 
-  void _stopRun({bool isComplete = false}) async {
+  void _resumeBackendJourney() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      if (token.isNotEmpty && widget.journeyId.isNotEmpty) {
+        await ApiService.resumeJourney(token, widget.journeyId);
+      }
+    } catch (e) {
+      debugPrint('Failed to resume journey on backend: $e');
+    }
+  }
+
+  void _stopRun({bool isComplete = false}) {
     if (!_isRunning) return;
 
     _liveWalkingTimer?.cancel();
-    
-    if (_isRunning) {
-      _runController.stop();
-      _runController.reset();
-      setState(() {
-        _isRunning = false;
-        _hasShownTempleAlertInRun = false;
-      });
-      
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final token = prefs.getString('auth_token') ?? '';
-        if (token.isNotEmpty && widget.journeyId.isNotEmpty) {
-          await ApiService.stopJourney(token, widget.journeyId);
-        }
-      } catch (e) {
-        debugPrint('Failed to stop journey in backend: $e');
-      }
-    }
+    _runController.stop();
+    _runController.reset();
 
-    if (!mounted) return;
-    
-    if (isComplete && widget.completedScreen != null) {
+    _roadVideoController?.pause();
+    _templeVideoController?.pause();
+
+    setState(() {
+      _isRunning = false;
+      _hasShownTempleAlertInRun = false;
+    });
+
+    _stopBackendJourney();
+
+    if (isComplete && mounted && widget.completedScreen != null) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => widget.completedScreen!,
         ),
       );
-    } else {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => YatraStopProgressScreen(
-            journeyId: widget.journeyId,
-            onContinue: () {
-              Navigator.of(context).popUntil((route) => route.isFirst);
-            },
-          ),
-        ),
-      );
+    }
+  }
+
+  void _stopBackendJourney() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      if (token.isNotEmpty && widget.journeyId.isNotEmpty) {
+        await ApiService.stopJourney(token, widget.journeyId);
+      }
+    } catch (e) {
+      debugPrint('Failed to stop journey in backend: $e');
     }
   }
 
@@ -324,7 +426,10 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      _switchToTempleVideo();
+                    },
                     child: Text(
                       'View Darshan',
                       style: GoogleFonts.outfit(
@@ -347,7 +452,10 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      _switchToRoadVideo();
+                    },
                     child: Text(
                       'Continue Yatra',
                       style: GoogleFonts.outfit(
@@ -523,81 +631,31 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     );
   }
 
-  Widget _buildParallaxBackground() {
-    return AnimatedBuilder(
-      animation: _runController,
-      builder: (context, _) {
-        final offset = _runController.value;
-        final bobbingOffset = _isRunning ? math.sin(offset * math.pi * 4) * 8 : 0.0;
-        
-        // Fix for physical devices trying to load localhost images from DB
-        final String resolvedImageUrl = widget.imageAsset.replaceAll('127.0.0.1', '192.168.29.113');
-        
-        return Stack(
-          children: [
-            // Bottom image scrolling down
-            Positioned.fill(
-              child: FractionalTranslation(
-                translation: Offset(0, offset),
-                child: resolvedImageUrl.startsWith('http')
-                    ? Image.network(
-                        resolvedImageUrl,
-                        fit: BoxFit.cover,
-                        alignment: Alignment.bottomCenter,
-                      )
-                    : Image.asset(
-                        resolvedImageUrl.isNotEmpty ? resolvedImageUrl : 'assets/images/yatra_road_bg.png',
-                        fit: BoxFit.cover,
-                        alignment: Alignment.bottomCenter,
-                      ),
-              ),
-            ),
-            // Top image coming in to replace it
-            Positioned.fill(
-              child: FractionalTranslation(
-                translation: Offset(0, offset - 1.0),
-                child: resolvedImageUrl.startsWith('http')
-                    ? Image.network(
-                        resolvedImageUrl,
-                        fit: BoxFit.cover,
-                        alignment: Alignment.bottomCenter,
-                      )
-                    : Image.asset(
-                        resolvedImageUrl.isNotEmpty ? resolvedImageUrl : 'assets/images/yatra_road_bg.png',
-                        fit: BoxFit.cover,
-                        alignment: Alignment.bottomCenter,
-                      ),
-              ),
-            ),
-            // Pilgrim Character
-            Align(
-              alignment: const Alignment(0, 0.4),
-              child: Transform.translate(
-                offset: Offset(0, bobbingOffset),
-                child: ColorFiltered(
-                  colorFilter: const ColorFilter.mode(Colors.white, BlendMode.multiply),
-                  child: Image.asset(
-                    'assets/images/pilgrim_character.png',
-                    width: 140,
-                    height: 140,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
+    final activeController = _currentVideoMode == YatraVideoMode.temple
+        ? _templeVideoController
+        : _roadVideoController;
+    final isInitialized = activeController != null && activeController.value.isInitialized;
+
     return Scaffold(
       body: Stack(
         children: [
+          // The FULL screen Photorealistic Video Player!
           Positioned.fill(
-            child: _buildParallaxBackground(),
+            child: isInitialized
+                ? SizedBox.expand(
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        width: activeController.value.size.width,
+                        height: activeController.value.size.height,
+                        child: VideoPlayer(activeController),
+                      ),
+                    ),
+                  )
+                : const Center(child: CircularProgressIndicator(color: Color(0xFFFF7A00))),
           ),
           SafeArea(
             child: Padding(
@@ -861,7 +919,7 @@ class _LiveSanghaCard extends StatelessWidget {
                 child: Column(
                   children: [
                     Text(
-                      '${distanceKm.toStringAsFixed(1)}',
+                      distanceKm.toStringAsFixed(1),
                       style: GoogleFonts.outfit(
                         color: const Color(0xFF5F5F5F),
                         fontSize: 24,

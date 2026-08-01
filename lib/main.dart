@@ -45,6 +45,7 @@ class BharatPrayApp extends StatelessWidget {
       theme: ThemeData(
         brightness: Brightness.dark,
         useMaterial3: true,
+        splashFactory: InkRipple.splashFactory,
         primaryColor: const Color(0xFFFF7700),
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFFFF7700),

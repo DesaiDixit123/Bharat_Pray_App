@@ -8,7 +8,7 @@ import 'create_yatra_group_screen.dart';
 import 'start_yatra_overview_screen.dart';
 import 'yatra_live_sangha_screen.dart';
 import 'yatra_completed_screen.dart';
-
+import 'animated_journey/animated_journey_screen.dart';
 
 // Using YatraModel from api_service.dart
 
@@ -86,6 +86,7 @@ class _YatraScreenState extends State<YatraScreen> {
           });
         }
       } catch (e) {
+        print('Error fetching yatras: $e');
         if (mounted) {
           setState(() {
             _popularYatras = [];
@@ -716,6 +717,7 @@ class _YatraScreenState extends State<YatraScreen> {
           duration: item.duration,
           sangha: item.groupSize,
           imageAsset: item.image,
+          routeTemples: item.routeTemples,
         ),
       ),
     );
@@ -733,6 +735,7 @@ class _YatraScreenState extends State<YatraScreen> {
           duration: item.duration,
           sangha: item.groupSize,
           imageAsset: item.image.isNotEmpty ? item.image : 'assets/images/somnath_temple_new.png',
+          routeTemples: item.routeTemples,
           completedScreen: YatraCompletedScreen(
             journeyId: item.journeyId ?? '',
             title: item.title,

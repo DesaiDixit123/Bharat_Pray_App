@@ -202,7 +202,16 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                                       });
 
                                       try {
-                                        final response = await ApiService.sendOtp(phone);
+                                        Map<String, dynamic> response;
+                                        try {
+                                          response = await ApiService.sendOtp(phone);
+                                        } catch (e) {
+                                          if (e.toString().contains('not registered') || e.toString().contains('sign up')) {
+                                            response = await ApiService.registerUser(name: 'Devotee', contact: phone);
+                                          } else {
+                                            rethrow;
+                                          }
+                                        }
                                         final otp = response['Data']?['dev_mode_otp']?.toString();
 
                                         if (context.mounted) {
@@ -226,47 +235,16 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                                           );
                                         }
                                       } catch (error) {
-                                        final errorMessage = error.toString();
-                                        if (errorMessage.contains('not registered') || errorMessage.contains('register')) {
-                                          // Prompt to register
-                                          if (context.mounted) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                  'Number not registered! Please register first.',
-                                                  style: GoogleFonts.outfit(color: Colors.white),
-                                                ),
-                                                backgroundColor: Colors.redAccent,
-                                                action: SnackBarAction(
-                                                  label: 'REGISTER',
-                                                  textColor: Colors.white,
-                                                  onPressed: () async {
-                                                    final registeredPhone = await Navigator.push<String>(
-                                                      context,
-                                                      MaterialPageRoute(
-                                                        builder: (context) => RegisterScreen(initialPhoneNumber: phone),
-                                                      ),
-                                                    );
-                                                    if (registeredPhone != null && context.mounted) {
-                                                      _phoneController.text = registeredPhone;
-                                                    }
-                                                  },
-                                                ),
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                error.toString().replaceAll('Exception: ', ''),
+                                                style: GoogleFonts.outfit(color: Colors.white),
                                               ),
-                                            );
-                                          }
-                                        } else {
-                                          if (context.mounted) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                  errorMessage.replaceAll('Exception: ', ''),
-                                                  style: GoogleFonts.outfit(color: Colors.white),
-                                                ),
-                                                backgroundColor: Colors.redAccent,
-                                              ),
-                                            );
-                                          }
+                                              backgroundColor: Colors.redAccent,
+                                            ),
+                                          );
                                         }
                                       } finally {
                                         if (mounted) {

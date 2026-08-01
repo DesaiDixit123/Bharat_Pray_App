@@ -177,9 +177,14 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   Future<void> _navigateToNextScreen() async {
     if (!mounted) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    final bool isLoggedIn = (prefs.getBool('is_logged_in') ?? false) &&
-        (prefs.getString('auth_token')?.isNotEmpty ?? false);
+    bool isLoggedIn = false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      isLoggedIn = (prefs.getBool('is_logged_in') ?? false) &&
+          (prefs.getString('auth_token')?.isNotEmpty ?? false);
+    } catch (e) {
+      debugPrint("SharedPreferences init error: $e");
+    }
 
     if (!mounted) return;
 
