@@ -84,9 +84,9 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
       duration: const Duration(milliseconds: 1400),
     );
 
-    // Video 1A & 1B: Continue_walking.mp4 — double buffered for 0-second seamless looping
+    // Video 1A & 1B: New_walking.mp4 — double buffered for 0-second seamless looping
     _walkingVideoControllerA = VideoPlayerController.asset(
-      'assets/images/Continue_walking.mp4',
+      'assets/images/New_walking.mp4',
     )..initialize().then((_) {
         if (mounted) {
           _walkingVideoControllerA!.setLooping(false);
@@ -96,7 +96,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
       });
 
     _walkingVideoControllerB = VideoPlayerController.asset(
-      'assets/images/Continue_walking.mp4',
+      'assets/images/New_walking.mp4',
     )..initialize().then((_) {
         if (mounted) {
           _walkingVideoControllerB!.setLooping(false);
@@ -135,8 +135,8 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
   }
 
   // ─── Seamless loop: Ping-Pong technique for 0-second gap
-  // When active controller hits 9s, we instantly swap to the standby controller
-  // which is already queued at 4s, creating a perfect seamless loop.
+  // When active controller hits the end, we instantly swap to the standby controller
+  // which is already queued at 1s, creating a perfect seamless loop.
   void _onWalkingVideoPositionChanged() {
     if (_currentVideoMode != YatraVideoMode.walking) return;
     
@@ -153,7 +153,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
         
     // Start the 2-second crossfade exactly 2000ms before the end
     if (pos.inMilliseconds >= loopEnd - 2000) {
-      // 1. Play the standby video (already pre-buffered at 4s)
+      // 1. Play the standby video (already pre-buffered at 1s)
       standbyCtrl.play();
       
       // 2. Swap UI to trigger the 2-second AnimatedOpacity crossfade
@@ -166,7 +166,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
       Future.delayed(const Duration(milliseconds: 2050), () {
         if (mounted) {
           activeCtrl.pause();
-          activeCtrl.seekTo(const Duration(seconds: 4));
+          activeCtrl.seekTo(const Duration(seconds: 1));
         }
       });
     }
@@ -196,7 +196,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     }
   }
 
-  /// Switch back to the seamless-looping walking video (4s–9s window).
+  /// Switch back to the seamless-looping walking video (1s–end window).
   void _switchToWalkingVideo() {
     _templeReachingVideoController?.pause();
     _templeEntranceVideoController?.pause();
@@ -208,8 +208,8 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     final standbyCtrl = _useWalkingA ? _walkingVideoControllerB : _walkingVideoControllerA;
     
     if (_isRunning) {
-      standbyCtrl?.seekTo(const Duration(seconds: 4)).then((_) => standbyCtrl.pause());
-      activeCtrl?.seekTo(const Duration(seconds: 4)).then((_) => activeCtrl.play());
+      standbyCtrl?.seekTo(const Duration(seconds: 1)).then((_) => standbyCtrl.pause());
+      activeCtrl?.seekTo(const Duration(seconds: 1)).then((_) => activeCtrl.play());
     }
   }
 
@@ -368,19 +368,19 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     });
     _runController.repeat();
 
-    // Queue standby controller at 4s, and play active controller at 4s
+    // Queue standby controller at 1s, and play active controller at 1s
     final activeCtrl = _useWalkingA ? _walkingVideoControllerA : _walkingVideoControllerB;
     final standbyCtrl = _useWalkingA ? _walkingVideoControllerB : _walkingVideoControllerA;
     
     if (activeCtrl != null && activeCtrl.value.isInitialized &&
         standbyCtrl != null && standbyCtrl.value.isInitialized) {
-      standbyCtrl.seekTo(const Duration(seconds: 4)).then((_) => standbyCtrl.pause());
-      activeCtrl.seekTo(const Duration(seconds: 4)).then((_) => activeCtrl.play());
+      standbyCtrl.seekTo(const Duration(seconds: 1)).then((_) => standbyCtrl.pause());
+      activeCtrl.seekTo(const Duration(seconds: 1)).then((_) => activeCtrl.play());
     } else {
       activeCtrl?.initialize().then((_) {
         if (mounted && _isRunning) {
-          standbyCtrl?.seekTo(const Duration(seconds: 4)).then((_) => standbyCtrl.pause());
-          activeCtrl.seekTo(const Duration(seconds: 4)).then((_) => activeCtrl.play());
+          standbyCtrl?.seekTo(const Duration(seconds: 1)).then((_) => standbyCtrl.pause());
+          activeCtrl.seekTo(const Duration(seconds: 1)).then((_) => activeCtrl.play());
           setState(() {});
         }
       });
