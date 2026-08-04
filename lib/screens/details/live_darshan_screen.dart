@@ -7,6 +7,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_service.dart';
 
 class LiveDarshanScreen extends StatefulWidget {
@@ -39,6 +41,8 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
 
   String _darshanId = '';
   String _token = '';
+  String _userName = '';
+  String _userAvatar = '';
 
   // Social Stats States
   int _viewerCount = 0;
@@ -54,7 +58,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
   YoutubePlayerController? _youtubeController;
 
   // Chat Feed State
-  final List<Map<String, String>> _liveFeed = [];
+  final List<Map<String, dynamic>> _liveFeed = [];
 
   // Heart Animation State
   final List<HeartAnim> _hearts = [];
@@ -63,6 +67,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
   // Loading / Error UI State
   bool _isLoading = true;
   bool _isError = false;
+  bool _isOffline = false;
 
   // Sockets / Timers
   IO.Socket? _socket;
@@ -79,54 +84,82 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       _token = prefs.getString('auth_token') ?? '';
+      _userName = prefs.getString('user_name') ?? prefs.getString('name') ?? 'Devotee';
+      _userAvatar = prefs.getString('user_avatar') ?? prefs.getString('profile_pic') ?? '';
 
-      if (_darshanId.isEmpty) {
-        // Find matching darshan by temple name from the list to resolve static banner navigations
-        final listData = await ApiService.getDarshansList(token: _token, limit: 100);
-        final docs = listData['docs'] as List<dynamic>? ?? [];
-        final match = docs.firstWhere(
-          (d) {
-            final tName = (d['temple']?['name'] ?? d['temple_id']?['name'] ?? d['temple_details']?['name'] ?? '')?.toString() ?? '';
-            final dName = d['name']?.toString() ?? '';
-            final searchName = widget.templeName.toLowerCase();
-            return tName.toLowerCase().contains(searchName) || 
-                   dName.toLowerCase().contains(searchName);
-          },
-          orElse: () => null,
-        );
-        if (match != null) {
-          _darshanId = match['_id'].toString();
-        }
-      }
+      bool success = false;
 
-      if (_darshanId.isEmpty) {
-        // Fallback: use first active stream from list
-        final listData = await ApiService.getDarshansList(token: _token, limit: 1);
-        final docs = listData['docs'] as List<dynamic>? ?? [];
-        if (docs.isNotEmpty) {
-          _darshanId = docs.first['_id'].toString();
-        }
-      }
-
+      // 1. If a valid darshanId was passed from parent screen, fetch its details directly
       if (_darshanId.isNotEmpty) {
-        // 1. Fetch details and comments
-        await _fetchDetailsAndComments();
-        // 2. Setup socket connections
+        try {
+          await _fetchDetailsAndComments();
+          success = true;
+        } catch (e) {
+          debugPrint('Passed darshanId $_darshanId invalid or not a stream: $e');
+          _darshanId = ''; // reset so we can search by temple name
+        }
+      }
+
+      // 2. If darshanId is empty or invalid, search live streams dynamically by temple name
+      if (!success && widget.templeName.isNotEmpty) {
+        try {
+          final listData = await ApiService.getDarshansList(token: _token, search: widget.templeName, limit: 20);
+          final docs = listData['docs'] as List<dynamic>? ?? [];
+          if (docs.isNotEmpty) {
+            _darshanId = docs.first['_id'].toString();
+            await _fetchDetailsAndComments();
+            success = true;
+          }
+        } catch (e) {
+          debugPrint('Search by temple name failed: $e');
+        }
+      }
+
+      // 3. Fallback search across all live darshan streams for temple match
+      if (!success && widget.templeName.isNotEmpty) {
+        try {
+          final listData = await ApiService.getDarshansList(token: _token, limit: 100);
+          final docs = listData['docs'] as List<dynamic>? ?? [];
+          final searchName = widget.templeName.trim().toLowerCase();
+          final match = docs.firstWhere(
+            (d) {
+              final tName = (d['temple']?['name'] ?? d['temple_id']?['name'] ?? d['temple_details']?['name'] ?? '')?.toString().toLowerCase() ?? '';
+              final dName = (d['name'] ?? '')?.toString().toLowerCase() ?? '';
+              return (tName.isNotEmpty && (tName.contains(searchName) || searchName.contains(tName))) || 
+                     (dName.isNotEmpty && (dName.contains(searchName) || searchName.contains(dName)));
+            },
+            orElse: () => null,
+          );
+          if (match != null) {
+            _darshanId = match['_id'].toString();
+            await _fetchDetailsAndComments();
+            success = true;
+          }
+        } catch (e) {
+          debugPrint('Fuzzy match failed: $e');
+        }
+      }
+
+      // NO STATIC FALLBACK!
+      if (success && _darshanId.isNotEmpty && !_isOffline) {
         _connectSocket();
-        // 3. Setup heartbeat
         _startHeartbeatTimer();
       } else {
-        setState(() {
-          _isLoading = false;
-          _isError = true;
-        });
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _isOffline = true;
+          });
+        }
       }
     } catch (e) {
       debugPrint('Error initializing Live Darshan Screen: $e');
-      setState(() {
-        _isLoading = false;
-        _isError = true;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isOffline = true;
+        });
+      }
     }
   }
 
@@ -136,16 +169,35 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
       final details = await ApiService.getLiveDarshanDetails(_token, _darshanId);
       
       // Update counts
-      _viewerCount = details['current_viewers'] ?? 0;
-      _likesCount = details['like_count'] ?? 0;
-      _commentsCount = details['comments_count'] ?? 0;
-      _shareCount = details['share_count'] ?? 0;
+      _viewerCount = details['current_viewers'] ?? details['currentViewers'] ?? 0;
+      _likesCount = details['like_count'] ?? details['likesCount'] ?? 0;
+      _commentsCount = details['comments_count'] ?? details['commentsCount'] ?? 0;
+      _shareCount = details['share_count'] ?? details['sharesCount'] ?? 0;
       _isFavourite = false; // default, fetch active status in next call
 
       // Extract Youtube Video ID
       if (details['youtube_darshan_details'] != null) {
         _youtubeVideoId = details['youtube_darshan_details']['youtubeVideoId'] ?? '';
       }
+
+      // Check if admin has enabled live status AND configured youtube video ID
+      final bool isLiveFlag = (details['is_live_status'] == true || 
+                              details['liveStatus'] == 'live' || 
+                              details['status'] == 'live') &&
+                             _youtubeVideoId.trim().isNotEmpty;
+
+      if (!isLiveFlag) {
+        _isOffline = true;
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _isOffline = true;
+          });
+        }
+        return;
+      }
+
+      _isOffline = false;
 
       // Initialize YouTube Player
       if (_youtubeVideoId.isNotEmpty) {
@@ -155,28 +207,49 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
           params: const YoutubePlayerParams(
             showControls: false,
             showFullscreenButton: false,
-            mute: true, // Auto-play compliant
+            mute: false,
           ),
         );
       }
 
       // 2. Fetch current status (likes, favourite)
-      final status = await ApiService.getLiveDarshanStatus(_token, _darshanId);
-      _isLiked = status['isLiked'] ?? false;
-      _isFavourite = status['isFavourite'] ?? false;
+      try {
+        final status = await ApiService.getLiveDarshanStatus(_token, _darshanId);
+        _isLiked = status['isLiked'] ?? false;
+        _isFavourite = status['isFavourite'] ?? false;
+      } catch (_) {}
 
       // 3. Fetch past comments
-      final commentsRes = await ApiService.getLiveComments(_token, _darshanId, page: 1);
-      final docs = commentsRes['docs'] as List<dynamic>? ?? [];
-      
-      _liveFeed.clear();
-      // Reverse array to render oldest first at top of listView
-      for (final doc in docs.reversed) {
-        _liveFeed.add({
-          'user': doc['user']?['name'] ?? 'User',
-          'message': doc['comment'] ?? '',
-          'avatar': doc['user']?['profile_pic'] ?? '',
-        });
+      try {
+        final commentsRes = await ApiService.getLiveComments(_token, _darshanId, page: 1);
+        final dynamic rawList = commentsRes is List
+            ? commentsRes
+            : (commentsRes['docs'] ?? commentsRes['comments'] ?? commentsRes['data'] ?? []);
+        final docs = rawList is List ? rawList : [];
+
+        _liveFeed.clear();
+        for (final doc in docs.reversed) {
+          if (doc is Map) {
+            final uName = (doc['user'] is Map ? doc['user']['name'] : null) ?? doc['userName'] ?? doc['user_name'] ?? 'Devotee';
+            final uMsg = doc['comment'] ?? doc['content'] ?? doc['message'] ?? '';
+            final uAvatar = (doc['user'] is Map ? doc['user']['profile_pic'] : null) ?? doc['userAvatar'] ?? '';
+            final uId = doc['_id']?.toString() ?? doc['id']?.toString();
+            final isPinned = doc['isPinned'] == true;
+            final likesCount = doc['likes_count'] ?? doc['likesCount'] ?? 0;
+            if (uMsg.toString().isNotEmpty) {
+              _liveFeed.add({
+                'id': uId,
+                'user': uName.toString(),
+                'message': uMsg.toString(),
+                'avatar': uAvatar.toString(),
+                'isPinned': isPinned,
+                'likesCount': likesCount,
+              });
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Error fetching comments: $e');
       }
 
       if (mounted) {
@@ -215,7 +288,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
 
     // Handle updates
     _socket!.on('viewer_count_update', (data) {
-      if (mounted) {
+      if (mounted && data is Map) {
         setState(() {
           _viewerCount = data['current_viewers'] ?? 0;
         });
@@ -223,43 +296,66 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
     });
 
     _socket!.on('likes_count_update', (data) {
-      if (mounted) {
-        setState(() {
-          _likesCount = data['like_count'] ?? 0;
-        });
+      if (mounted && data is Map) {
+        final String eventDarshanId = (data['darshan_id'] ?? data['darshanId'])?.toString() ?? '';
+        if (eventDarshanId.isEmpty || eventDarshanId == _darshanId) {
+          setState(() {
+            _likesCount = data['like_count'] ?? 0;
+          });
+        }
       }
     });
 
     _socket!.on('comments_count_update', (data) {
-      if (mounted) {
-        setState(() {
-          _commentsCount = data['comments_count'] ?? 0;
-        });
+      if (mounted && data is Map) {
+        final String eventDarshanId = (data['darshan_id'] ?? data['darshanId'])?.toString() ?? '';
+        if (eventDarshanId.isEmpty || eventDarshanId == _darshanId) {
+          setState(() {
+            _commentsCount = data['comments_count'] ?? 0;
+          });
+        }
       }
     });
 
     _socket!.on('new_comment', (data) {
-      if (mounted) {
-        setState(() {
-          _liveFeed.add({
-            'user': data['user']?['name'] ?? 'User',
-            'message': data['comment'] ?? '',
-            'avatar': data['user']?['profile_pic'] ?? '',
+      if (mounted && data is Map) {
+        final String eventDarshanId = (data['darshan_id'] ?? data['darshanId'])?.toString() ?? '';
+        if (eventDarshanId.isNotEmpty && eventDarshanId != _darshanId) return;
+
+        final commentUser = (data['user'] is Map ? data['user']['name'] : null) ?? data['userName'] ?? data['user_name'] ?? 'Devotee';
+        final commentText = data['comment'] ?? data['content'] ?? data['message'] ?? '';
+        final commentAvatar = (data['user'] is Map ? data['user']['profile_pic'] : null) ?? data['userAvatar'] ?? '';
+
+        // Prevent duplicate if this is the user's own comment echoed back
+        final isOwnEcho = commentUser == _userName && _liveFeed.isNotEmpty && _liveFeed.last['message'] == commentText;
+        if (!isOwnEcho && commentText.toString().isNotEmpty) {
+          setState(() {
+            _liveFeed.add({
+              'id': data['_id']?.toString() ?? data['id']?.toString(),
+              'user': commentUser.toString(),
+              'message': commentText.toString(),
+              'avatar': commentAvatar.toString(),
+              'isPinned': data['isPinned'] == true,
+              'likesCount': data['likes_count'] ?? 0,
+            });
+            
+            if (_liveFeed.length > 100) {
+              _liveFeed.removeAt(0);
+            }
           });
-          
-          if (_liveFeed.length > 50) {
-            _liveFeed.removeAt(0);
-          }
-        });
-        _scrollToBottom();
+          _scrollToBottom();
+        }
       }
     });
 
     _socket!.on('like_status', (data) {
-      if (mounted) {
-        setState(() {
-          _isLiked = data['isLiked'] ?? false;
-        });
+      if (mounted && data is Map) {
+        final String eventDarshanId = (data['darshan_id'] ?? data['darshanId'])?.toString() ?? '';
+        if (eventDarshanId.isEmpty || eventDarshanId == _darshanId) {
+          setState(() {
+            _isLiked = data['isLiked'] ?? false;
+          });
+        }
       }
     });
   }
@@ -309,19 +405,54 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
     }
   }
 
-  void _sendComment() {
+  Future<void> _sendComment() async {
     final text = _commentController.text.trim();
-    if (text.isNotEmpty && _socket != null && _socket!.connected) {
+    if (text.isEmpty) return;
+
+    // 1. Instantly update UI locally (Optimistic update so chat ALWAYS shows user's comment)
+    setState(() {
+      _liveFeed.add({
+        'id': null,
+        'user': _userName.isNotEmpty ? _userName : 'Devotee',
+        'message': text,
+        'avatar': _userAvatar,
+        'isPinned': false,
+        'likesCount': 0,
+      });
+      _commentsCount += 1;
+    });
+
+    _commentController.clear();
+    _commentFocusNode.unfocus();
+    _scrollToBottom();
+
+    // 2. Emit over socket if connected
+    if (_socket != null && _socket!.connected) {
       _socket!.emit('send_comment', {
         'darshan_id': _darshanId,
-        'comment': text
+        'comment': text,
+        'content': text,
       });
-      _commentController.clear();
-      _commentFocusNode.unfocus();
+    }
+
+    // 3. Send over HTTP API as fallback / persistence
+    try {
+      await ApiService.sendLiveComment(_token, _darshanId, text);
+    } catch (e) {
+      debugPrint('Error sending comment via HTTP API: $e');
     }
   }
 
   void _toggleLike() {
+    setState(() {
+      _isLiked = !_isLiked;
+      if (_isLiked) {
+        _likesCount++;
+      } else {
+        _likesCount = (_likesCount > 0) ? _likesCount - 1 : 0;
+      }
+    });
+
     if (_socket != null && _socket!.connected) {
       _socket!.emit('like_stream', {'darshan_id': _darshanId});
     }
@@ -346,24 +477,157 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
       final res = await ApiService.incrementShareCount(_token, _darshanId);
       if (mounted) {
         setState(() {
-          _shareCount = res['share_count'] ?? _shareCount + 1;
+          _shareCount = res['share_count'] ?? (_shareCount + 1);
         });
       }
-      
-      // Copy sharing link or trigger sharing dialogue
+
+      final String templeTitle = widget.templeName.isNotEmpty ? widget.templeName : 'Live Darshan';
       final String shareUrl = "https://bharatpray.com/live-darshan/$_darshanId";
-      await Clipboard.setData(ClipboardData(text: shareUrl));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Darshan sharing link copied to clipboard! 🙏'),
-            backgroundColor: Color(0xFFFF7A00),
-          ),
-        );
+      final String shareText = "🙏 Watch Live Darshan of $templeTitle on Bharat Pray app!\n\n$shareUrl";
+
+      // Trigger system share sheet with fallback to options modal
+      final result = await Share.share(shareText, subject: 'Live Darshan - $templeTitle');
+      if (result.status == ShareResultStatus.dismissed && mounted) {
+        _showShareOptionsBottomSheet(templeTitle, shareText, shareUrl);
       }
     } catch (e) {
       debugPrint('Error sharing stream: $e');
+      final String templeTitle = widget.templeName.isNotEmpty ? widget.templeName : 'Live Darshan';
+      final String shareUrl = "https://bharatpray.com/live-darshan/$_darshanId";
+      final String shareText = "🙏 Watch Live Darshan of $templeTitle on Bharat Pray app!\n\n$shareUrl";
+      if (mounted) {
+        _showShareOptionsBottomSheet(templeTitle, shareText, shareUrl);
+      }
     }
+  }
+
+  void _showShareOptionsBottomSheet(String templeTitle, String shareText, String shareUrl) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF1E1E1E),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Share Live Darshan',
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildShareAppTile(
+                    icon: Icons.chat_rounded,
+                    color: const Color(0xFF25D366),
+                    label: 'WhatsApp',
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final waUrl = Uri.parse("whatsapp://send?text=${Uri.encodeComponent(shareText)}");
+                      if (await canLaunchUrl(waUrl)) {
+                        await launchUrl(waUrl);
+                      } else {
+                        Share.share(shareText, subject: 'Live Darshan - $templeTitle');
+                      }
+                    },
+                  ),
+                  _buildShareAppTile(
+                    icon: Icons.send_rounded,
+                    color: const Color(0xFF0088CC),
+                    label: 'Telegram',
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final tgUrl = Uri.parse("https://t.me/share/url?url=${Uri.encodeComponent(shareUrl)}&text=${Uri.encodeComponent("🙏 Live Darshan of $templeTitle")}");
+                      if (await canLaunchUrl(tgUrl)) {
+                        await launchUrl(tgUrl, mode: LaunchMode.externalApplication);
+                      } else {
+                        Share.share(shareText, subject: 'Live Darshan - $templeTitle');
+                      }
+                    },
+                  ),
+                  _buildShareAppTile(
+                    icon: Icons.link_rounded,
+                    color: const Color(0xFFFF7A00),
+                    label: 'Copy Link',
+                    onTap: () async {
+                      Navigator.pop(context);
+                      await Clipboard.setData(ClipboardData(text: shareUrl));
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Darshan link copied to clipboard! 🙏'),
+                            backgroundColor: Color(0xFFFF7A00),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  _buildShareAppTile(
+                    icon: Icons.grid_view_rounded,
+                    color: Colors.white70,
+                    label: 'More Apps',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Share.share(shareText, subject: 'Live Darshan - $templeTitle');
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildShareAppTile({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.15),
+              shape: BoxShape.circle,
+              border: Border.all(color: color.withOpacity(0.3), width: 1),
+            ),
+            child: Icon(icon, color: color, size: 26),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: GoogleFonts.outfit(color: Colors.white70, fontSize: 12),
+          ),
+        ],
+      ),
+    );
   }
 
   void _spawnHeart(double x, double y) {
@@ -419,31 +683,8 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                   color: Color(0xFFFF7A00),
                 ),
               )
-            : _isError
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.error_outline_rounded, color: Colors.white60, size: 48),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Stream details failed to load.',
-                          style: GoogleFonts.outfit(color: Colors.white, fontSize: 16),
-                        ),
-                        const SizedBox(height: 8),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFFF7A00),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                          ),
-                          onPressed: _loadProfileAndInit,
-                          child: Text('Retry', style: GoogleFonts.outfit(color: Colors.white)),
-                        ),
-                      ],
-                    ),
-                  )
+            : (_isOffline || _isError)
+                ? _buildOfflineScreen(context)
                 : Stack(
                     children: [
                       // 1. Full-screen Video Player / Image Fallback
@@ -451,30 +692,26 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                         child: Container(
                           color: Colors.black,
                           child: _youtubeController != null
-                              ? SizedBox.expand(
-                                  child: FittedBox(
-                                    fit: BoxFit.cover,
-                                    child: SizedBox(
-                                      width: 16,
-                                      height: 9,
-                                      child: YoutubePlayer(
-                                        controller: _youtubeController!,
-                                      ),
+                              ? Center(
+                                  child: AspectRatio(
+                                    aspectRatio: 16 / 9,
+                                    child: YoutubePlayer(
+                                      controller: _youtubeController!,
                                     ),
                                   ),
                                 )
                               : imageUrl.isNotEmpty
                                   ? Image.network(
                                       imageUrl,
-                                      fit: BoxFit.cover,
+                                      fit: BoxFit.contain,
                                       errorBuilder: (c, e, s) => Image.asset(
                                         'assets/images/image_2.png',
-                                        fit: BoxFit.cover,
+                                        fit: BoxFit.contain,
                                       ),
                                     )
                                   : Image.asset(
                                       'assets/images/image_2.png',
-                                      fit: BoxFit.cover,
+                                      fit: BoxFit.contain,
                                     ),
                         ),
                       ),
@@ -758,7 +995,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            chat['user']!,
+                                            chat['user'] ?? 'Devotee',
                                             style: GoogleFonts.outfit(
                                               color: const Color(0xFFFF8A00),
                                               fontWeight: FontWeight.bold,
@@ -767,7 +1004,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                                           ),
                                           const SizedBox(height: 1),
                                           Text(
-                                            chat['message']!,
+                                            chat['message'] ?? '',
                                             style: GoogleFonts.outfit(
                                               color: Colors.white,
                                               fontSize: 12,
@@ -784,27 +1021,11 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                         ),
                       ),
 
-                      // 9. Right-Side Action Buttons (Sound, Like, Fav, Comment, Share)
-                      // Sound Toggle Button: bottom: 388
+                      // 9. Right-Side Action Buttons (Like, Comment, Share)
+                      // Like button: bottom: 232
                       Positioned(
                         right: 16,
-                        bottom: 388,
-                        width: 48,
-                        height: 72,
-                        child: _buildLiveActionButton(
-                          icon: Icon(
-                            _isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                            color: Colors.white,
-                            size: 22,
-                          ),
-                          label: _isMuted ? "Unmute" : "Mute",
-                          onTap: _toggleSound,
-                        ),
-                      ),
-                      // Like button: bottom: 310
-                      Positioned(
-                        right: 16,
-                        bottom: 310,
+                        bottom: 232,
                         width: 48,
                         height: 72,
                         child: _buildLiveActionButton(
@@ -817,23 +1038,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                           onTap: _toggleLike,
                         ),
                       ),
-                      // Favourite button: bottom: 232
-                      Positioned(
-                        right: 16,
-                        bottom: 232,
-                        width: 48,
-                        height: 72,
-                        child: _buildLiveActionButton(
-                          icon: Icon(
-                            _isFavourite ? Icons.star_rounded : Icons.star_border_rounded,
-                            color: _isFavourite ? const Color(0xFFFFB300) : Colors.white,
-                            size: 22,
-                          ),
-                          label: "Fav",
-                          onTap: _toggleFavorite,
-                        ),
-                      ),
-                      // Comment button: bottom: 154
+                      // Comment button: bottom: 154 (Opens Half-Screen Instagram-style Comments Sheet)
                       Positioned(
                         right: 16,
                         bottom: 154,
@@ -847,7 +1052,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                           ),
                           label: _formatNumber(_commentsCount),
                           onTap: () {
-                            _commentFocusNode.requestFocus();
+                            _showCommentsBottomSheet(context);
                           },
                         ),
                       ),
@@ -931,6 +1136,297 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
     );
   }
 
+  void _showCommentsBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Container(
+                height: MediaQuery.of(context).size.height * 0.60,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF191722),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black45,
+                      blurRadius: 20,
+                      offset: Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 10),
+                    Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Header: Live Chat title + comments count + Close button
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Live Chat',
+                            style: GoogleFonts.outfit(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF7A00).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              _formatNumber(_commentsCount),
+                              style: GoogleFonts.outfit(
+                                color: const Color(0xFFFF7A00),
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 22),
+                            onPressed: () => Navigator.pop(sheetContext),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(color: Colors.white10, height: 1),
+
+                    // Live Comments List (Pinned comments sorted to top)
+                    Expanded(
+                      child: () {
+                        final displayList = List<Map<String, dynamic>>.from(_liveFeed);
+                        displayList.sort((a, b) {
+                          final bool aPinned = a['isPinned'] == true;
+                          final bool bPinned = b['isPinned'] == true;
+                          if (aPinned && !bPinned) return -1;
+                          if (!aPinned && bPinned) return 1;
+                          return 0;
+                        });
+
+                        return displayList.isEmpty
+                          ? Center(
+                              child: Text(
+                                'No comments yet. Say something nice!',
+                                style: GoogleFonts.outfit(color: Colors.white38, fontSize: 13),
+                              ),
+                            )
+                          : ListView.builder(
+                              controller: _chatScrollController,
+                              physics: const BouncingScrollPhysics(),
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              itemCount: displayList.length,
+                              itemBuilder: (context, index) {
+                                final chat = displayList[index];
+                                final avatarUrl = _resolveImageUrl(chat['avatar'] ?? '');
+                                final bool isPinned = chat['isPinned'] == true;
+                                final int commentLikes = chat['likesCount'] is int
+                                    ? chat['likesCount'] as int
+                                    : int.tryParse(chat['likesCount']?.toString() ?? '0') ?? 0;
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 16.0),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        width: 32,
+                                        height: 32,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.white24, width: 1.0),
+                                        ),
+                                        child: ClipOval(
+                                          child: avatarUrl.isNotEmpty
+                                              ? Image.network(
+                                                  avatarUrl,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (c, e, s) => Image.asset(
+                                                    'assets/images/image_3.png',
+                                                    fit: BoxFit.cover,
+                                                  ),
+                                                )
+                                              : Image.asset(
+                                                  'assets/images/image_3.png',
+                                                  fit: BoxFit.cover,
+                                                ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            if (isPinned)
+                                              Padding(
+                                                padding: const EdgeInsets.only(bottom: 4.0),
+                                                child: Row(
+                                                  children: [
+                                                    const Icon(Icons.push_pin_rounded, size: 12, color: Color(0xFFFF7A00)),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      'Pinned by Admin',
+                                                      style: GoogleFonts.outfit(
+                                                        color: const Color(0xFFFF7A00),
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            Text(
+                                              chat['user'] ?? 'Devotee',
+                                              style: GoogleFonts.outfit(
+                                                color: const Color(0xFFFF8A00),
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              chat['message'] ?? '',
+                                              style: GoogleFonts.outfit(
+                                                color: Colors.white.withValues(alpha: 0.9),
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      GestureDetector(
+                                        onTap: () {
+                                          if (chat['id'] != null && _socket != null && _socket!.connected) {
+                                            _socket!.emit('like_comment', {
+                                              'darshan_id': _darshanId,
+                                              'comment_id': chat['id'],
+                                            });
+                                            setModalState(() {
+                                              final currentLikes = chat['likesCount'] is int
+                                                  ? chat['likesCount'] as int
+                                                  : int.tryParse(chat['likesCount']?.toString() ?? '0') ?? 0;
+                                              chat['likesCount'] = currentLikes + 1;
+                                            });
+                                            setState(() {});
+                                          }
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(left: 8.0, top: 4.0),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                (commentLikes > 0) ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                                                color: (commentLikes > 0) ? const Color(0xFFFF2D55) : Colors.white38,
+                                                size: 16,
+                                              ),
+                                              if (commentLikes > 0) ...[
+                                                const SizedBox(width: 3),
+                                                Text(
+                                                  _formatNumber(commentLikes),
+                                                  style: GoogleFonts.outfit(color: Colors.white54, fontSize: 11),
+                                                ),
+                                              ]
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            );
+                      }(),
+                    ),
+
+                    // Input Field at Bottom of Sheet
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF22202C),
+                        border: Border(top: BorderSide(color: Colors.white10)),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(color: Colors.white12),
+                              ),
+                              child: TextField(
+                                controller: _commentController,
+                                focusNode: _commentFocusNode,
+                                style: GoogleFonts.outfit(color: Colors.white, fontSize: 13),
+                                onSubmitted: (_) {
+                                  _sendComment();
+                                  setModalState(() {});
+                                },
+                                decoration: InputDecoration(
+                                  hintText: "Say something nice.......",
+                                  hintStyle: GoogleFonts.outfit(
+                                    color: Colors.white38,
+                                    fontSize: 13,
+                                  ),
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          GestureDetector(
+                            onTap: () {
+                              _sendComment();
+                              setModalState(() {});
+                            },
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFFF7A00),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Center(
+                                child: Icon(Icons.send_rounded, color: Colors.white, size: 18),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildLiveActionButton({
     required Widget icon,
     required String label,
@@ -984,6 +1480,398 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildOfflineScreen(BuildContext context) {
+    final imageUrl = _resolveImageUrl(widget.imageUrl);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F0E13),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 1. Top Custom App Bar
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.08),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white.withOpacity(0.12)),
+                      ),
+                      child: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.templeName.isNotEmpty ? widget.templeName : 'Temple Darshan',
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Colors.orangeAccent,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Live Stream Offline',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white60,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 10),
+                    // 2. Temple Banner Card
+                    Container(
+                      height: 220,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.white.withOpacity(0.15)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.5),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: imageUrl.isNotEmpty
+                                  ? Image.network(
+                                      imageUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (c, e, s) => Image.asset(
+                                        'assets/images/image_2.png',
+                                        fit: BoxFit.cover,
+                                      ),
+                                    )
+                                  : Image.asset(
+                                      'assets/images/image_2.png',
+                                      fit: BoxFit.cover,
+                                    ),
+                            ),
+                            Positioned.fill(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Colors.transparent,
+                                      Colors.black.withOpacity(0.85),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              bottom: 16,
+                              left: 20,
+                              right: 20,
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.6),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(color: Colors.white24),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.sensors_off_rounded,
+                                          color: Colors.orangeAccent,
+                                          size: 14,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'STREAM OFFLINE',
+                                          style: GoogleFonts.outfit(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.8,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    // 3. Informative Spiritual Card
+                    Container(
+                      padding: const EdgeInsets.all(22),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1B1924),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: const Color(0xFF2C283B)),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 64,
+                            height: 64,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFF8A00), Color(0xFFFF4500)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFFF7A00).withOpacity(0.35),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: const Center(
+                              child: Icon(
+                                Icons.videocam_off_rounded,
+                                color: Colors.white,
+                                size: 30,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Live Darshan Currently Offline',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.outfit(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'The admin is currently offline. Live Aarti and Darshan stream for ${widget.templeName.isNotEmpty ? widget.templeName : "this temple"} will resume during scheduled temple timings.',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.outfit(
+                              color: Colors.white70,
+                              fontSize: 13,
+                              height: 1.5,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          const Divider(color: Colors.white10),
+                          const SizedBox(height: 16),
+
+                          // Timings Info Grid
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.04),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: Colors.white.withOpacity(0.08)),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      const Icon(Icons.wb_sunny_rounded, color: Color(0xFFFFB300), size: 20),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Morning Aarti',
+                                        style: GoogleFonts.outfit(color: Colors.white60, fontSize: 11),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '06:00 AM',
+                                        style: GoogleFonts.outfit(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.04),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: Colors.white.withOpacity(0.08)),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      const Icon(Icons.nights_stay_rounded, color: Color(0xFF7C4DFF), size: 20),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Evening Aarti',
+                                        style: GoogleFonts.outfit(color: Colors.white60, fontSize: 11),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '06:30 PM',
+                                        style: GoogleFonts.outfit(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // 4. Action Buttons
+                    // Refresh Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF7A00),
+                          foregroundColor: Colors.white,
+                          elevation: 4,
+                          shadowColor: const Color(0xFFFF7A00).withOpacity(0.4),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(26),
+                          ),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _isLoading = true;
+                            _isOffline = false;
+                            _isError = false;
+                          });
+                          _loadProfileAndInit();
+                        },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Check Live Status Again',
+                              style: GoogleFonts.outfit(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Notify Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: Colors.white.withOpacity(0.2), width: 1.0),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                        ),
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('🙏 You will be notified when ${widget.templeName.isNotEmpty ? widget.templeName : "this temple"} goes live!'),
+                              backgroundColor: const Color(0xFFFF7A00),
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          );
+                        },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.notifications_active_outlined, color: Colors.white70, size: 18),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Notify Me When Live',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

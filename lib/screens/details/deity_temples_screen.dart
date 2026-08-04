@@ -771,7 +771,7 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
                           context,
                           MaterialPageRoute(
                             builder: (context) => LiveDarshanScreen(
-                              darshanId: deity['_id']?.toString() ?? '',
+                              darshanId: (deity['darshan_id'] ?? deity['live_darshan_id'] ?? deity['darshanId'])?.toString() ?? '',
                               templeName: templeName.isNotEmpty ? templeName : deityName,
                               imageUrl: imagePath,
                             ),

@@ -267,6 +267,9 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
     final String imagePath = _resolveImageUrl(deity['image']);
     final String deityName = deity['name'] ?? 'Deity';
     final String templeName = (deity['temple'] != null) ? (deity['temple']['name'] ?? '') : '';
+    // Backend /user/darshan/list now only returns darshans with is_live_status: true.
+    // getDetails expects darshan_id = darshans._id (NOT livedarshans._id).
+    final String liveDarshanId = (deity['darshan_id'] ?? deity['_id'])?.toString() ?? '';
 
     return GestureDetector(
       onTap: () async {
@@ -370,7 +373,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                             context,
                             MaterialPageRoute(
                               builder: (context) => LiveDarshanScreen(
-                                darshanId: deity['_id']?.toString() ?? '',
+                                darshanId: liveDarshanId,
                                 templeName: templeName.isNotEmpty ? templeName : deityName,
                                 imageUrl: imagePath,
                               ),

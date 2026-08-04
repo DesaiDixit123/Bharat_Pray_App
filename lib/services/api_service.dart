@@ -7,29 +7,16 @@ class ApiService {
   // Set to true to use the live production server, false for local testing
   static const bool isLive = true;
 
-  // Hosts for Android physical device (when isLive = false):
-  // '10.192.149.19'  → Wi-Fi LAN IP of the PC running the backend
-  // '10.0.2.2'       → USB tunnel (run: adb reverse tcp:3020 tcp:3020)
-  static String _activeAndroidHost = '10.192.149.19';
+  // Local backend IP: Mac's Wi-Fi IP = 192.168.29.249, Port = 3021
+  static const String _localIp = '192.168.29.249';
+  static const int _localPort = 3021;
 
   static String get baseUrl {
     if (isLive) {
       return 'https://api.bharatpray.com/user';
     }
-    
-    if (Platform.isAndroid) {
-      return 'http://$_activeAndroidHost:3020/user';
-    }
-    return 'http://localhost:3020/user';
-  }
-
-  /// Rotate between Wi-Fi IP and USB tunnel only — 127.0.0.1 excluded (unusable on physical devices).
-  static void _switchHost() {
-    if (_activeAndroidHost == '10.192.149.19') {
-      _activeAndroidHost = '10.0.2.2';
-    } else {
-      _activeAndroidHost = '10.192.149.19';
-    }
+    // Local server — works for both Android & iOS physical devices on same Wi-Fi
+    return 'http://$_localIp:$_localPort/user';
   }
 
   static String resolveImageUrl(String? url) {
@@ -41,10 +28,11 @@ class ApiService {
     final baseDomain = baseUrl.replaceAll(RegExp(r'/api.*|/user.*'), '');
     
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      return trimmed.replaceFirst(RegExp(r'http://[0-9.]+:3020'), baseDomain)
-                    .replaceFirst(RegExp(r'http://localhost:3020'), baseDomain)
-                    .replaceFirst(RegExp(r'https://api.bharatpray.com'), baseDomain)
-                    .replaceFirst(RegExp(r'https://apis.bambamcabs.com'), baseDomain);
+      // Remap any production or old-local URLs to current baseUrl domain
+      return trimmed
+          .replaceFirst(RegExp(r'https://api\.bharatpray\.com'), baseDomain)
+          .replaceFirst(RegExp(r'http://[0-9.]+:[0-9]+'), baseDomain)
+          .replaceFirst(RegExp(r'http://localhost:[0-9]+'), baseDomain);
     }
     
     final isUploads = trimmed.contains('uploads/');
@@ -53,29 +41,11 @@ class ApiService {
   }
 
   static Future<http.Response> _safeGet(Uri uri, {Map<String, String>? headers}) async {
-    try {
-      return await http.get(uri, headers: headers).timeout(const Duration(seconds: 4));
-    } catch (e) {
-      if (Platform.isAndroid) {
-        _switchHost();
-        final fallbackUri = Uri.parse(uri.toString().replaceFirst(RegExp(r'http://[0-9.]+:3020'), 'http://$_activeAndroidHost:3020'));
-        return await http.get(fallbackUri, headers: headers).timeout(const Duration(seconds: 6));
-      }
-      rethrow;
-    }
+    return await http.get(uri, headers: headers).timeout(const Duration(seconds: 10));
   }
 
   static Future<http.Response> _safePost(Uri uri, {Map<String, String>? headers, Object? body}) async {
-    try {
-      return await http.post(uri, headers: headers, body: body).timeout(const Duration(seconds: 4));
-    } catch (e) {
-      if (Platform.isAndroid) {
-        _switchHost();
-        final fallbackUri = Uri.parse(uri.toString().replaceFirst(RegExp(r'http://[0-9.]+:3020'), 'http://$_activeAndroidHost:3020'));
-        return await http.post(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 6));
-      }
-      rethrow;
-    }
+    return await http.post(uri, headers: headers, body: body).timeout(const Duration(seconds: 10));
   }
 
   // Helper to handle http responses
@@ -381,6 +351,46 @@ class ApiService {
       },
     );
     return _processResponse(response)['Data'];
+  }
+
+  // POST /user/live-darshan/comment or /user/chat/live/comment
+  static Future<Map<String, dynamic>> sendLiveComment(String token, String darshanId, String comment) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/live-darshan/comment'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({
+          'darshan_id': darshanId,
+          'sessionId': darshanId,
+          'comment': comment,
+          'content': comment,
+        }),
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      try {
+        final response = await http.post(
+          Uri.parse('$baseUrl/chat/live/comment'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: json.encode({
+            'sessionId': darshanId,
+            'darshan_id': darshanId,
+            'content': comment,
+            'comment': comment,
+          }),
+        );
+        return _processResponse(response)['Data'] ?? {};
+      } catch (err) {
+        print('Error sending live comment via API: $err');
+        return {};
+      }
+    }
   }
 
   // POST /user/live-darshan/details (joins stream and returns metadata)
