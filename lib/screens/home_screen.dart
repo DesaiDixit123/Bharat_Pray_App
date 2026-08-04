@@ -19,6 +19,7 @@ import 'details/deity_temples_screen.dart';
 import 'prayer_detail_screen.dart';
 import '../models/prayer.dart';
 import '../services/api_service.dart';
+import '../services/yatra_group_socket_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -78,6 +79,19 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     // Fetch live dashboard data from backend
     _fetchDashboardData();
+    _initYatraGroupSocket();
+  }
+
+  Future<void> _initYatraGroupSocket() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      if (token.isNotEmpty) {
+        YatraGroupSocketService().init(token);
+      }
+    } catch (e) {
+      debugPrint('YatraGroupSocket init error: $e');
+    }
   }
 
   Future<void> _fetchDashboardData() async {

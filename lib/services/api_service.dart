@@ -2222,4 +2222,182 @@ class ApiService {
       return [];
     }
   }
+
+  // ==========================================
+  // Phase 2: Create Yatra Group Flow APIs
+  // ==========================================
+
+  // GET /user/yatra-group/temples
+  static Future<Map<String, dynamic>> getTemplesForGroup(String token, {String search = '', int page = 1}) async {
+    try {
+      final uri = Uri.parse('$baseUrl/user/yatra-group/temples').replace(
+        queryParameters: {
+          'search': search,
+          'page': '$page',
+          'limit': '20',
+        },
+      );
+      final response = await _safeGet(uri, headers: _authHeaders(token));
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('Error fetching temples for group: $e');
+      return {};
+    }
+  }
+
+  // POST /user/yatra-group/calculate-distance
+  static Future<Map<String, dynamic>> calculateTempleDistance(
+    String token, {
+    required String templeId,
+    double? startLat,
+    double? startLng,
+  }) async {
+    try {
+      final response = await _safePost(
+        Uri.parse('$baseUrl/user/yatra-group/calculate-distance'),
+        headers: _jsonHeaders(token: token),
+        body: jsonEncode({
+          'templeId': templeId,
+          if (startLat != null) 'startLat': startLat,
+          if (startLng != null) 'startLng': startLng,
+        }),
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('Error calculating distance: $e');
+      return {};
+    }
+  }
+
+  // POST /user/yatra-group/contacts/sync
+  static Future<Map<String, dynamic>> syncContacts(
+    String token, {
+    required List<dynamic> contacts,
+    String? groupId,
+  }) async {
+    try {
+      final response = await _safePost(
+        Uri.parse('$baseUrl/user/yatra-group/contacts/sync'),
+        headers: _jsonHeaders(token: token),
+        body: jsonEncode({
+          'contacts': contacts,
+          if (groupId != null) 'groupId': groupId,
+        }),
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('Error syncing contacts: $e');
+      return {};
+    }
+  }
+
+  // GET /user/yatra-group/my-groups
+  static Future<Map<String, dynamic>> getMyYatraGroups(String token) async {
+    try {
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/user/yatra-group/my-groups'),
+        headers: _authHeaders(token),
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('Error fetching my groups: $e');
+      return {};
+    }
+  }
+
+  // POST /user/yatra-group/create
+  static Future<Map<String, dynamic>> createYatraGroup(String token, Map<String, dynamic> payload) async {
+    try {
+      final response = await _safePost(
+        Uri.parse('$baseUrl/user/yatra-group/create'),
+        headers: _jsonHeaders(token: token),
+        body: jsonEncode(payload),
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('Error creating Yatra group: $e');
+      return {};
+    }
+  }
+
+  // POST /user/yatra-group/invite/send
+  static Future<Map<String, dynamic>> sendGroupInvitations(
+    String token, {
+    required String groupId,
+    required List<String> inviteeIds,
+  }) async {
+    try {
+      final response = await _safePost(
+        Uri.parse('$baseUrl/user/yatra-group/invite/send'),
+        headers: _jsonHeaders(token: token),
+        body: jsonEncode({
+          'groupId': groupId,
+          'inviteeIds': inviteeIds,
+        }),
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('Error sending invitations: $e');
+      return {};
+    }
+  }
+
+  // GET /user/yatra-group/invitations
+  static Future<List<dynamic>> getPendingInvitations(String token) async {
+    try {
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/user/yatra-group/invitations'),
+        headers: _authHeaders(token),
+      );
+      return _processResponse(response)['Data'] ?? [];
+    } catch (e) {
+      print('Error fetching invitations: $e');
+      return [];
+    }
+  }
+
+  // POST /user/yatra-group/invite/accept
+  static Future<Map<String, dynamic>> acceptGroupInvitation(
+    String token, {
+    String? groupId,
+    String? inviteToken,
+  }) async {
+    try {
+      final response = await _safePost(
+        Uri.parse('$baseUrl/user/yatra-group/invite/accept'),
+        headers: _jsonHeaders(token: token),
+        body: jsonEncode({
+          if (groupId != null) 'groupId': groupId,
+          if (inviteToken != null) 'inviteToken': inviteToken,
+        }),
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('Error accepting invitation: $e');
+      return {};
+    }
+  }
+
+  // POST /user/yatra-group/invite/reject
+  static Future<Map<String, dynamic>> rejectGroupInvitation(
+    String token, {
+    String? groupId,
+    String? inviteToken,
+  }) async {
+    try {
+      final response = await _safePost(
+        Uri.parse('$baseUrl/user/yatra-group/invite/reject'),
+        headers: _jsonHeaders(token: token),
+        body: jsonEncode({
+          if (groupId != null) 'groupId': groupId,
+          if (inviteToken != null) 'inviteToken': inviteToken,
+        }),
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('Error rejecting invitation: $e');
+      return {};
+    }
+  }
 }
+
