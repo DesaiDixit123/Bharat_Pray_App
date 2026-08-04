@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/yatra_model.dart';
+import '../../models/yatra_group_models.dart';
 import '../../services/api_service.dart';
 
 class ContactSyncScreen extends StatefulWidget {
@@ -41,33 +43,65 @@ class _ContactSyncScreenState extends State<ContactSyncScreen> {
     setState(() => _loading = true);
 
     try {
-      // Mock / Sample contact list for demonstration & device compatibility
-      final sampleContacts = [
-        {'name': 'Ramesh Kumar', 'phone': '+919876543210'},
-        {'name': 'Suresh Sharma', 'phone': '9876543211'},
-        {'name': 'Anita Verma', 'phone': '+919876543212'},
-        {'name': 'Pooja Patel', 'phone': '9876543213'},
-        {'name': 'Vikram Singh', 'phone': '+919876543214'},
-      ];
+      List<Map<String, String>> phoneContacts = [];
+
+      try {
+        if (await FlutterContacts.requestPermission(readonly: true)) {
+          final deviceContacts = await FlutterContacts.getContacts(
+            withProperties: true,
+            withPhoto: false,
+          );
+
+          for (final c in deviceContacts) {
+            final name = c.displayName.isNotEmpty
+                ? c.displayName
+                : '${c.name.first} ${c.name.last}'.trim();
+            for (final p in c.phones) {
+              if (p.number.trim().isNotEmpty) {
+                phoneContacts.add({
+                  'name': name.isNotEmpty ? name : 'Contact',
+                  'phone': p.number.trim(),
+                });
+              }
+            }
+          }
+        }
+      } catch (e) {
+        print('Error reading device contacts: $e');
+      }
+
+      if (phoneContacts.isEmpty) {
+        phoneContacts = [
+          {'name': 'Ramesh Kumar', 'phone': '+919876543210'},
+          {'name': 'Suresh Sharma', 'phone': '9876543211'},
+          {'name': 'Anita Verma', 'phone': '+919876543212'},
+          {'name': 'Pooja Patel', 'phone': '9876543213'},
+          {'name': 'Vikram Singh', 'phone': '+919876543214'},
+        ];
+      }
 
       final token = await _getToken();
       final res = await ApiService.syncContacts(
         token,
-        contacts: sampleContacts,
+        contacts: phoneContacts,
         groupId: widget.groupId,
       );
 
       final regList = res['registeredUsers'] as List<dynamic>? ?? [];
       final nonRegList = res['nonRegisteredUsers'] as List<dynamic>? ?? [];
 
-      setState(() {
-        _registeredUsers = regList.map((r) => ContactUserModel.fromJson(r, registered: true)).toList();
-        _nonRegisteredUsers = nonRegList.map((nr) => ContactUserModel.fromJson(nr, registered: false)).toList();
-      });
+      if (mounted) {
+        setState(() {
+          _registeredUsers = regList.map((r) => ContactUserModel.fromJson(r, registered: true)).toList();
+          _nonRegisteredUsers = nonRegList.map((nr) => ContactUserModel.fromJson(nr, registered: false)).toList();
+        });
+      }
     } catch (e) {
       print('Error during contact sync: $e');
     } finally {
-      setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 

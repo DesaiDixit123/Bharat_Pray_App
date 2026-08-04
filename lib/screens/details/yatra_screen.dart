@@ -3,10 +3,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/yatra_model.dart';
+import '../../models/journey_models.dart';
 import '../../services/api_service.dart';
 import '../yatra_group/create_yatra_group_screen.dart';
 import '../yatra_group/group_invitation_dialog.dart';
 import '../yatra_group/my_yatra_groups_screen.dart';
+import '../../widgets/shimmer_yatra_card.dart';
+import '../../widgets/error_retry_widget.dart';
+import '../../widgets/empty_state_widget.dart';
 import 'start_yatra_overview_screen.dart';
 import 'yatra_live_sangha_screen.dart';
 import 'yatra_completed_screen.dart';
@@ -53,8 +57,10 @@ class _YatraScreenState extends State<YatraScreen> {
 </svg>''';
 
   List<YatraModel> _popularYatras = [];
-  List<YatraModel> _continueYatras = [];
+  ContinueYatraModel? _continueJourney;
   bool _isLoading = true;
+  bool _isError = false;
+  String _errorMessage = '';
 
   @override
   void initState() {
@@ -63,45 +69,35 @@ class _YatraScreenState extends State<YatraScreen> {
     _fetchYatras();
   }
 
-  Future<void> _fetchYatras() async {
+  Future<void> _fetchYatras({bool forceRefresh = false}) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
-    
-    if (token.isNotEmpty) {
-      try {
-        final popularData = await ApiService.getPopularYatras(token);
-        print('POPULAR YATRAS RESPONSE: $popularData');
-        final continueData = await ApiService.getContinueYatras(token);
-        
-        final parsedPopular = popularData.map((e) {
-          print('PARSING YATRA: ${e["title"]}, IMAGE: ${e["image"]}');
-          return YatraModel.fromJson(e);
-        }).toList();
-        final parsedContinue = continueData.map((e) => YatraModel.fromJson(e)).toList();
 
-        if (mounted) {
-          setState(() {
-            _popularYatras = parsedPopular;
-            _continueYatras = parsedContinue;
-            _isLoading = false;
-          });
-        }
-      } catch (e) {
-        print('Error fetching yatras: $e');
-        if (mounted) {
-          setState(() {
-            _popularYatras = [];
-            _continueYatras = [];
-            _isLoading = false;
-          });
-        }
-      }
-    } else {
+    setState(() {
+      _isLoading = true;
+      _isError = false;
+    });
+
+    try {
+      final popularRes = await ApiService.getPopularYatra(token: token, forceRefresh: forceRefresh);
+      final continueRes = await ApiService.getContinueYatra(token: token, forceRefresh: forceRefresh);
+
+        setState(() {
+          _popularYatras = (popularRes.data != null && popularRes.data!.isNotEmpty)
+              ? popularRes.data!
+              : _getMockPopularYatras();
+          _continueJourney = continueRes.data;
+          _isLoading = false;
+          _isError = false;
+        });
+    } catch (e) {
       if (mounted) {
         setState(() {
           _popularYatras = [];
-          _continueYatras = [];
+          _continueJourney = null;
           _isLoading = false;
+          _isError = true;
+          _errorMessage = e.toString();
         });
       }
     }
@@ -414,15 +410,42 @@ class _YatraScreenState extends State<YatraScreen> {
 
   Widget _buildPopularYatraSection() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return SizedBox(
+        height: 305,
+        child: ListView.builder(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          itemCount: 3,
+          itemBuilder: (_, __) => const ShimmerYatraCard(width: 280, height: 265),
+        ),
+      );
     }
-    
+
+    if (_isError) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: ErrorRetryWidget(
+          message: _errorMessage.isNotEmpty ? _errorMessage : 'Unable to connect to server.',
+          onRetry: () => _fetchYatras(forceRefresh: true),
+        ),
+      );
+    }
+
+    if (_popularYatras.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 20),
+        child: EmptyStateWidget(
+          title: 'No Popular Yatras Found',
+          message: 'Currently there are no active popular yatras configured.',
+        ),
+      );
+    }
+
     return SizedBox(
       width: double.infinity,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title row
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
@@ -437,9 +460,9 @@ class _YatraScreenState extends State<YatraScreen> {
                   ),
                 ),
                 GestureDetector(
-                  onTap: () {},
+                  onTap: () => _fetchYatras(forceRefresh: true),
                   child: Text(
-                    'View All',
+                    'Refresh',
                     style: GoogleFonts.outfit(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -450,25 +473,27 @@ class _YatraScreenState extends State<YatraScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 16), // gap: 16px
-          
-          // Horizontal scrolling area
+          const SizedBox(height: 16),
           SizedBox(
-            height: 305, // Scroll area matches card widget height (305)
+            height: 305,
             width: double.infinity,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.only(left: 10, right: 20), // left: 10px, right: 20px
-              itemCount: _popularYatras.length,
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: EdgeInsets.only(
-                    right: index == _popularYatras.length - 1 ? 0 : 16, // gap: 16px between cards
-                  ),
-                  child: _buildYatraCard(_popularYatras[index], isPopular: true),
-                );
-              },
+            child: RefreshIndicator(
+              onRefresh: () => _fetchYatras(forceRefresh: true),
+              color: const Color(0xFFFF7700),
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.only(left: 10, right: 20),
+                itemCount: _popularYatras.length,
+                itemBuilder: (context, index) {
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      right: index == _popularYatras.length - 1 ? 0 : 16,
+                    ),
+                    child: _buildYatraCard(_popularYatras[index], isPopular: true),
+                  );
+                },
+              ),
             ),
           ),
         ],
@@ -478,65 +503,152 @@ class _YatraScreenState extends State<YatraScreen> {
 
   Widget _buildContinueYatraSection() {
     if (_isLoading) {
-      return const SizedBox.shrink(); // Avoid double loaders
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 20),
+        child: ShimmerYatraCard(height: 180),
+      );
     }
 
-    if (_continueYatras.isEmpty) {
-      return const SizedBox.shrink();
+    if (_continueJourney == null) {
+      return const SizedBox.shrink(); // Don't show if user has no active running journey
     }
+
+    final journey = _continueJourney!;
 
     return SizedBox(
       width: double.infinity,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title row
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Continue Yatra',
-                  style: GoogleFonts.outfit(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF994700),
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () {},
-                  child: Text(
-                    'View All',
-                    style: GoogleFonts.outfit(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFFFF7A00),
-                    ),
-                  ),
-                ),
-              ],
+            child: Text(
+              'Continue Yatra',
+              style: GoogleFonts.outfit(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF994700),
+              ),
             ),
           ),
-          const SizedBox(height: 16), // gap: 16px
-          
-          // Horizontal scrolling area
-          SizedBox(
-            height: 305, // Scroll area matches card widget height (305)
-            width: double.infinity,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.only(left: 10, right: 20), // left: 10px, right: 20px
-              itemCount: _continueYatras.length,
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: EdgeInsets.only(
-                    right: index == _continueYatras.length - 1 ? 0 : 16, // gap: 16px between cards
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1332),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withOpacity(0.1)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          journey.coverImage,
+                          width: 70,
+                          height: 70,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Image.asset(
+                            'assets/images/somnath_temple_new.png',
+                            width: 70,
+                            height: 70,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              journey.title,
+                              style: GoogleFonts.outfit(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Day ${journey.currentDay} of ${journey.estimatedDays}  •  ${journey.distanceCoveredKm} / ${journey.totalDistanceKm}',
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                color: Colors.white70,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: LinearProgressIndicator(
+                                value: journey.progressPercent / 100.0,
+                                backgroundColor: Colors.white.withOpacity(0.1),
+                                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFF7700)),
+                                minHeight: 6,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  child: _buildYatraCard(_continueYatras[index], isPopular: false),
-                );
-              },
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${journey.progressPercent.toInt()}% Completed',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFFFF7700),
+                        ),
+                      ),
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => StartYatraOverviewScreen(
+                                id: journey.routeId.isNotEmpty ? journey.routeId : '1',
+                                title: journey.title,
+                                distance: journey.totalDistanceKm,
+                                steps: '${journey.accumulatedSteps} Steps',
+                                duration: '${journey.estimatedDays} Days',
+                                sangha: '1 Sangha',
+                                imageAsset: journey.coverImage,
+                              ),
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF7700),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        ),
+                        child: Text(
+                          'Resume',
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -570,14 +682,22 @@ class _YatraScreenState extends State<YatraScreen> {
               ),
             ],
           ),
-          child: ClipRRect(
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(32),
-              topRight: Radius.circular(32),
-              bottomLeft: Radius.circular(10),
-              bottomRight: Radius.circular(10),
-            ),
-            child: Column(
+          child: GestureDetector(
+            onTap: () {
+              if (isPopular) {
+                _openStartYatraOverview(item);
+              } else {
+                _openContinueYatra(item);
+              }
+            },
+            child: ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(32),
+                topRight: Radius.circular(32),
+                bottomLeft: Radius.circular(10),
+                bottomRight: Radius.circular(10),
+              ),
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Top Image Section (333 x 200)
@@ -686,6 +806,7 @@ class _YatraScreenState extends State<YatraScreen> {
             ),
           ),
         ),
+      ),
         
         const SizedBox(height: 12), // Spacing: 12px
         

@@ -147,16 +147,22 @@ class _StartYatraOverviewScreenState extends State<StartYatraOverviewScreen> {
                           fit: StackFit.expand,
                           children: [
                             widget.imageAsset.startsWith('http')
-                                ? Image.network(
-                                    widget.imageAsset,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) =>
-                                        const ColoredBox(color: Colors.black),
-                                  )
-                                : Image.asset(
-                                    widget.imageAsset,
-                                    fit: BoxFit.cover,
-                                  ),
+                                 ? Image.network(
+                                     widget.imageAsset,
+                                     fit: BoxFit.cover,
+                                     errorBuilder: (context, error, stackTrace) => Image.asset(
+                                       'assets/images/somnath_temple_new.png',
+                                       fit: BoxFit.cover,
+                                     ),
+                                   )
+                                 : Image.asset(
+                                     widget.imageAsset.isNotEmpty ? widget.imageAsset : 'assets/images/somnath_temple_new.png',
+                                     fit: BoxFit.cover,
+                                     errorBuilder: (context, error, stackTrace) => Image.asset(
+                                       'assets/images/somnath_temple_new.png',
+                                       fit: BoxFit.cover,
+                                     ),
+                                   ),
                             DecoratedBox(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(

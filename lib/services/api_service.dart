@@ -4,11 +4,21 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'dart:typed_data';
 import '../models/user_model.dart';
+import '../models/yatra_model.dart';
+import '../models/journey_models.dart';
 
 class ApiService {
+  // Set to true to use the live production server, false for local testing
+  static const bool isLive = false;
+
+  // Local backend IP: Mac's Wi-Fi IP = 192.168.29.249, Port = 3020
+  static const String _localIp = '192.168.29.249';
+  static const int _localPort = 3020;
   static String get baseUrl {
-    // Always use the production server URL.
-    return 'https://api.bharatpray.com';
+    if (isLive) {
+      return 'https://api.bharatpray.com';
+    }
+    return 'http://$_localIp:$_localPort';
   }
 
   static void _logApiCall(String method, Uri uri, {Map<String, String>? headers}) {
@@ -50,11 +60,18 @@ class ApiService {
 
   static String resolveImageUrl(String? url) {
     if (url == null || url.trim().isEmpty) return '';
-    final trimmed = url.trim();
+    var trimmed = url.trim();
     if (trimmed.startsWith('assets/')) return trimmed; // Keep local assets as is
+
+    if (!isLive) {
+      // Remap production URL or localhost to active local IP base URL
+      trimmed = trimmed.replaceAll('https://api.bharatpray.com', baseUrl);
+      trimmed = trimmed.replaceAll('http://api.bharatpray.com', baseUrl);
+      trimmed = trimmed.replaceAll('http://localhost:3020', baseUrl);
+      trimmed = trimmed.replaceAll('http://127.0.0.1:3020', baseUrl);
+    }
         
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      // If the URL is already absolute, return it as is.
       return trimmed;
     }
     
@@ -1908,38 +1925,172 @@ class ApiService {
   // Yatra Flow APIs
   // ==========================================
 
-  // GET /user/yatra/list (Popular Yatras)
-  static Future<List<dynamic>> getPopularYatras(String token) async {
+  // ==========================================
+  // Yatra Flow APIs (Repository Layer - Phase 1)
+  // ==========================================
+
+  // Memory cache for offline/instant fallback
+  static Map<String, dynamic>? _popularCache;
+  static Map<String, dynamic>? _continueCache;
+  static DateTime? _popularCacheTime;
+
+  /// GET /user/yatra/popular (Paginated Popular Yatras)
+  static Future<ApiResponseModel<List<YatraModel>>> getPopularYatra({
+    String? token,
+    int page = 1,
+    int limit = 10,
+    String search = '',
+    bool forceRefresh = false,
+  }) async {
+    final queryParams = <String, String>{
+      'page': page.toString(),
+      'limit': limit.toString(),
+    };
+    if (search.trim().isNotEmpty) {
+      queryParams['search'] = search.trim();
+    }
+
+    final uri = Uri.parse('$baseUrl/user/yatra/popular').replace(queryParameters: queryParams);
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+    };
+
+    // Use memory cache if valid (< 5 mins), non-empty, and no search/refresh requested
+    if (!forceRefresh && page == 1 && search.isEmpty && _popularCache != null && _popularCacheTime != null) {
+      final cachedDocs = _popularCache!['Data']?['docs'] ?? _popularCache!['docs'];
+      if (cachedDocs is List && cachedDocs.isNotEmpty) {
+        if (DateTime.now().difference(_popularCacheTime!) < const Duration(minutes: 5)) {
+          return ApiResponseModel<List<YatraModel>>.fromJson(_popularCache, (dataJson) {
+            final docs = dataJson['docs'] is List ? (dataJson['docs'] as List) : [];
+            return docs.map((d) => YatraModel.fromJson(d)).toList();
+          });
+        }
+      }
+    }
+
     try {
-      final response = await _safeGet(
-        Uri.parse('$baseUrl/user/yatra/list'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-      return _processResponse(response)['Data'] ?? [];
+      final response = await _safeGet(uri, headers: headers);
+      final jsonBody = _processResponse(response);
+
+      final result = ApiResponseModel<List<YatraModel>>.fromJson(jsonBody, (dataJson) {
+        final docs = dataJson['docs'] is List
+            ? (dataJson['docs'] as List)
+            : (dataJson is List ? dataJson : []);
+        return docs.map((d) => YatraModel.fromJson(d)).toList();
+      });
+
+      if (page == 1 && search.isEmpty && result.data != null && result.data!.isNotEmpty) {
+        _popularCache = jsonBody;
+        _popularCacheTime = DateTime.now();
+      } else if (page == 1 && search.isEmpty) {
+        _popularCache = null;
+        _popularCacheTime = null;
+      }
+
+      return result;
     } catch (e) {
-      print('Error fetching popular yatras: $e');
-      return []; // Return empty list gracefully if endpoint is missing
+      // Fallback to cache on network failure
+      if (_popularCache != null) {
+        return ApiResponseModel<List<YatraModel>>.fromJson(_popularCache, (dataJson) {
+          final docs = dataJson['docs'] is List ? (dataJson['docs'] as List) : [];
+          return docs.map((d) => YatraModel.fromJson(d)).toList();
+        });
+      }
+      return ApiResponseModel<List<YatraModel>>(
+        isSuccess: false,
+        statusCode: 500,
+        message: 'Failed to load Popular Yatras: ${e.toString().replaceAll("Exception: ", "")}',
+        error: e.toString(),
+      );
     }
   }
 
-  // GET /user/yatra/journey/current (Continue Yatras)
-  static Future<List<dynamic>> getContinueYatras(String token) async {
-    try {
-      final response = await _safeGet(
-        Uri.parse('$baseUrl/user/yatra/journey/current'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-      return _processResponse(response)['Data'] ?? [];
-    } catch (e) {
-      print('Error fetching continue yatras: $e');
-      return [];
+  /// Refetch Page 1 of Popular Yatras
+  static Future<ApiResponseModel<List<YatraModel>>> refreshPopularYatra({
+    String? token,
+    int limit = 10,
+  }) async {
+    return getPopularYatra(token: token, page: 1, limit: limit, forceRefresh: true);
+  }
+
+  /// Search Popular Yatras with query
+  static Future<ApiResponseModel<List<YatraModel>>> searchPopularYatra(
+    String query, {
+    String? token,
+    int limit = 10,
+  }) async {
+    return getPopularYatra(token: token, page: 1, limit: limit, search: query, forceRefresh: true);
+  }
+
+  /// Load Next Page for Infinite Scroll
+  static Future<ApiResponseModel<List<YatraModel>>> loadMorePopularYatra({
+    required int nextPage,
+    String? token,
+    int limit = 10,
+    String search = '',
+  }) async {
+    return getPopularYatra(token: token, page: nextPage, limit: limit, search: search);
+  }
+
+  /// GET /user/yatra/journey/current (Active Continue Yatra Progress)
+  static Future<ApiResponseModel<ContinueYatraModel?>> getContinueYatra({
+    String? token,
+    bool forceRefresh = false,
+  }) async {
+    final uri = Uri.parse('$baseUrl/user/yatra/journey/current');
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+    };
+
+    if (!forceRefresh && _continueCache != null) {
+      return ApiResponseModel<ContinueYatraModel?>.fromJson(_continueCache, (dataJson) {
+        if (dataJson == null || dataJson == 0) return null;
+        return ContinueYatraModel.fromJson(dataJson);
+      });
     }
+
+    try {
+      final response = await _safeGet(uri, headers: headers);
+      final jsonBody = _processResponse(response);
+      _continueCache = jsonBody;
+
+      return ApiResponseModel<ContinueYatraModel?>.fromJson(jsonBody, (dataJson) {
+        if (dataJson == null || dataJson == 0) return null;
+        return ContinueYatraModel.fromJson(dataJson);
+      });
+    } catch (e) {
+      if (_continueCache != null) {
+        return ApiResponseModel<ContinueYatraModel?>.fromJson(_continueCache, (dataJson) {
+          if (dataJson == null || dataJson == 0) return null;
+          return ContinueYatraModel.fromJson(dataJson);
+        });
+      }
+      return ApiResponseModel<ContinueYatraModel?>(
+        isSuccess: false,
+        statusCode: 500,
+        message: 'Failed to load active journey: ${e.toString().replaceAll("Exception: ", "")}',
+        error: e.toString(),
+      );
+    }
+  }
+
+  // Legacy compatibility getters
+  static Future<List<dynamic>> getPopularYatras(String token) async {
+    final res = await getPopularYatra(token: token);
+    if (res.isSuccess && res.data != null) {
+      return res.data!.map((y) => y.toJson()).toList();
+    }
+    return [];
+  }
+
+  static Future<List<dynamic>> getContinueYatras(String token) async {
+    final res = await getContinueYatra(token: token);
+    if (res.isSuccess && res.data != null) {
+      return [res.data!.toJson()];
+    }
+    return [];
   }
 
   // POST /user/yatra/journey/start

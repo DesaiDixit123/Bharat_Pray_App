@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/yatra_model.dart';
+import '../../models/yatra_group_models.dart';
 import '../../services/api_service.dart';
 import 'contact_sync_screen.dart';
 
@@ -307,7 +308,7 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
 
               // Members Section
               Row(
-                mainAxisAlignment: MainAxisAlignment.between,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('Add Members (${_selectedMembers.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   TextButton.icon(
@@ -320,11 +321,11 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
               if (_selectedMembers.isNotEmpty)
                 Wrap(
                   spacing: 8,
-                  children: _selectedMembers.map((member) {
+                  children: _selectedMembers.map<Widget>((member) {
                     return Chip(
                       avatar: CircleAvatar(
                         backgroundColor: Colors.orange.shade100,
-                        child: Text(member.name[0].toUpperCase(), style: const TextStyle(color: Color(0xFFFF7A00), fontSize: 12)),
+                        child: Text(member.name.isNotEmpty ? member.name[0].toUpperCase() : 'U', style: const TextStyle(color: Color(0xFFFF7A00), fontSize: 12)),
                       ),
                       label: Text(member.name, style: const TextStyle(fontSize: 12)),
                       onDeleted: () {

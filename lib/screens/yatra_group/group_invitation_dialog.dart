@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/yatra_model.dart';
+import '../../models/yatra_group_models.dart';
 import '../../services/api_service.dart';
 
 class GroupInvitationDialog extends StatefulWidget {

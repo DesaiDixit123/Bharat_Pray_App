@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/yatra_model.dart';
+import '../../models/yatra_group_models.dart';
 import '../../services/api_service.dart';
 import '../../services/yatra_group_socket_service.dart';
 import 'group_invitation_dialog.dart';
