@@ -27,6 +27,12 @@ class YatraGroupSocketService {
       StreamController<Map<String, dynamic>>.broadcast();
   final _memberUpdateController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _memberReadyController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _groupUpdatedController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _invitationActionController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   // ─── Public streams ───────────────────────────────────────────────────────
   /// Fires when this user receives a new group invitation.
@@ -44,6 +50,18 @@ class YatraGroupSocketService {
   /// Fires on any member list update for a group.
   Stream<Map<String, dynamic>> get onMemberUpdate =>
       _memberUpdateController.stream;
+
+  /// Fires when a member changes ready status.
+  Stream<Map<String, dynamic>> get onMemberReadyStatusChanged =>
+      _memberReadyController.stream;
+
+  /// Fires on group details update or deletion.
+  Stream<Map<String, dynamic>> get onGroupUpdated =>
+      _groupUpdatedController.stream;
+
+  /// Fires when invitations are resent or cancelled.
+  Stream<Map<String, dynamic>> get onInvitationAction =>
+      _invitationActionController.stream;
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -107,6 +125,48 @@ class YatraGroupSocketService {
     _socket!.on('group_member_update', (data) {
       if (data is Map) {
         _memberUpdateController.add(Map<String, dynamic>.from(data));
+      }
+    });
+
+    _socket!.on('member_ready', (data) {
+      if (data is Map) {
+        _memberReadyController.add(Map<String, dynamic>.from(data));
+      }
+    });
+
+    _socket!.on('member_not_ready', (data) {
+      if (data is Map) {
+        _memberReadyController.add(Map<String, dynamic>.from(data));
+      }
+    });
+
+    _socket!.on('member_status_changed', (data) {
+      if (data is Map) {
+        _memberReadyController.add(Map<String, dynamic>.from(data));
+      }
+    });
+
+    _socket!.on('group_updated', (data) {
+      if (data is Map) {
+        _groupUpdatedController.add(Map<String, dynamic>.from(data));
+      }
+    });
+
+    _socket!.on('group_deleted', (data) {
+      if (data is Map) {
+        _groupUpdatedController.add({'action': 'deleted', ...Map<String, dynamic>.from(data)});
+      }
+    });
+
+    _socket!.on('invitation_resent', (data) {
+      if (data is Map) {
+        _invitationActionController.add({'action': 'resent', ...Map<String, dynamic>.from(data)});
+      }
+    });
+
+    _socket!.on('invitation_cancelled', (data) {
+      if (data is Map) {
+        _invitationActionController.add({'action': 'cancelled', ...Map<String, dynamic>.from(data)});
       }
     });
 

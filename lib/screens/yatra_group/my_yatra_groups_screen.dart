@@ -7,6 +7,7 @@ import '../../models/yatra_group_models.dart';
 import '../../services/api_service.dart';
 import '../../services/yatra_group_socket_service.dart';
 import 'group_invitation_dialog.dart';
+import 'group_dashboard_screen.dart';
 
 /// Displays the user's active yatra groups and pending invitations.
 /// Listens to real-time socket events for new invitations and member joins.
@@ -226,8 +227,18 @@ class _MyYatraGroupsScreenState extends State<MyYatraGroupsScreen> {
   }
 
   Widget _buildGroupCard(YatraGroupModel group) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => GroupDashboardScreen(groupId: group.id),
+          ),
+        ).then((_) => _loadData());
+      },
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),

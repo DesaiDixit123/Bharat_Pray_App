@@ -424,3 +424,162 @@ class ApiResponseModel<T> {
     );
   }
 }
+
+/// Phase 3: Detailed Yatra Group Member Model
+@immutable
+class GroupMemberModel {
+  final String memberId;
+  final String userId;
+  final String name;
+  final String mobile;
+  final String profilePic;
+  final String role; // 'leader' (Owner) | 'admin' | 'member'
+  final String invitationStatus; // 'accepted' | 'pending' | 'rejected'
+  final String readyStatus; // 'ready' | 'not_ready'
+  final DateTime? joinedAt;
+  final DateTime? lastActive;
+
+  const GroupMemberModel({
+    required this.memberId,
+    required this.userId,
+    required this.name,
+    required this.mobile,
+    required this.profilePic,
+    required this.role,
+    required this.invitationStatus,
+    required this.readyStatus,
+    this.joinedAt,
+    this.lastActive,
+  });
+
+  factory GroupMemberModel.fromJson(dynamic rawJson) {
+    if (rawJson is! Map) {
+      return const GroupMemberModel(
+        memberId: '',
+        userId: '',
+        name: 'Member',
+        mobile: '',
+        profilePic: '',
+        role: 'member',
+        invitationStatus: 'pending',
+        readyStatus: 'not_ready',
+      );
+    }
+    final json = Map<String, dynamic>.from(rawJson);
+
+    return GroupMemberModel(
+      memberId: json['memberId']?.toString() ?? json['_id']?.toString() ?? '',
+      userId: json['userId']?.toString() ?? '',
+      name: json['name']?.toString() ?? 'User',
+      mobile: json['mobile']?.toString() ?? '',
+      profilePic: ApiService.resolveImageUrl(json['profilePic']?.toString() ?? json['profile_pic']?.toString() ?? ''),
+      role: json['role']?.toString() ?? 'member',
+      invitationStatus: json['invitationStatus']?.toString() ?? json['status']?.toString() ?? 'pending',
+      readyStatus: json['readyStatus']?.toString() ?? 'not_ready',
+      joinedAt: json['joinedAt'] != null ? DateTime.tryParse(json['joinedAt'].toString()) : null,
+      lastActive: json['lastActive'] != null ? DateTime.tryParse(json['lastActive'].toString()) : null,
+    );
+  }
+}
+
+/// Phase 3: Yatra Group Dashboard Model
+@immutable
+class YatraGroupDashboardModel {
+  final String groupId;
+  final String name;
+  final String description;
+  final String coverImage;
+  final String visibility;
+  final String inviteToken;
+  final DateTime? createdDate;
+  final Map<String, dynamic>? createdBy;
+  final Map<String, dynamic>? temple;
+  final double totalDistanceKm;
+  final int estimatedSteps;
+  final int estimatedDays;
+  final int totalMembers;
+  final int acceptedMembers;
+  final int pendingInvitations;
+  final int rejectedInvitations;
+  final int readyCount;
+  final int notReadyCount;
+  final int minReadyRequired;
+  final String currentStatus;
+  final List<GroupMemberModel> members;
+  final List<dynamic> invitations;
+  final bool isOwner;
+  final bool canStart;
+  final List<String> validationErrors;
+
+  const YatraGroupDashboardModel({
+    required this.groupId,
+    required this.name,
+    required this.description,
+    required this.coverImage,
+    required this.visibility,
+    required this.inviteToken,
+    this.createdDate,
+    this.createdBy,
+    this.temple,
+    required this.totalDistanceKm,
+    required this.estimatedSteps,
+    required this.estimatedDays,
+    required this.totalMembers,
+    required this.acceptedMembers,
+    required this.pendingInvitations,
+    required this.rejectedInvitations,
+    required this.readyCount,
+    required this.notReadyCount,
+    required this.minReadyRequired,
+    required this.currentStatus,
+    required this.members,
+    required this.invitations,
+    required this.isOwner,
+    required this.canStart,
+    required this.validationErrors,
+  });
+
+  factory YatraGroupDashboardModel.fromJson(dynamic rawJson) {
+    if (rawJson is! Map) {
+      throw Exception('Invalid Dashboard JSON structure');
+    }
+    final json = Map<String, dynamic>.from(rawJson);
+
+    final counts = json['counts'] as Map<String, dynamic>? ?? {};
+    final metrics = json['journeyMetrics'] as Map<String, dynamic>? ?? {};
+    final perms = json['permissions'] as Map<String, dynamic>? ?? {};
+    final validation = json['validation'] as Map<String, dynamic>? ?? {};
+
+    final membersList = (json['members'] as List<dynamic>? ?? [])
+        .map((m) => GroupMemberModel.fromJson(m))
+        .toList();
+
+    return YatraGroupDashboardModel(
+      groupId: json['groupId']?.toString() ?? json['_id']?.toString() ?? '',
+      name: json['name']?.toString() ?? 'Yatra Group',
+      description: json['description']?.toString() ?? '',
+      coverImage: ApiService.resolveImageUrl(json['coverImage']?.toString() ?? ''),
+      visibility: json['visibility']?.toString() ?? 'public',
+      inviteToken: json['inviteToken']?.toString() ?? '',
+      createdDate: json['createdDate'] != null ? DateTime.tryParse(json['createdDate'].toString()) : null,
+      createdBy: json['createdBy'] is Map ? Map<String, dynamic>.from(json['createdBy']) : null,
+      temple: json['temple'] is Map ? Map<String, dynamic>.from(json['temple']) : null,
+      totalDistanceKm: (metrics['totalDistanceKm'] ?? json['totalDistance'] ?? 0.0).toDouble(),
+      estimatedSteps: metrics['estimatedSteps'] ?? json['estimatedSteps'] ?? 0,
+      estimatedDays: metrics['estimatedDays'] ?? json['estimatedDays'] ?? 0,
+      totalMembers: counts['totalMembers'] ?? membersList.length,
+      acceptedMembers: counts['acceptedMembers'] ?? 0,
+      pendingInvitations: counts['pendingInvitations'] ?? 0,
+      rejectedInvitations: counts['rejectedInvitations'] ?? 0,
+      readyCount: counts['readyCount'] ?? 0,
+      notReadyCount: counts['notReadyCount'] ?? 0,
+      minReadyRequired: counts['minReadyRequired'] ?? 2,
+      currentStatus: json['currentStatus']?.toString() ?? 'PREPARING',
+      members: membersList,
+      invitations: json['invitations'] as List<dynamic>? ?? [],
+      isOwner: perms['isOwner'] == true,
+      canStart: validation['canStart'] == true,
+      validationErrors: (validation['errors'] as List<dynamic>? ?? []).map((e) => e.toString()).toList(),
+    );
+  }
+}

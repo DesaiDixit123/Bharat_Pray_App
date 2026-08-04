@@ -2550,5 +2550,142 @@ class ApiService {
       return {};
     }
   }
+
+  // ─── Phase 3: Group Dashboard & Readiness APIs ───────────────────────────────
+
+  // GET /user/yatra-group/dashboard/:id
+  static Future<YatraGroupDashboardModel> getGroupDashboard(String token, String groupId) async {
+    final response = await _safeGet(
+      Uri.parse('$baseUrl/user/yatra-group/dashboard/$groupId'),
+      headers: _authHeaders(token),
+    );
+    final res = _processResponse(response);
+    return YatraGroupDashboardModel.fromJson(res['Data']);
+  }
+
+  // POST /user/yatra-group/ready-status
+  static Future<Map<String, dynamic>> toggleMemberReadyStatus(
+    String token, {
+    required String groupId,
+    required String readyStatus,
+  }) async {
+    final response = await _safePost(
+      Uri.parse('$baseUrl/user/yatra-group/ready-status'),
+      headers: _jsonHeaders(token: token),
+      body: jsonEncode({
+        'groupId': groupId,
+        'readyStatus': readyStatus,
+      }),
+    );
+    return _processResponse(response)['Data'] ?? {};
+  }
+
+  // POST /user/yatra-group/invite/resend
+  static Future<Map<String, dynamic>> resendGroupInvitation(
+    String token, {
+    String? invitationId,
+    String? groupId,
+    String? receiverId,
+  }) async {
+    final response = await _safePost(
+      Uri.parse('$baseUrl/user/yatra-group/invite/resend'),
+      headers: _jsonHeaders(token: token),
+      body: jsonEncode({
+        if (invitationId != null) 'invitationId': invitationId,
+        if (groupId != null) 'groupId': groupId,
+        if (receiverId != null) 'receiverId': receiverId,
+      }),
+    );
+    return _processResponse(response)['Data'] ?? {};
+  }
+
+  // POST /user/yatra-group/invite/cancel
+  static Future<Map<String, dynamic>> cancelGroupInvitation(
+    String token, {
+    String? invitationId,
+    String? groupId,
+    String? receiverId,
+  }) async {
+    final response = await _safePost(
+      Uri.parse('$baseUrl/user/yatra-group/invite/cancel'),
+      headers: _jsonHeaders(token: token),
+      body: jsonEncode({
+        if (invitationId != null) 'invitationId': invitationId,
+        if (groupId != null) 'groupId': groupId,
+        if (receiverId != null) 'receiverId': receiverId,
+      }),
+    );
+    return _processResponse(response)['Data'] ?? {};
+  }
+
+  // PUT /user/yatra-group/update/:id
+  static Future<Map<String, dynamic>> updateYatraGroup(
+    String token,
+    String groupId,
+    Map<String, dynamic> payload,
+  ) async {
+    final response = await _safePut(
+      Uri.parse('$baseUrl/user/yatra-group/update/$groupId'),
+      headers: _jsonHeaders(token: token),
+      body: jsonEncode(payload),
+    );
+    return _processResponse(response)['Data'] ?? {};
+  }
+
+  // POST /user/yatra-group/validate-start/:id
+  static Future<Map<String, dynamic>> validateGroupStart(String token, String groupId) async {
+    final response = await _safePost(
+      Uri.parse('$baseUrl/user/yatra-group/validate-start/$groupId'),
+      headers: _authHeaders(token),
+    );
+    return _processResponse(response)['Data'] ?? {};
+  }
+
+  // POST /user/yatra-group/invite/send
+  static Future<Map<String, dynamic>> sendGroupInvitations(
+    String token,
+    String groupId,
+    List<String> inviteeIds,
+  ) async {
+    final response = await _safePost(
+      Uri.parse('$baseUrl/user/yatra-group/invite/send'),
+      headers: _jsonHeaders(token: token),
+      body: jsonEncode({
+        'groupId': groupId,
+        'inviteeIds': inviteeIds,
+      }),
+    );
+    return _processResponse(response)['Data'] ?? {};
+  }
+
+  // POST /user/yatra-group/members/remove
+  static Future<Map<String, dynamic>> removeGroupMember(
+    String token,
+    String groupId,
+    String memberUserId,
+  ) async {
+    final response = await _safePost(
+      Uri.parse('$baseUrl/user/yatra-group/members/remove'),
+      headers: _jsonHeaders(token: token),
+      body: jsonEncode({
+        'groupId': groupId,
+        'memberUserId': memberUserId,
+        'userId': memberUserId,
+      }),
+    );
+    return _processResponse(response)['Data'] ?? {};
+  }
+
+  // DELETE /user/yatra-group/delete/:id
+  static Future<Map<String, dynamic>> deleteYatraGroup(
+    String token,
+    String groupId,
+  ) async {
+    final response = await _safeDelete(
+      Uri.parse('$baseUrl/user/yatra-group/delete/$groupId'),
+      headers: _authHeaders(token),
+    );
+    return _processResponse(response)['Data'] ?? {};
+  }
 }
 
