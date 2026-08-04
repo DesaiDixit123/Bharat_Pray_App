@@ -7,7 +7,6 @@ import '../../services/api_service.dart';
 import 'add_temple_on_route_screen.dart';
 import 'yatra_live_sangha_screen.dart';
 import 'yatra_completed_screen.dart';
-import 'animated_journey/animated_journey_screen.dart';
 
 class StartYatraOverviewScreen extends StatefulWidget {
   static const Color accentOrange = Color(0xFFFF7A00);
@@ -163,10 +162,10 @@ class _StartYatraOverviewScreenState extends State<StartYatraOverviewScreen> {
                                 gradient: LinearGradient(
                                   begin: Alignment.topCenter,
                                   end: Alignment.bottomCenter,
-                                  colors: [
-                                    Colors.black.withValues(alpha: 0.14),
-                                    Colors.black.withValues(alpha: 0.25),
-                                    Colors.black.withValues(alpha: 0.62),
+                                  colors: [ // Corrected from withValues to withOpacity
+                                    Colors.black.withOpacity(0.14),
+                                    Colors.black.withOpacity(0.25),
+                                    Colors.black.withOpacity(0.62),
                                   ],
                                   stops: const [0.0, 0.38, 1.0],
                                 ),
@@ -249,12 +248,12 @@ class _BackButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 40,
-        height: 40,
+        width: 48,
+        height: 48,
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.22),
+          color: Colors.white.withOpacity(0.22),
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.white.withValues(alpha: 0.55), width: 1.0),
+          border: Border.all(color: Colors.white.withOpacity(0.55), width: 1.0),
         ),
         child: Center(
           child: SvgPicture.string(

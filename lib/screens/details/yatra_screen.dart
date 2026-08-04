@@ -8,7 +8,6 @@ import 'create_yatra_group_screen.dart';
 import 'start_yatra_overview_screen.dart';
 import 'yatra_live_sangha_screen.dart';
 import 'yatra_completed_screen.dart';
-import 'animated_journey/animated_journey_screen.dart';
 
 // Using YatraModel from api_service.dart
 

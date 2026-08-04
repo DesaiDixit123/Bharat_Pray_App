@@ -264,12 +264,12 @@ class _BackButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 40,
-        height: 40,
+        width: 48,
+        height: 48,
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.22),
+          color: Colors.white.withOpacity(0.22),
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.white.withValues(alpha: 0.55), width: 1.0),
+          border: Border.all(color: Colors.white.withOpacity(0.55), width: 1.0),
         ),
         child: Center(
           child: SvgPicture.string(

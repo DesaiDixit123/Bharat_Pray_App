@@ -77,8 +77,8 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
             child: GestureDetector(
               onTap: () => Navigator.pop(context),
               child: Container(
-                width: 40,
-                height: 40,
+              width: 48,
+              height: 48,
                 decoration: BoxDecoration(
                   color: Colors.white,
                   shape: BoxShape.circle,
@@ -158,7 +158,7 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
         hintText: hint,
         hintStyle: GoogleFonts.outfit(
           fontSize: 14,
-          color: const Color(0xFFC8A882).withValues(alpha: 0.6),
+          color: const Color(0xFFC8A882).withOpacity(0.6),
         ),
         fillColor: Colors.white,
         filled: true,
@@ -188,7 +188,7 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
         hint,
         style: GoogleFonts.outfit(
           fontSize: 14,
-          color: const Color(0xFFC8A882).withValues(alpha: 0.6),
+          color: const Color(0xFFC8A882).withOpacity(0.6),
         ),
       ),
       style: GoogleFonts.outfit(

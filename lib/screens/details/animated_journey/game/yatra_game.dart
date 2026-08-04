@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'package:flame/game.dart';
-import 'package:flame/components.dart';
-import 'package:flutter/material.dart';
 
 import 'player_component.dart';
 import 'road_component.dart';

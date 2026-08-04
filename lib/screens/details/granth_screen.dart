@@ -1,86 +1,79 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-class GranthScreen extends StatefulWidget {
+import 'granth_list_by_category_screen.dart';
+
+class GranthScreen extends StatelessWidget {
   const GranthScreen({super.key});
 
-  @override
-  State<GranthScreen> createState() => _GranthScreenState();
-}
-
-class _GranthScreenState extends State<GranthScreen> {
-  bool _showingChapterDetail = false;
-  final String _selectedGranth = "Bhagavad Gita";
-  Map<String, dynamic>? _selectedChapter;
-
-  final List<Map<String, dynamic>> _gitaChapters = [
+  static const List<Map<String, dynamic>> _granthCategories = [
     {
-      'number': '1',
-      'title': 'Arjuna Vishada Yoga',
-      'translation': 'The Yoga of Arjuna\'s Grief',
-      'versesCount': '46 Verses',
-      'verses': [
-        {
-          'sanskrit': 'धर्मक्षेत्रे कुरुक्षेत्रे समवेता युयुत्सवः ।\nमामकाः पाण्डवाश्चैव किमकुर्वत सञ्जय ॥ १.१ ॥',
-          'english': 'Dhritarashtra said: O Sanjay, assembled in the holy land of Kurukshetra and desiring to fight, what did my sons and the sons of Pandu do?',
-        },
-        {
-          'sanskrit': 'दृष्ट्वा तु पाण्डवानीकं व्यूढं दुर्योधनस्तदा ।\nआचार्यमुपसङ्गम्य राजा वचनमब्रवीत् ॥ १.२ ॥',
-          'english': 'Sanjaya said: King Duryodhana, having seen the army of the Pandavas drawn up in battle array, approached his teacher Drona and spoke these words.',
-        }
-      ]
+      'title': 'Veda',
+      'count': 4,
+      'image': 'assets/images/bhagavad_gita.png',
+      'description': 'The Vedas are the oldest sacred texts of Sanatan Dharma.',
     },
     {
-      'number': '2',
-      'title': 'Sankhya Yoga',
-      'translation': 'The Yoga of Knowledge',
-      'versesCount': '72 Verses',
-      'verses': [
-        {
-          'sanskrit': 'क्लैब्यं मा स्म गमः पार्थ नैतत्त्वय्युपपद्यते ।\nक्षुद्रं हृदयदौर्बल्यं त्यक्त्वोत्तिष्ठ परन्तप ॥ २.३ ॥',
-          'english': 'O Parth, yield not to unmanliness; it does not become you. Cast off this petty weakness of heart and arise, O scorcher of enemies!',
-        },
-        {
-          'sanskrit': 'कर्मण्येवाधिकारस्ते मा फलेषु कदाचन ।\nमा कर्मफलहेतुर्भूर्मा ते सङ्गोऽस्त्वकर्मणि ॥ २.४७ ॥',
-          'english': 'You have a right to perform your prescribed duties, but you are not entitled to the fruits of your actions. Never consider yourself to be the cause of the results of your activities, and never be attached to not doing your duty.',
-        }
-      ]
+      'title': 'Puran',
+      'count': 18,
+      'image': 'assets/images/granth_card.png',
+      'description': 'Sacred stories, legends, and timeless divine teachings.',
     },
     {
-      'number': '3',
-      'title': 'Karma Yoga',
-      'translation': 'The Yoga of Action',
-      'versesCount': '43 Verses',
-      'verses': [
-        {
-          'sanskrit': 'न कर्मणामनारम्भान्नैष्कर्म्यं पुरुषोऽश्नुते ।\nन च सन्न्यसनादेव सिद्धिं समधिगच्छति ॥ ३.४ ॥',
-          'english': 'Not by abstaining from work can one achieve freedom from karmic reactions, nor by renunciation alone can one attain perfection.',
-        }
-      ]
-    }
+      'title': 'Itihas',
+      'count': 6,
+      'image': 'assets/images/image_2.png',
+      'description': 'Epic narratives that shape dharma, duty, and devotion.',
+    },
+    {
+      'title': 'Darshan',
+      'count': 8,
+      'image': 'assets/images/image_3.png',
+      'description': 'Philosophical schools exploring truth, self, and reality.',
+    },
+    {
+      'title': 'Stotra',
+      'count': 12,
+      'image': 'assets/images/image_4.png',
+      'description': 'Devotional hymns for prayer, praise, and reflection.',
+    },
+    {
+      'title': 'Aarti',
+      'count': 8,
+      'image': 'assets/images/image_4_1.png',
+      'description': 'Ceremonial songs offered in reverence with light and bhakti.',
+    },
+    {
+      'title': 'Mantra',
+      'count': 15,
+      'image': 'assets/images/krishna.png',
+      'description': 'Sacred chants for focus, healing, strength, and devotion.',
+    },
+    {
+      'title': 'Other Granths',
+      'count': 10,
+      'image': 'assets/images/download_1.png',
+      'description': 'Additional spiritual texts and treasured compilations.',
+    },
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFE8D6),
+      backgroundColor: const Color(0xFFFFF6EE),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF2E2A36)),
-          onPressed: () {
-            if (_showingChapterDetail) {
-              setState(() {
-                _showingChapterDetail = false;
-              });
-            } else {
-              Navigator.pop(context);
-            }
-          },
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: Color(0xFF2E2A36),
+          ),
+          onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          _showingChapterDetail ? _selectedChapter!['title'] : 'Holy Granths',
+          'Granth',
           style: GoogleFonts.outfit(
             color: const Color(0xFF2E2A36),
             fontWeight: FontWeight.bold,
@@ -89,277 +82,141 @@ class _GranthScreenState extends State<GranthScreen> {
       ),
       body: SafeArea(
         top: false,
-        bottom: true,
-        child: _showingChapterDetail ? _buildChapterReader() : _buildGranthDashboard(),
-      ),
-    );
-  }
-
-  // Dashboard showing Granth selection and Chapter List
-  Widget _buildGranthDashboard() {
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Granth Header Banner Card
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10),
-            child: Container(
-              height: 140,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFFF9933), Color(0xFFFF5500)],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFFF7700).withValues(alpha: 0.25),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Stack(
-                children: [
-                  Positioned(
-                    right: 20,
-                    bottom: -20,
-                    child: Opacity(
-                      opacity: 0.15,
-                      child: Text(
-                        "📖",
-                        style: GoogleFonts.outfit(fontSize: 130),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          _selectedGranth,
-                          style: GoogleFonts.outfit(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '"The eternal spiritual wisdom of ancient Bharat."',
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            fontStyle: FontStyle.italic,
-                            color: Colors.white.withValues(alpha: 0.9),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12),
-            child: Text(
-              "Chapters (अध्याय)",
+        child: ListView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            Text(
+              'Select Granth Category',
               style: GoogleFonts.outfit(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                fontWeight: FontWeight.w700,
                 color: const Color(0xFF2E2A36),
               ),
             ),
-          ),
-
-          // Chapter list
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: _gitaChapters.length,
-            itemBuilder: (context, index) {
-              final chapter = _gitaChapters[index];
-              return Container(
-                margin: const EdgeInsets.only(bottom: 14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFEFE6DB)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.02),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+            const SizedBox(height: 6),
+            Text(
+              'Choose a category to explore sacred texts',
+              style: GoogleFonts.outfit(
+                    fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFF2E2A36).withOpacity(0.58),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ..._granthCategories.map((category) {
+              return _CategoryCard(
+                category: category,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => GranthListByCategoryScreen(category: category),
                     ),
-                  ],
-                ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  leading: Container(
-                    height: 40,
-                    width: 40,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFF7700).withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        chapter['number'],
-                        style: GoogleFonts.outfit(
-                          color: const Color(0xFFFF7700),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ),
-                  ),
-                  title: Text(
-                    chapter['title'],
-                    style: GoogleFonts.outfit(
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF2E2A36),
-                      fontSize: 15,
-                    ),
-                  ),
-                  subtitle: Text(
-                    chapter['translation'],
-                    style: GoogleFonts.outfit(
-                      color: const Color(0xFF2E2A36).withValues(alpha: 0.5),
-                      fontSize: 12,
-                    ),
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        chapter['versesCount'],
-                        style: GoogleFonts.outfit(color: const Color(0xFFFF7700), fontSize: 11, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(width: 8),
-                      const Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey, size: 14),
-                    ],
-                  ),
-                  onTap: () {
-                    setState(() {
-                      _selectedChapter = chapter;
-                      _showingChapterDetail = true;
-                    });
-                  },
-                ),
+                  );
+                },
               );
-            },
-          ),
-          const SizedBox(height: 30),
-        ],
+            }),
+          ],
+        ),
       ),
     );
   }
+}
 
-  // Chapter Reader layout showing verses
-  double _readerFontSize = 18.0;
+class _CategoryCard extends StatelessWidget {
+  const _CategoryCard({
+    required this.category,
+    required this.onTap,
+  });
 
-  Widget _buildChapterReader() {
-    final verses = _selectedChapter!['verses'] as List<Map<String, String>>;
-    return Column(
-      children: [
-        // Sub-title bar with font resizing controls
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          color: const Color(0xFFFFEAD2).withValues(alpha: 0.4),
+  final Map<String, dynamic> category;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFF3E4D6)),
+        boxShadow: [
+          BoxShadow( // Corrected from withValues to withOpacity
+            color: const Color(0xFFFF7700).withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                "Chapter ${_selectedChapter!['number']}: ${_selectedChapter!['translation']}",
-                style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF2E2A36).withValues(alpha: 0.7), fontWeight: FontWeight.bold),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: SizedBox(
+                  height: 78,
+                  width: 102,
+                  child: Image.asset(
+                    category['image'] as String,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: const Color(0xFF8F4D18),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.menu_book_rounded,
+                          color: Colors.white,
+                          size: 30,
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ),
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.remove_circle_outline_rounded, size: 18),
-                    onPressed: () {
-                      setState(() {
-                        if (_readerFontSize > 14) _readerFontSize -= 2;
-                      });
-                    },
-                  ),
-                  Text(
-                    "Aa",
-                    style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-                    onPressed: () {
-                      setState(() {
-                        if (_readerFontSize < 28) _readerFontSize += 2;
-                      });
-                    },
-                  ),
-                ],
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      category['title'] as String,
+                      style: GoogleFonts.outfit(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF2E2A36),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${category['count']} Granths',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF2E2A36).withOpacity(0.42),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                height: 36,
+                width: 36,
+                child: const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  color: Color(0xFFFF7700),
+                  size: 18,
+                ),
               ),
             ],
           ),
         ),
-
-        // Verses list
-        Expanded(
-          child: ListView.builder(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.all(20),
-            itemCount: verses.length,
-            itemBuilder: (context, index) {
-              final verse = verses[index];
-              return Container(
-                margin: const EdgeInsets.only(bottom: 24),
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: const Color(0xFFEFE6DB)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.02),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    // Sanskrit Sloka
-                    SelectableText(
-                      verse['sanskrit']!,
-                      style: GoogleFonts.yatraOne(
-                        fontSize: _readerFontSize,
-                        color: const Color(0xFF2E2A36),
-                        height: 1.8,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const Divider(color: Color(0xFFEFE6DB), height: 30),
-                    // English translation
-                    SelectableText(
-                      verse['english']!,
-                      style: GoogleFonts.outfit(
-                        fontSize: _readerFontSize - 3,
-                        color: const Color(0xFF2E2A36).withValues(alpha: 0.75),
-                        height: 1.5,
-                      ),
-                      textAlign: TextAlign.left,
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

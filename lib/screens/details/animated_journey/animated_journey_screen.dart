@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 
 import 'game/yatra_game.dart';
 import 'game/player_component.dart';
-import '../../../models/yatra_model.dart'; // Ensure this model exists
+// Ensure this model exists
 
 class AnimatedJourneyScreen extends StatefulWidget {
   final dynamic yatra; // We pass the Yatra model here
 
-  const AnimatedJourneyScreen({Key? key, required this.yatra}) : super(key: key);
+  const AnimatedJourneyScreen({super.key, required this.yatra});
 
   @override
   State<AnimatedJourneyScreen> createState() => _AnimatedJourneyScreenState();

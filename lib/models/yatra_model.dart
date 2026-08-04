@@ -44,7 +44,7 @@ class YatraModel {
         : (json['stepsStr'] ?? '0 Steps');
 
     final durationStr = rawDuration != null
-        ? '${rawDuration} ${rawDuration == 1 ? "Day" : "Days"}'
+        ? '$rawDuration ${rawDuration == 1 ? "Day" : "Days"}'
         : (json['durationStr'] ?? '0 Days');
 
     final groupStr = rawGroup != null
