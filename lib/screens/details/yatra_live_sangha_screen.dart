@@ -16,6 +16,7 @@ import 'package:geolocator/geolocator.dart';
 
 class YatraLiveSanghaScreen extends StatefulWidget {
   final String journeyId;
+  final String yatraId;
   final String title;
   final String distance;
   final String steps;
@@ -30,6 +31,7 @@ class YatraLiveSanghaScreen extends StatefulWidget {
   const YatraLiveSanghaScreen({
     super.key,
     this.journeyId = '',
+    this.yatraId = '',
     this.title = 'Somnath',
     this.distance = '450 km',
     this.steps = '108k',
@@ -95,32 +97,55 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
       duration: const Duration(milliseconds: 1400),
     );
 
-    // Video 1A & 1B: New_walking.mp4 — double buffered for 0-second seamless looping
+    // Video 1A & 1B: 1st_Scene.mp4 — double buffered for 0-second seamless looping (MUTED)
     _walkingVideoControllerA = VideoPlayerController.asset(
-      'assets/images/New_walking.mp4',
+      'assets/images/1st_Scene.mp4',
     )..initialize().then((_) {
         if (mounted) {
+          _walkingVideoControllerA!.setVolume(0.0);
           _walkingVideoControllerA!.setLooping(false);
           _walkingVideoControllerA!.addListener(_onWalkingVideoPositionChanged);
           setState(() {});
         }
+      }).catchError((_) {
+        _walkingVideoControllerA = VideoPlayerController.asset('assets/images/New_walking.mp4')
+          ..initialize().then((_) {
+            if (mounted) {
+              _walkingVideoControllerA!.setVolume(0.0);
+              _walkingVideoControllerA!.setLooping(false);
+              _walkingVideoControllerA!.addListener(_onWalkingVideoPositionChanged);
+              setState(() {});
+            }
+          });
       });
 
     _walkingVideoControllerB = VideoPlayerController.asset(
-      'assets/images/New_walking.mp4',
+      'assets/images/1st_Scene.mp4',
     )..initialize().then((_) {
         if (mounted) {
+          _walkingVideoControllerB!.setVolume(0.0);
           _walkingVideoControllerB!.setLooping(false);
           _walkingVideoControllerB!.addListener(_onWalkingVideoPositionChanged);
           setState(() {});
         }
+      }).catchError((_) {
+        _walkingVideoControllerB = VideoPlayerController.asset('assets/images/New_walking.mp4')
+          ..initialize().then((_) {
+            if (mounted) {
+              _walkingVideoControllerB!.setVolume(0.0);
+              _walkingVideoControllerB!.setLooping(false);
+              _walkingVideoControllerB!.addListener(_onWalkingVideoPositionChanged);
+              setState(() {});
+            }
+          });
       });
 
-    // Video 2: Temple_reaching.mp4 — plays once then shows popup
+    // Video 2: 2nd_Scene.mp4 — plays once on temple/destination arrival then shows popup/completion (MUTED)
     _templeReachingVideoController = VideoPlayerController.asset(
-      'assets/images/Temple_reaching.mp4',
+      'assets/images/2nd_Scene.mp4',
     )..initialize().then((_) {
         if (mounted) {
+          _templeReachingVideoController!.setVolume(0.0);
           _templeReachingVideoController!.setLooping(false);
           _templeReachingVideoController!.addListener(_onTempleReachingStatusChanged);
           _templeReachingVideoController!.addListener(() {
@@ -128,13 +153,27 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
           });
           setState(() {});
         }
+      }).catchError((_) {
+        _templeReachingVideoController = VideoPlayerController.asset('assets/images/Temple_reaching.mp4')
+          ..initialize().then((_) {
+            if (mounted) {
+              _templeReachingVideoController!.setVolume(0.0);
+              _templeReachingVideoController!.setLooping(false);
+              _templeReachingVideoController!.addListener(_onTempleReachingStatusChanged);
+              _templeReachingVideoController!.addListener(() {
+                if (mounted) setState(() {});
+              });
+              setState(() {});
+            }
+          });
       });
 
-    // Video 3: Temple_entrarance.mp4 — plays when user taps View Darshan
+    // Video 3: 3rd_Scene.mp4 — plays when user taps View Darshan (MUTED)
     _templeEntranceVideoController = VideoPlayerController.asset(
-      'assets/images/Temple_entrarance.mp4',
+      'assets/images/3rd_Scene.mp4',
     )..initialize().then((_) {
         if (mounted) {
+          _templeEntranceVideoController!.setVolume(0.0);
           _templeEntranceVideoController!.setLooping(false);
           _templeEntranceVideoController!.addListener(_onTempleEntranceStatusChanged);
           _templeEntranceVideoController!.addListener(() {
@@ -142,12 +181,23 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
           });
           setState(() {});
         }
+      }).catchError((_) {
+        _templeEntranceVideoController = VideoPlayerController.asset('assets/images/Temple_entrarance.mp4')
+          ..initialize().then((_) {
+            if (mounted) {
+              _templeEntranceVideoController!.setVolume(0.0);
+              _templeEntranceVideoController!.setLooping(false);
+              _templeEntranceVideoController!.addListener(_onTempleEntranceStatusChanged);
+              _templeEntranceVideoController!.addListener(() {
+                if (mounted) setState(() {});
+              });
+              setState(() {});
+            }
+          });
       });
   }
 
   // ─── Seamless loop: Ping-Pong technique for 0-second gap
-  // When active controller hits the end, we instantly swap to the standby controller
-  // which is already queued at 1s, creating a perfect seamless loop.
   void _onWalkingVideoPositionChanged() {
     if (_currentVideoMode != YatraVideoMode.walking) return;
     
@@ -158,26 +208,24 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     if (standbyCtrl == null || !standbyCtrl.value.isInitialized) return;
     
     final pos = activeCtrl.value.position;
-    final loopEnd = activeCtrl.value.duration.inMilliseconds < 9000
-        ? activeCtrl.value.duration.inMilliseconds
-        : 9000;
+    final totalDurationMs = activeCtrl.value.duration.inMilliseconds;
+    if (totalDurationMs <= 0) return;
+    
+    final loopEnd = totalDurationMs;
         
-    // Start the 2-second crossfade exactly 2000ms before the end
+    // Start the 2-second crossfade exactly 2000ms before the end of the full video
     if (pos.inMilliseconds >= loopEnd - 2000) {
-      // 1. Play the standby video (already pre-buffered at 1s)
+      standbyCtrl.setVolume(0.0);
       standbyCtrl.play();
       
-      // 2. Swap UI to trigger the 2-second AnimatedOpacity crossfade
       setState(() {
         _useWalkingA = !_useWalkingA;
       });
       
-      // 3. Let the old video keep playing during the 2-second fade.
-      // After it's completely hidden, pause and rewind it for the NEXT loop.
       Future.delayed(const Duration(milliseconds: 2050), () {
         if (mounted) {
           activeCtrl.pause();
-          activeCtrl.seekTo(const Duration(seconds: 1));
+          activeCtrl.seekTo(Duration.zero);
         }
       });
     }
@@ -207,7 +255,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     }
   }
 
-  /// Switch back to the seamless-looping walking video (1s–end window).
+  /// Switch back to the seamless-looping walking video.
   void _switchToWalkingVideo() {
     _templeReachingVideoController?.pause();
     _templeEntranceVideoController?.pause();
@@ -219,12 +267,14 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     final standbyCtrl = _useWalkingA ? _walkingVideoControllerB : _walkingVideoControllerA;
     
     if (_isRunning) {
-      standbyCtrl?.seekTo(const Duration(seconds: 1)).then((_) => standbyCtrl.pause());
-      activeCtrl?.seekTo(const Duration(seconds: 1)).then((_) => activeCtrl.play());
+      standbyCtrl?.setVolume(0.0);
+      activeCtrl?.setVolume(0.0);
+      standbyCtrl?.seekTo(Duration.zero).then((_) => standbyCtrl.pause());
+      activeCtrl?.seekTo(Duration.zero).then((_) => activeCtrl.play());
     }
   }
 
-  /// Play Temple_reaching.mp4 once, then show the choice popup.
+  /// Play 2nd_Scene.mp4 once, then show the choice popup.
   void _switchToTempleReachingVideo() {
     _walkingVideoControllerA?.pause();
     _walkingVideoControllerB?.pause();
@@ -233,11 +283,12 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     });
     final ctrl = _templeReachingVideoController;
     if (ctrl != null && ctrl.value.isInitialized) {
+      ctrl.setVolume(0.0);
       ctrl.seekTo(Duration.zero).then((_) => ctrl.play());
     }
   }
 
-  /// Play Temple_entrarance.mp4 (View Darshan path).
+  /// Play 3rd_Scene.mp4 (View Darshan path).
   void _switchToTempleEntranceVideo() {
     _templeReachingVideoController?.pause();
     setState(() {
@@ -245,6 +296,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     });
     final ctrl = _templeEntranceVideoController;
     if (ctrl != null && ctrl.value.isInitialized) {
+      ctrl.setVolume(0.0);
       ctrl.seekTo(Duration.zero).then((_) => ctrl.play());
     }
   }
@@ -309,6 +361,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
                     ),
                     onPressed: () {
                       Navigator.of(ctx).pop();
+                      _markTempleCompletedBackend(darshanWatched: true);
                       _switchToTempleEntranceVideo();
                     },
                     child: Text(
@@ -334,6 +387,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
                     ),
                     onPressed: () {
                       Navigator.of(ctx).pop();
+                      _markTempleCompletedBackend(darshanWatched: false);
                       _switchToWalkingVideo();
                     },
                     child: Text(
@@ -363,6 +417,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     _liveController.dispose();
     _liveWalkingTimer?.cancel();
     _loopSeekTimer?.cancel();
+    _gps5SecPollTimer?.cancel();
     _locationSubscription?.cancel();
     _runController.dispose();
     _walkingVideoControllerA?.removeListener(_onWalkingVideoPositionChanged);
@@ -388,19 +443,23 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     // Start live tracking via LiveYatraController
     _liveController.startTracking();
 
-    // Queue standby controller at 1s, and play active controller at 1s
+    // Play active controller from start, queue standby controller (both MUTED)
     final activeCtrl = _useWalkingA ? _walkingVideoControllerA : _walkingVideoControllerB;
     final standbyCtrl = _useWalkingA ? _walkingVideoControllerB : _walkingVideoControllerA;
     
     if (activeCtrl != null && activeCtrl.value.isInitialized &&
         standbyCtrl != null && standbyCtrl.value.isInitialized) {
-      standbyCtrl.seekTo(const Duration(seconds: 1)).then((_) => standbyCtrl.pause());
-      activeCtrl.seekTo(const Duration(seconds: 1)).then((_) => activeCtrl.play());
+      activeCtrl.setVolume(0.0);
+      standbyCtrl.setVolume(0.0);
+      standbyCtrl.seekTo(Duration.zero).then((_) => standbyCtrl.pause());
+      activeCtrl.seekTo(Duration.zero).then((_) => activeCtrl.play());
     } else {
       activeCtrl?.initialize().then((_) {
         if (mounted && _isRunning) {
-          standbyCtrl?.seekTo(const Duration(seconds: 1)).then((_) => standbyCtrl.pause());
-          activeCtrl.seekTo(const Duration(seconds: 1)).then((_) => activeCtrl.play());
+          activeCtrl.setVolume(0.0);
+          standbyCtrl?.setVolume(0.0);
+          standbyCtrl?.seekTo(Duration.zero).then((_) => standbyCtrl.pause());
+          activeCtrl.seekTo(Duration.zero).then((_) => activeCtrl.play());
           setState(() {});
         }
       });
@@ -514,10 +573,28 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     });
   }
 
+  Timer? _gps5SecPollTimer;
+  DateTime? _currentTempleArrivalTime;
+  String _currentTempleId = '';
+  String _currentTempleName = '';
+
+  void _start5SecLocationPolling() {
+    _gps5SecPollTimer?.cancel();
+    _gps5SecPollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      if (!_isRunning || _currentVideoMode != YatraVideoMode.walking) return;
+      try {
+        final position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 4),
+        );
+        _onLocationUpdate(position);
+      } catch (e) {
+        debugPrint('5-sec periodic GPS poll error: $e');
+      }
+    });
+  }
+
   // ─── Real GPS Proximity Tracking ─────────────────────────────────────────
-  // Requests location permission, then listens to device position updates.
-  // When the user comes within 500 m of any selected temple that has lat/lng,
-  // we switch to Temple_reaching.mp4 (only once per temple per run).
   Future<void> _startLocationTracking() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
@@ -540,23 +617,25 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
 
     const locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 20, // metres – receive update every 20 m movement
+      distanceFilter: 10,
     );
 
     _locationSubscription =
         Geolocator.getPositionStream(locationSettings: locationSettings)
             .listen(_onLocationUpdate);
+
+    _start5SecLocationPolling();
   }
 
   void _onLocationUpdate(Position position) {
     if (!_isRunning || _currentVideoMode != YatraVideoMode.walking) return;
 
-    // Check every temple on the route that has GPS coordinates.
-    for (final temple in widget.selectedTemples) {
+    for (int i = 0; i < widget.selectedTemples.length; i++) {
+      final temple = widget.selectedTemples[i];
       if (temple.lat == null || temple.lng == null) continue;
 
       final templeKey = '${temple.name}|${temple.lat}|${temple.lng}';
-      if (_templeAlertShownFor.contains(templeKey)) continue; // already triggered
+      if (_templeAlertShownFor.contains(templeKey)) continue;
 
       final distanceMeters = _haversineDistanceMeters(
         position.latitude,
@@ -565,15 +644,103 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
         temple.lng!,
       );
 
-      debugPrint('Distance to ${temple.name}: ${distanceMeters.toStringAsFixed(0)} m');
+      debugPrint('📍 [5-sec GPS Poll] Distance to ${temple.name}: ${distanceMeters.toStringAsFixed(0)} m');
 
-      if (distanceMeters <= 500) {
-        // User is within 500 m – mark as shown and play the reaching video.
+      // Configurable Geofence Radius (50 - 100 meters)
+      if (distanceMeters <= 100.0) {
         _templeAlertShownFor.add(templeKey);
-        _switchToTempleReachingVideo();
-        break; // handle one temple at a time
+        _currentTempleArrivalTime = DateTime.now();
+        _currentTempleId = temple.name;
+        _currentTempleName = temple.name;
+
+        final isFinalDestination = (i == widget.selectedTemples.length - 1);
+
+        if (isFinalDestination) {
+          debugPrint('🏁 Final Destination Reached: ${temple.name}');
+          _triggerDestinationCompletionFlow(position);
+        } else {
+          debugPrint('🏛️ Temple Reached: ${temple.name}');
+          _verifyTempleArrivalBackend(position, temple.name);
+          _switchToTempleReachingVideo();
+        }
+        break;
       }
     }
+  }
+
+  void _verifyTempleArrivalBackend(Position pos, String templeId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      if (token.isNotEmpty && widget.journeyId.isNotEmpty) {
+        await ApiService.verifyTempleArrival(
+          token,
+          journeyId: widget.journeyId,
+          templeId: templeId,
+          latitude: pos.latitude,
+          longitude: pos.longitude,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error verifying temple arrival backend: $e');
+    }
+  }
+
+  void _markTempleCompletedBackend({required bool darshanWatched}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      final now = DateTime.now();
+      final duration = _currentTempleArrivalTime != null
+          ? now.difference(_currentTempleArrivalTime!).inSeconds
+          : 0;
+
+      if (token.isNotEmpty && widget.journeyId.isNotEmpty && _currentTempleId.isNotEmpty) {
+        await ApiService.markTempleCompleted(
+          token,
+          journeyId: widget.journeyId,
+          templeId: _currentTempleId,
+          visitDurationSeconds: duration,
+          darshanWatched: darshanWatched,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error marking temple completed backend: $e');
+    }
+  }
+
+  void _triggerDestinationCompletionFlow(Position pos) async {
+    _walkingVideoControllerA?.pause();
+    _walkingVideoControllerB?.pause();
+    setState(() {
+      _currentVideoMode = YatraVideoMode.templeReaching;
+    });
+
+    final ctrl = _templeReachingVideoController;
+    if (ctrl != null && ctrl.value.isInitialized) {
+      await ctrl.seekTo(Duration.zero);
+      await ctrl.play();
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      if (token.isNotEmpty && widget.journeyId.isNotEmpty) {
+        await ApiService.stopJourney(token, widget.journeyId);
+      }
+    } catch (e) {
+      debugPrint('Error completing destination journey backend: $e');
+    }
+
+    _gps5SecPollTimer?.cancel();
+    _locationSubscription?.cancel();
+    _liveController.stopTracking();
+
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted) {
+        _stopRun(isComplete: true);
+      }
+    });
   }
 
   /// Haversine formula – returns distance in metres between two lat/lng points.
@@ -776,31 +943,17 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
   }
 
   void _openSingleChat(_TravelerProfile traveler) {
-    final seedMessages = <YatraChatMessage>[
-      YatraChatMessage(
-        senderName: traveler.name,
-        text: 'Har Har Mahadev.',
-        time: '10:00 pm',
-        isCurrentUser: false,
-        avatarAsset: traveler.image,
-      ),
-      YatraChatMessage(
-        senderName: 'You',
-        text: 'Har Har Mahadev.',
-        time: '10:00 pm',
-        isCurrentUser: true,
-        avatarAsset: traveler.image,
-      ),
-    ];
-
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => YatraChatScreen(
           chatType: YatraChatType.single,
           title: traveler.name,
-          subtitle: 'Online',
+          subtitle: traveler.isOnline ? 'Online' : 'Offline',
           headerAvatarAsset: traveler.image,
-          messages: seedMessages,
+          targetUserId: traveler.userId,
+          yatraId: widget.yatraId,
+          journeyId: widget.journeyId,
+          messages: const [],
         ),
       ),
     );
@@ -1256,6 +1409,7 @@ class _TravelerStrip extends StatelessWidget {
 
     final travelers = liveDevotees.map((d) {
       return _TravelerProfile(
+        userId: d.userId,
         name: d.name,
         distance: d.distanceText,
         image: d.profilePic.isNotEmpty ? d.profilePic : 'assets/images/deity_shiva.png',
@@ -1366,6 +1520,7 @@ class _TravelerProfile {
     required this.km,
     required this.steps,
     required this.days,
+    this.userId = '',
     this.kmRemaining = '0',
     this.isOnline = true,
   });
@@ -1376,6 +1531,7 @@ class _TravelerProfile {
   final String km;
   final String steps;
   final String days;
+  final String userId;
   final String kmRemaining;
   final bool isOnline;
 }

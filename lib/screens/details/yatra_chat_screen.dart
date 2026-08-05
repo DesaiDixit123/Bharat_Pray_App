@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/api_service.dart';
+import '../../services/yatra_personal_chat_service.dart';
 
 enum YatraChatType { single, group }
 
@@ -12,6 +14,9 @@ class YatraChatMessage {
     required this.time,
     required this.isCurrentUser,
     this.avatarAsset,
+    this.readStatus = 'sent',
+    this.messageId = '',
+    this.tempId = '',
   });
 
   final String senderName;
@@ -19,6 +24,9 @@ class YatraChatMessage {
   final String time;
   final bool isCurrentUser;
   final String? avatarAsset;
+  final String readStatus;
+  final String messageId;
+  final String tempId;
 }
 
 class YatraChatScreen extends StatefulWidget {
@@ -28,6 +36,9 @@ class YatraChatScreen extends StatefulWidget {
     required this.title,
     required this.subtitle,
     required this.messages,
+    this.targetUserId = '',
+    this.yatraId = '',
+    this.journeyId = '',
     this.headerAvatarAsset,
     this.groupMembersText,
   });
@@ -36,6 +47,9 @@ class YatraChatScreen extends StatefulWidget {
   final String title;
   final String subtitle;
   final List<YatraChatMessage> messages;
+  final String targetUserId;
+  final String yatraId;
+  final String journeyId;
   final String? headerAvatarAsset;
   final String? groupMembersText;
 
@@ -47,64 +61,145 @@ class _YatraChatScreenState extends State<YatraChatScreen> {
   late List<YatraChatMessage> _messages;
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final YatraPersonalChatService _chatService = YatraPersonalChatService();
+
+  StreamSubscription? _msgSub;
+  StreamSubscription? _typingSub;
+  StreamSubscription? _readSub;
+  bool _isTargetTyping = false;
 
   bool get _isLightTheme => true;
 
-  Color get _backgroundColor =>
-      const Color(0xFFFFE8D6);
-
-  Color get _headerTitleColor =>
-      const Color(0xFFFF7A00);
-
-  Color get _subtitleColor =>
-      const Color(0xFFD3B99B);
-
-  Color get _leftBubbleColor =>
-      Colors.white;
-
-  Color get _rightBubbleColor =>
-      Colors.white;
-
-  Color get _bubbleBorderColor =>
-      const Color(0xFFCFA87B);
-
+  Color get _backgroundColor => const Color(0xFFFFE8D6);
+  Color get _headerTitleColor => const Color(0xFFFF7A00);
+  Color get _subtitleColor => const Color(0xFFD3B99B);
+  Color get _leftBubbleColor => Colors.white;
+  Color get _rightBubbleColor => Colors.white;
+  Color get _bubbleBorderColor => const Color(0xFFCFA87B);
   Color get _messageColor => const Color(0xFF2D2D2D);
-
-  Color get _inputBackground =>
-      const Color(0xFFFFE8D6);
-
-  Color get _inputBorderColor =>
-      const Color(0xFFCFA87B);
-
-  Color get _inputHintColor =>
-      const Color(0xFFA88B6A);
+  Color get _inputBackground => const Color(0xFFFFE8D6);
+  Color get _inputBorderColor => const Color(0xFFCFA87B);
+  Color get _inputHintColor => const Color(0xFFA88B6A);
 
   @override
   void initState() {
     super.initState();
     _messages = List<YatraChatMessage>.from(widget.messages);
-    _fetchMessages();
+    _initSocketAndFetch();
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+  }
+
+  void _initSocketAndFetch() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token') ?? '';
+
+    if (token.isNotEmpty && widget.targetUserId.isNotEmpty) {
+      _chatService.init(token);
+      _chatService.joinPersonalChat(widget.targetUserId);
+      _chatService.markMessagesRead(widget.targetUserId);
+
+      _msgSub = _chatService.onNewMessage.listen((data) {
+        if (!mounted) return;
+        final senderId = data['senderId']?.toString() ?? '';
+        final text = data['content']?.toString() ?? '';
+        final tempId = data['tempId']?.toString() ?? '';
+
+        if (senderId == widget.targetUserId || data['receiverId']?.toString() == widget.targetUserId) {
+          final isMe = senderId != widget.targetUserId;
+          final existingIdx = _messages.indexWhere((m) => m.tempId.isNotEmpty && m.tempId == tempId);
+
+          if (existingIdx != -1) {
+            setState(() {
+              _messages[existingIdx] = YatraChatMessage(
+                senderName: isMe ? 'You' : widget.title,
+                text: text,
+                time: _formatTime(DateTime.now()),
+                isCurrentUser: isMe,
+                avatarAsset: isMe ? widget.headerAvatarAsset : widget.headerAvatarAsset,
+                readStatus: data['readStatus']?.toString() ?? 'sent',
+                messageId: data['_id']?.toString() ?? '',
+              );
+            });
+          } else {
+            setState(() {
+              _messages.add(
+                YatraChatMessage(
+                  senderName: isMe ? 'You' : widget.title,
+                  text: text,
+                  time: _formatTime(DateTime.now()),
+                  isCurrentUser: isMe,
+                  avatarAsset: isMe ? widget.headerAvatarAsset : widget.headerAvatarAsset,
+                  readStatus: data['readStatus']?.toString() ?? 'sent',
+                  messageId: data['_id']?.toString() ?? '',
+                ),
+              );
+            });
+          }
+          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        }
+      });
+
+      _typingSub = _chatService.onTypingStatus.listen((data) {
+        if (!mounted) return;
+        if (data['userId']?.toString() == widget.targetUserId) {
+          setState(() {
+            _isTargetTyping = data['isTyping'] as bool? ?? false;
+          });
+        }
+      });
+
+      _readSub = _chatService.onReadReceipt.listen((data) {
+        if (!mounted) return;
+        setState(() {
+          _messages = _messages.map((m) {
+            if (m.isCurrentUser) {
+              return YatraChatMessage(
+                senderName: m.senderName,
+                text: m.text,
+                time: m.time,
+                isCurrentUser: true,
+                avatarAsset: m.avatarAsset,
+                readStatus: 'read',
+                messageId: m.messageId,
+              );
+            }
+            return m;
+          }).toList();
+        });
+      });
+    }
+
+    _fetchMessages();
+  }
+
+  String _formatTime(DateTime dt) {
+    final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final ampm = dt.hour >= 12 ? 'pm' : 'am';
+    return '$hour:$minute $ampm';
   }
 
   Future<void> _fetchMessages() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token') ?? '';
-      
+
+      if (token.isEmpty || widget.targetUserId.isEmpty) return;
+
       final isGroup = widget.chatType == YatraChatType.group;
       final apiMessages = isGroup
           ? await ApiService.getGroupMessages(token, 'mock_group_id')
-          : await ApiService.getPersonalMessages(token, 'mock_chat_id');
+          : await ApiService.getPersonalMessages(token, widget.targetUserId);
 
       if (apiMessages.isNotEmpty && mounted) {
         setState(() {
           _messages = apiMessages.map((m) => YatraChatMessage(
-            senderName: m['senderName'] ?? 'Unknown',
-            text: m['text'] ?? '',
+            senderName: (m['isCurrentUser'] == true) ? 'You' : (m['senderName'] ?? widget.title),
+            text: m['content'] ?? m['text'] ?? '',
             time: m['time'] ?? 'Now',
             isCurrentUser: m['isCurrentUser'] ?? false,
-            avatarAsset: m['avatarUrl'],
+            avatarAsset: m['avatarUrl'] ?? widget.headerAvatarAsset,
+            readStatus: m['readStatus'] ?? 'sent',
           )).toList();
         });
         WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
@@ -116,6 +211,9 @@ class _YatraChatScreenState extends State<YatraChatScreen> {
 
   @override
   void dispose() {
+    _msgSub?.cancel();
+    _typingSub?.cancel();
+    _readSub?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -134,19 +232,34 @@ class _YatraChatScreenState extends State<YatraChatScreen> {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
+    final tempId = DateTime.now().millisecondsSinceEpoch.toString();
+
     setState(() {
       _messages.add(
         YatraChatMessage(
           senderName: 'You',
           text: text,
-          time: 'Now',
+          time: _formatTime(DateTime.now()),
           isCurrentUser: true,
           avatarAsset: widget.headerAvatarAsset,
+          readStatus: 'sent',
+          tempId: tempId,
         ),
       );
     });
 
+    if (widget.targetUserId.isNotEmpty) {
+      _chatService.sendMessage(
+        targetUserId: widget.targetUserId,
+        content: text,
+        yatraId: widget.yatraId,
+        journeyId: widget.journeyId,
+        tempId: tempId,
+      );
+    }
+
     _messageController.clear();
+    _chatService.sendTypingIndicator(widget.targetUserId, false);
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
@@ -200,15 +313,25 @@ class _YatraChatScreenState extends State<YatraChatScreen> {
                                 size: 26,
                               ),
                             )
-                          : Image.asset(
-                              widget.headerAvatarAsset ?? '',
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => ColoredBox(
-                                color: _isLightTheme
-                                    ? const Color(0xFFE9D4BF)
-                                    : const Color(0xFF2A2A2A),
-                              ),
-                            ),
+                          : (widget.headerAvatarAsset != null && widget.headerAvatarAsset!.startsWith('http')
+                              ? Image.network(
+                                  widget.headerAvatarAsset!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) => ColoredBox(
+                                    color: _isLightTheme
+                                        ? const Color(0xFFE9D4BF)
+                                        : const Color(0xFF2A2A2A),
+                                  ),
+                                )
+                              : Image.asset(
+                                  widget.headerAvatarAsset ?? 'assets/images/deity_shiva.png',
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) => ColoredBox(
+                                    color: _isLightTheme
+                                        ? const Color(0xFFE9D4BF)
+                                        : const Color(0xFF2A2A2A),
+                                  ),
+                                )),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -227,15 +350,17 @@ class _YatraChatScreenState extends State<YatraChatScreen> {
                           ),
                         ),
                         Text(
-                          showGroupHeader
-                              ? (widget.groupMembersText ?? widget.subtitle)
-                              : widget.subtitle,
+                          _isTargetTyping
+                              ? 'Typing...'
+                              : (showGroupHeader
+                                  ? (widget.groupMembersText ?? widget.subtitle)
+                                  : widget.subtitle),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.outfit(
-                            color: _subtitleColor,
+                            color: _isTargetTyping ? const Color(0xFF2E8A3A) : _subtitleColor,
                             fontSize: 12,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: _isTargetTyping ? FontWeight.bold : FontWeight.w500,
                           ),
                         ),
                       ],
@@ -280,6 +405,11 @@ class _YatraChatScreenState extends State<YatraChatScreen> {
                       alignment: Alignment.center,
                       child: TextField(
                         controller: _messageController,
+                        onChanged: (val) {
+                          if (widget.targetUserId.isNotEmpty) {
+                            _chatService.sendTypingIndicator(widget.targetUserId, val.trim().isNotEmpty);
+                          }
+                        },
                         style: GoogleFonts.outfit(
                           color: _messageColor,
                           fontSize: 15,
@@ -408,18 +538,29 @@ class _ChatBubble extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      message.time,
-                      style: GoogleFonts.outfit(
-                        color: useLightTheme
-                            ? const Color(0xFF5B5B5B)
-                            : const Color(0xFFCFCFCF),
-                        fontSize: 9,
-                        fontWeight: FontWeight.w400,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Text(
+                        message.time,
+                        style: GoogleFonts.outfit(
+                          color: useLightTheme
+                              ? const Color(0xFF5B5B5B)
+                              : const Color(0xFFCFCFCF),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w400,
+                        ),
                       ),
-                    ),
+                      if (isMe) ...[
+                        const SizedBox(width: 4),
+                        Icon(
+                          message.readStatus == 'read' ? Icons.done_all_rounded : Icons.done_rounded,
+                          size: 12,
+                          color: message.readStatus == 'read' ? const Color(0xFF0088FF) : const Color(0xFF8E8E93),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),

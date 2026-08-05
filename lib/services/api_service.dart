@@ -11,8 +11,8 @@ class ApiService {
   // Set to true to use the live production server, false for local testing
   static const bool isLive = false;
 
-  // Local backend IP: Wi-Fi IP = 192.168.29.113, Port = 3021
-  static const String _localIp = '192.168.29.113';
+  // Local backend IP: Wi-Fi IP = 10.192.149.19, Port = 3021
+  static const String _localIp = '10.192.149.19';
   static const int _localPort = 3021;
   static String get baseUrl {
     if (isLive) {
@@ -2688,6 +2688,48 @@ class ApiService {
     final response = await _safeDelete(
       Uri.parse('$baseUrl/user/yatra-group/delete/$groupId'),
       headers: _authHeaders(token),
+    );
+    return _processResponse(response)['Data'] ?? {};
+  }
+
+  // POST /api/darshan_management/yatra/temple/arrive
+  static Future<Map<String, dynamic>> verifyTempleArrival(
+    String token, {
+    required String journeyId,
+    required String templeId,
+    required double latitude,
+    required double longitude,
+  }) async {
+    final response = await _safePost(
+      Uri.parse('$baseUrl/api/darshan_management/yatra/temple/arrive'),
+      headers: _jsonHeaders(token: token),
+      body: jsonEncode({
+        'journeyId': journeyId,
+        'templeId': templeId,
+        'latitude': latitude,
+        'longitude': longitude,
+      }),
+    );
+    return _processResponse(response)['Data'] ?? {};
+  }
+
+  // POST /api/darshan_management/yatra/temple/complete
+  static Future<Map<String, dynamic>> markTempleCompleted(
+    String token, {
+    required String journeyId,
+    required String templeId,
+    required int visitDurationSeconds,
+    required bool darshanWatched,
+  }) async {
+    final response = await _safePost(
+      Uri.parse('$baseUrl/api/darshan_management/yatra/temple/complete'),
+      headers: _jsonHeaders(token: token),
+      body: jsonEncode({
+        'journeyId': journeyId,
+        'templeId': templeId,
+        'visitDurationSeconds': visitDurationSeconds,
+        'darshanWatched': darshanWatched,
+      }),
     );
     return _processResponse(response)['Data'] ?? {};
   }
