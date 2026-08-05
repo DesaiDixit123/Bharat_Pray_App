@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:bharat_pray/screens/details/app_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,6 +18,7 @@ class StartYatraOverviewScreen extends StatefulWidget {
 
   final String id;
   final String title;
+  final String routeName;
   final String distance;
   final String steps;
   final String duration;
@@ -28,6 +31,7 @@ class StartYatraOverviewScreen extends StatefulWidget {
     super.key,
     this.id = '',
     required this.title,
+    this.routeName = '',
     required this.distance,
     required this.steps,
     required this.duration,
@@ -42,8 +46,8 @@ class StartYatraOverviewScreen extends StatefulWidget {
 }
 
 class _StartYatraOverviewScreenState extends State<StartYatraOverviewScreen> {
-
   bool _isLoading = false;
+  List<TempleRouteItem> _addedRouteTemples = [];
 
   void _startLiveYatra() async {
     setState(() { _isLoading = true; });
@@ -71,7 +75,7 @@ class _StartYatraOverviewScreenState extends State<StartYatraOverviewScreen> {
               sangha: widget.sangha,
               imageAsset: widget.imageAsset,
               isFromCreateGroup: widget.isFromCreateGroup,
-              selectedTemples: const <TempleRouteItem>[],
+              selectedTemples: _addedRouteTemples,
               routeTemples: widget.routeTemples,
               completedScreen: YatraCompletedScreen(
                 journeyId: journeyId,
@@ -88,6 +92,77 @@ class _StartYatraOverviewScreenState extends State<StartYatraOverviewScreen> {
     }
   }
 
+  Future<void> _navigateToAddTemples() async {
+    final result = await Navigator.of(context).push<List<TempleRouteItem>>(
+      MaterialPageRoute(
+        builder: (context) => AddTempleOnRouteScreen(
+          title: widget.title,
+          distance: widget.distance,
+          steps: widget.steps,
+          duration: widget.duration,
+          sangha: widget.sangha,
+          imageAsset: widget.imageAsset,
+          initialSelectedTemples: _addedRouteTemples,
+          routeTemplesData: widget.routeTemples,
+        ),
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _addedRouteTemples = result;
+      });
+    }
+  }
+
+  String _getDestinationName() {
+    String startName = '';
+    if (widget.routeName.contains(' to ')) {
+      startName = widget.routeName.split(' to ').first.trim();
+    } else if (widget.title.isNotEmpty) {
+      startName = widget.title.trim();
+    }
+    startName = startName.replaceAll(RegExp(r'\s*yatra', caseSensitive: false), '').trim();
+    return startName.isNotEmpty ? ' to $startName' : '';
+  }
+
+  Widget _buildHeaderImage(String asset) {
+    if (asset.isEmpty) {
+      return Image.asset('assets/images/somnath_temple_new.png', fit: BoxFit.cover);
+    }
+    if (asset.startsWith('/') || asset.contains('/')) {
+      try {
+        final file = File(asset);
+        if (file.existsSync()) {
+          return Image.file(file, fit: BoxFit.cover);
+        }
+      } catch (_) {}
+    }
+    if (asset.startsWith('data:image') || (asset.length > 100 && !asset.startsWith('http') && !asset.startsWith('assets/'))) {
+      try {
+        final bytes = base64Decode(asset.contains(',') ? asset.split(',').last : asset);
+        return Image.memory(bytes, fit: BoxFit.cover);
+      } catch (_) {}
+    }
+    if (asset.startsWith('http')) {
+      return Image.network(
+        asset,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Image.asset(
+          'assets/images/somnath_temple_new.png',
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+    return Image.asset(
+      asset,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => Image.asset(
+        'assets/images/somnath_temple_new.png',
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -102,20 +177,7 @@ class _StartYatraOverviewScreenState extends State<StartYatraOverviewScreen> {
             children: [
               _OutlineActionButton(
                 label: 'Add a Temple on the Route',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => AddTempleOnRouteScreen(
-                        title: widget.title,
-                        distance: widget.distance,
-                        steps: widget.steps,
-                        duration: widget.duration,
-                        sangha: widget.sangha,
-                        imageAsset: widget.imageAsset,
-                      ),
-                    ),
-                  );
-                },
+                onTap: _navigateToAddTemples,
               ),
               const SizedBox(height: 12),
               _PrimaryActionButton(
@@ -134,46 +196,30 @@ class _StartYatraOverviewScreenState extends State<StartYatraOverviewScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
-                height: 382,
+                height: 300,
                 child: Stack(
                   children: [
                     Positioned.fill(
                       child: ClipRRect(
                         borderRadius: const BorderRadius.only(
-                          bottomLeft: Radius.circular(32),
-                          bottomRight: Radius.circular(32),
+                          bottomLeft: Radius.circular(28),
+                          bottomRight: Radius.circular(28),
                         ),
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            widget.imageAsset.startsWith('http')
-                                 ? Image.network(
-                                     widget.imageAsset,
-                                     fit: BoxFit.cover,
-                                     errorBuilder: (context, error, stackTrace) => Image.asset(
-                                       'assets/images/somnath_temple_new.png',
-                                       fit: BoxFit.cover,
-                                     ),
-                                   )
-                                 : Image.asset(
-                                     widget.imageAsset.isNotEmpty ? widget.imageAsset : 'assets/images/somnath_temple_new.png',
-                                     fit: BoxFit.cover,
-                                     errorBuilder: (context, error, stackTrace) => Image.asset(
-                                       'assets/images/somnath_temple_new.png',
-                                       fit: BoxFit.cover,
-                                     ),
-                                   ),
+                            _buildHeaderImage(widget.imageAsset),
                             DecoratedBox(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   begin: Alignment.topCenter,
                                   end: Alignment.bottomCenter,
-                                  colors: [ // Corrected from withValues to withOpacity
-                                    Colors.black.withOpacity(0.14),
-                                    Colors.black.withOpacity(0.25),
-                                    Colors.black.withOpacity(0.62),
+                                  colors: [
+                                    Colors.black.withOpacity(0.35),
+                                    Colors.black.withOpacity(0.15),
+                                    Colors.black.withOpacity(0.75),
                                   ],
-                                  stops: const [0.0, 0.38, 1.0],
+                                  stops: const [0.0, 0.45, 1.0],
                                 ),
                               ),
                             ),
@@ -182,21 +228,69 @@ class _StartYatraOverviewScreenState extends State<StartYatraOverviewScreen> {
                       ),
                     ),
                     Positioned(
-                      top: MediaQuery.of(context).padding.top + 12,
-                      left: 20,
+                      top: MediaQuery.of(context).padding.top + 8,
+                      left: 16,
                       child: _BackButton(
                         onTap: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+                    Positioned(
+                      left: 20,
+                      right: 20,
+                      bottom: 20,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            widget.title.isNotEmpty ? widget.title : (widget.routeName.isNotEmpty ? widget.routeName : 'Yatra Overview'),
+                            style: GoogleFonts.outfit(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              shadows: [
+                                Shadow(offset: Offset(0, 2), blurRadius: 6, color: Colors.black54),
+                              ],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (widget.routeName.isNotEmpty && widget.routeName != widget.title) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Icon(Icons.location_on_rounded, color: Color(0xFFFF7700), size: 16),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    widget.routeName,
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white.withOpacity(0.95),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      shadows: [
+                                        Shadow(offset: Offset(0, 1), blurRadius: 4, color: Colors.black54),
+                                      ],
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: _StatsGrid(
                   distance: widget.distance,
-                  steps: widget.steps,
+                  steps: widget.steps.replaceAll(RegExp(r'\s*steps', caseSensitive: false), '').trim(),
                   duration: widget.duration,
                   sangha: widget.sangha,
                   mutedBrown: StartYatraOverviewScreen.mutedBrown,
@@ -212,29 +306,180 @@ class _StartYatraOverviewScreenState extends State<StartYatraOverviewScreen> {
                       'Sacred Overview',
                       style: GoogleFonts.outfit(
                         color: const Color(0xFF2E2A36),
-                        fontSize: 31,
+                        fontSize: 26,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     Text(
-                      'The Somnath Yatra is more than a physical journey; it is a pilgrimage to the "First among Twelve Jyotirlingas." '
-                      'Traversing through the rugged beauty of the Saurashtra coast, devotees walk in the footsteps of ancient sages, '
-                      'seeking the eternal blessings of Lord Shiva. Experience the transformative power of the Pancha Mahabhuta '
-                      'as the ocean winds carry the chants of Om Namah Shivaya.',
+                      'The ${widget.routeName.isNotEmpty ? widget.routeName : (widget.title.isNotEmpty ? widget.title : "Yatra")} is more than a physical journey; it is a pilgrimage to sacred divine shrines. '
+                      'Traversing through holy paths, devotees walk in the footsteps of ancient sages, '
+                      'seeking eternal blessings. Experience the transformative power of spiritual devotion '
+                      'as chants echo along your path.',
                       style: GoogleFonts.outfit(
                         color: const Color(0xFF8C7660),
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.w400,
-                        height: 1.55,
+                        height: 1.5,
                       ),
                     ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Add a Temple on the Route${_getDestinationName()}',
+                      style: GoogleFonts.outfit(
+                        color: const Color(0xFF6B3A0A),
+                        fontSize: 19,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildExactRouteTimeline(),
                   ],
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildExactRouteTimeline() {
+    if (_addedRouteTemples.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.6),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFEFE6DB)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.place_outlined, color: Color(0xFFFF7700), size: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'No route temple stops added yet. Tap "Add a Temple on the Route" below to add stops.',
+                style: GoogleFonts.outfit(color: const Color(0xFF8C7660), fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (int i = 0; i < _addedRouteTemples.length; i++)
+          _buildExactTimelineNode(
+            temple: _addedRouteTemples[i],
+            index: i,
+            isLast: i == _addedRouteTemples.length - 1,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildExactTimelineNode({
+    required TempleRouteItem temple,
+    required int index,
+    required bool isLast,
+  }) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 24,
+            child: Column(
+              children: [
+                const SizedBox(height: 3),
+                isLast
+                    ? Container(
+                        width: 18,
+                        height: 18,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFF7700),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Container(
+                            width: 7,
+                            height: 7,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF1E1E1E),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                      )
+                    : Container(
+                        width: 14,
+                        height: 14,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFF7700),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                if (!isLast)
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      color: const Color(0xFFFF7700),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 24),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          temple.name,
+                          style: GoogleFonts.outfit(
+                            color: const Color(0xFFFF7700),
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          temple.schedule.isNotEmpty ? temple.schedule : '${temple.distance} • Stop ${index + 1}',
+                          style: GoogleFonts.outfit(
+                            color: const Color(0xFFC8A882),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, color: Color(0xFFFF7700), size: 18),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () {
+                      setState(() {
+                        _addedRouteTemples.removeAt(index);
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -10,6 +10,7 @@ class YatraTemple {
   final double latitude;
   final double longitude;
   final String address;
+  final String image;
 
   const YatraTemple({
     required this.id,
@@ -19,6 +20,7 @@ class YatraTemple {
     this.latitude = 0.0,
     this.longitude = 0.0,
     this.address = '',
+    this.image = '',
   });
 
   factory YatraTemple.fromJson(dynamic rawJson) {
@@ -34,6 +36,7 @@ class YatraTemple {
       latitude: _parseDouble(json['latitude'] ?? json['lat']),
       longitude: _parseDouble(json['longitude'] ?? json['lng']),
       address: json['address']?.toString() ?? '',
+      image: json['image']?.toString() ?? json['thumbnail']?.toString() ?? '',
     );
   }
 

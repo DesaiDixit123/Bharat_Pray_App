@@ -339,8 +339,9 @@ class _MyYatraGroupsScreenState extends State<MyYatraGroupsScreen> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildStatChip(IconData icon, String label) {
     return Row(

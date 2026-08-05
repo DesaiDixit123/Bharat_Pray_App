@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import '../../models/yatra_model.dart';
+import '../../models/yatra_group_models.dart';
+import '../../models/user_model.dart';
 import '../../services/api_service.dart';
 import '../../services/yatra_group_socket_service.dart';
 import 'contact_sync_screen.dart';
@@ -88,12 +90,14 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
       final data = await ApiService.getGroupDashboard(token, widget.groupId);
       
       // Resolve current user ID from token/profile if possible
-      final profile = await ApiService.getProfile(token).catchError((_) => UserModel.fallback());
+      try {
+        final profile = await ApiService.getProfile(token);
+        _currentUserId = profile.id;
+      } catch (_) {}
       
       if (mounted) {
         setState(() {
           _dashboard = data;
-          _currentUserId = profile.id;
           _loading = false;
         });
       }
@@ -159,7 +163,7 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
       try {
         final token = await _getToken();
         final inviteeIds = result.map((m) => m.id).toList();
-        await ApiService.sendGroupInvitations(token, widget.groupId, inviteeIds);
+        await ApiService.sendGroupInvitations(token, groupId: widget.groupId, inviteeIds: inviteeIds);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Sent invitations to ${inviteeIds.length} contact(s)!')),
         );
@@ -697,7 +701,7 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
 
   Widget _buildMemberListHeader() {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.between,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           'Group Members (${_dashboard!.members.length})',

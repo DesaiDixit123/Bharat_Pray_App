@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/yatra_model.dart';
 import '../../models/yatra_group_models.dart';
 import '../../services/api_service.dart';
+import '../details/start_yatra_overview_screen.dart';
 import 'contact_sync_screen.dart';
 
 class CreateYatraGroupScreen extends StatefulWidget {
@@ -20,8 +23,18 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _templeSearchController = TextEditingController();
+  final TextEditingController _adminYatraSearchController = TextEditingController();
 
+  String _yatraType = 'admin'; // 'admin' or 'custom'
   String _visibility = 'public';
+
+  // Admin Yatra selection
+  List<YatraModel> _adminYatraList = [];
+  YatraModel? _selectedAdminYatra;
+  bool _loadingAdminYatras = false;
+
+  // Custom Yatra selection
+  YatraTemple? _startTemple;
   YatraTemple? _selectedTemple;
   List<YatraTemple> _templeList = [];
   bool _loadingTemples = false;
@@ -38,12 +51,28 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
   @override
   void initState() {
     super.initState();
+    _fetchAdminYatras();
     _fetchTemples();
   }
 
   Future<String> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('auth_token') ?? '';
+  }
+
+  Future<void> _fetchAdminYatras({String search = ''}) async {
+    setState(() => _loadingAdminYatras = true);
+    try {
+      final token = await _getToken();
+      final res = await ApiService.getPopularYatra(token: token, search: search, limit: 20);
+      setState(() {
+        _adminYatraList = res.data ?? [];
+      });
+    } catch (e) {
+      print('Failed to load admin yatras: $e');
+    } finally {
+      setState(() => _loadingAdminYatras = false);
+    }
   }
 
   Future<void> _fetchTemples({String search = ''}) async {
@@ -64,9 +93,11 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
     }
   }
 
-  Future<void> _calculateDistance(YatraTemple temple) async {
+  Future<void> _calculateDistance() async {
+    final targetTemple = _selectedTemple ?? _startTemple;
+    if (targetTemple == null) return;
+
     setState(() {
-      _selectedTemple = temple;
       _calculatingDistance = true;
     });
 
@@ -74,13 +105,32 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
       final token = await _getToken();
       final res = await ApiService.calculateTempleDistance(
         token,
-        templeId: temple.id,
+        templeId: _selectedTemple?.id ?? _startTemple?.id ?? '',
+        startTempleId: _startTemple?.id,
+        startLat: _startTemple?.latitude,
+        startLng: _startTemple?.longitude,
       );
 
       setState(() {
-        _totalDistanceKm = (res['totalDistanceKm'] ?? 0.0).toDouble();
-        _estimatedSteps = res['estimatedSteps'] ?? 0;
-        _estimatedDays = res['estimatedDays'] ?? 0;
+        _totalDistanceKm = (res['totalDistanceKm'] ?? res['totalDistance'] ?? res['distance'] ?? 0.0).toDouble();
+
+        final rawSteps = res['estimatedSteps'];
+        if (rawSteps is int) {
+          _estimatedSteps = rawSteps;
+        } else if (rawSteps != null) {
+          _estimatedSteps = int.tryParse(rawSteps.toString().replaceAll(RegExp(r'\D'), '')) ?? (_totalDistanceKm * 1400).round();
+        } else {
+          _estimatedSteps = (_totalDistanceKm * 1400).round();
+        }
+
+        final rawDays = res['estimatedDays'] ?? res['duration'];
+        if (rawDays is int) {
+          _estimatedDays = rawDays;
+        } else if (rawDays != null) {
+          _estimatedDays = int.tryParse(rawDays.toString().replaceAll(RegExp(r'\D'), '')) ?? (_totalDistanceKm / 30.0).ceil();
+        } else {
+          _estimatedDays = (_totalDistanceKm / 30.0).ceil();
+        }
       });
     } catch (e) {
       print('Distance calculation fallback error: $e');
@@ -112,9 +162,17 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
 
   Future<void> _createGroup() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedTemple == null) {
+
+    if (_yatraType == 'admin' && _selectedAdminYatra == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a Temple for your Yatra.')),
+        const SnackBar(content: Text('Please select an Admin Yatra from the list.')),
+      );
+      return;
+    }
+
+    if (_yatraType == 'custom' && _selectedTemple == null && _startTemple == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select Start Location or Destination Temple.')),
       );
       return;
     }
@@ -123,7 +181,7 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
 
     try {
       final token = await _getToken();
-      
+
       String coverBase64 = '';
       if (_coverImagePath != null) {
         final bytes = await File(_coverImagePath!).readAsBytes();
@@ -133,7 +191,13 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
       final payload = {
         'name': _nameController.text.trim(),
         'description': _descriptionController.text.trim(),
-        'templeId': _selectedTemple!.id,
+        'yatraType': _yatraType,
+        'yatraId': _yatraType == 'admin' ? _selectedAdminYatra?.id : null,
+        'startTempleId': _yatraType == 'custom' ? _startTemple?.id : null,
+        'endTempleId': _yatraType == 'custom' ? _selectedTemple?.id : null,
+        'templeId': _yatraType == 'admin'
+            ? (_selectedAdminYatra?.templeId ?? _selectedAdminYatra?.id)
+            : (_selectedTemple?.id ?? _startTemple?.id),
         'visibility': _visibility,
         'totalDistance': _totalDistanceKm,
         'estimatedSteps': _estimatedSteps,
@@ -147,13 +211,45 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Yatra Group created successfully!')),
         );
-        Navigator.pop(context, true);
+        final String selectedRouteName = _yatraType == 'admin' && _selectedAdminYatra != null
+            ? _selectedAdminYatra!.title
+            : (_selectedTemple != null
+                ? '${_startTemple != null ? _startTemple!.name : "Start"} to ${_selectedTemple!.name}'
+                : _nameController.text.trim());
+
+        final String displayTitle = _nameController.text.trim().isNotEmpty
+            ? _nameController.text.trim()
+            : (selectedRouteName.isNotEmpty ? selectedRouteName : 'Yatra Group');
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => StartYatraOverviewScreen(
+              id: res['_id']?.toString() ?? _selectedAdminYatra?.id ?? _selectedTemple?.id ?? '',
+              title: displayTitle,
+              routeName: selectedRouteName,
+              distance: '${_totalDistanceKm > 0 ? _totalDistanceKm.toStringAsFixed(1) : "450"} KM',
+              steps: _estimatedSteps > 0 ? '$_estimatedSteps' : '108k',
+              duration: '${_estimatedDays > 0 ? _estimatedDays : 5} Days',
+              sangha: '${_selectedMembers.length + 1}',
+              imageAsset: (_coverImagePath != null && _coverImagePath!.isNotEmpty)
+                  ? _coverImagePath!
+                  : (_yatraType == 'admin' && _selectedAdminYatra != null && _selectedAdminYatra!.image.isNotEmpty
+                      ? _selectedAdminYatra!.image
+                      : (_selectedTemple != null && _selectedTemple!.image.isNotEmpty)
+                          ? _selectedTemple!.image
+                          : 'assets/images/somnath_temple_new.png'),
+              isFromCreateGroup: true,
+            ),
+          ),
+        );
       } else {
         throw Exception(res['message'] ?? 'Failed to create group');
       }
     } catch (e) {
+      final cleanMsg = e.toString().replaceAll('Exception:', '').trim();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Group creation failed: $e')),
+        SnackBar(content: Text('Group creation failed: $cleanMsg')),
       );
     } finally {
       setState(() => _submitting = false);
@@ -163,42 +259,56 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA),
+      backgroundColor: const Color(0xFFFFE8D6),
       appBar: AppBar(
-        title: const Text('Create Yatra Group', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        elevation: 0.5,
-        iconTheme: const IconThemeData(color: Colors.black),
+        systemOverlayStyle: SystemUiOverlayStyle.dark,
+        title: Text('Create Yatra Group', style: GoogleFonts.outfit(color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF2E2A36)),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Cover Image Selector
+              // Cover Image Selector Card
               GestureDetector(
                 onTap: _pickCoverImage,
                 child: Container(
-                  height: 140,
+                  height: 145,
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.orange.shade200),
-                    image: _coverImagePath != null
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFFF7700), width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFF7700).withValues(alpha: 0.1),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                    image: (_coverImagePath != null && _coverImagePath!.isNotEmpty)
                         ? DecorationImage(image: FileImage(File(_coverImagePath!)), fit: BoxFit.cover)
                         : null,
                   ),
-                  child: _coverImagePath == null
+                  child: (_coverImagePath == null || _coverImagePath!.isEmpty)
                       ? Column(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Icon(Icons.add_a_photo_outlined, color: Color(0xFFFF7A00), size: 32),
-                            SizedBox(height: 8),
-                            Text('Upload Group Cover Image (Optional)',
-                                style: TextStyle(color: Color(0xFFFF7A00), fontWeight: FontWeight.w600, fontSize: 13)),
+                          children: [
+                            const Icon(Icons.add_a_photo_outlined, color: Color(0xFFFF7700), size: 36),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Upload Group Cover Image (Optional)',
+                              style: GoogleFonts.outfit(color: const Color(0xFFFF7700), fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
                           ],
                         )
                       : null,
@@ -207,129 +317,341 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
               const SizedBox(height: 20),
 
               // Group Name Field
-              const Text('Group Name *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              Text('Group Name *', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF2E2A36))),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _nameController,
+                style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF2E2A36), fontWeight: FontWeight.w600),
                 decoration: InputDecoration(
                   hintText: 'e.g. Kedarnath Yatra Pilgrims',
+                  hintStyle: GoogleFonts.outfit(color: const Color(0xFF2E2A36).withValues(alpha: 0.4), fontSize: 13),
+                  prefixIcon: const Icon(Icons.group_outlined, color: Color(0xFFFF7700), size: 20),
                   filled: true,
                   fillColor: Colors.white,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFEFE6DB))),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFEFE6DB))),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFFF7700))),
                 ),
                 validator: (val) {
                   if (val == null || val.trim().isEmpty) return 'Group Name is required';
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
-              // Temple Dropdown Selection
-              const Text('Select Temple / Yatra Destination *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              // Yatra Type Segment Selector
+              Text('Select Yatra Type *', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF2E2A36))),
               const SizedBox(height: 8),
-              GestureDetector(
-                onTap: () => _showTemplePickerDialog(context),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.temple_hindu, color: Color(0xFFFF7A00)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          _selectedTemple != null ? '${_selectedTemple!.name} (${_selectedTemple!.city})' : 'Tap to search & select Temple',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: _selectedTemple != null ? FontWeight.bold : FontWeight.normal,
-                            color: _selectedTemple != null ? Colors.black87 : Colors.grey.shade500,
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFEFE6DB)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _yatraType = 'admin';
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: _yatraType == 'admin' ? const Color(0xFFFF7700) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.stars_rounded, size: 18, color: _yatraType == 'admin' ? Colors.white : const Color(0xFF2E2A36)),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Admin Yatra',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: _yatraType == 'admin' ? Colors.white : const Color(0xFF2E2A36),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      const Icon(Icons.arrow_drop_down),
-                    ],
-                  ),
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _yatraType = 'custom';
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: _yatraType == 'custom' ? const Color(0xFFFF7700) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.edit_location_alt_rounded, size: 18, color: _yatraType == 'custom' ? Colors.white : const Color(0xFF2E2A36)),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Custom Yatra',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: _yatraType == 'custom' ? Colors.white : const Color(0xFF2E2A36),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
-              // Auto Distance & Calculations Display
-              if (_calculatingDistance)
-                const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()))
-              else if (_selectedTemple != null)
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.orange.shade200),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildCalcStat('Distance', '${_totalDistanceKm.toStringAsFixed(1)} KM', Icons.straighten),
-                      _buildCalcStat('Est. Steps', '$_estimatedSteps', Icons.directions_walk),
-                      _buildCalcStat('Est. Days', '$_estimatedDays Days', Icons.calendar_today),
-                    ],
+              // Dynamic Body Based on Yatra Type Selection
+              if (_yatraType == 'admin') ...[
+                // Admin Yatra Picker
+                Text('Select Admin Yatra *', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF2E2A36))),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: () => _showAdminYatraPickerDialog(context),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFEFE6DB)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.02),
+                          blurRadius: 8,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.temple_hindu_rounded, color: Color(0xFFFF7700), size: 22),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _selectedAdminYatra != null ? _selectedAdminYatra!.title : 'Tap to select predefined Admin Yatra',
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              fontWeight: _selectedAdminYatra != null ? FontWeight.bold : FontWeight.w500,
+                              color: _selectedAdminYatra != null ? const Color(0xFF2E2A36) : const Color(0xFF2E2A36).withValues(alpha: 0.4),
+                            ),
+                          ),
+                        ),
+                        const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFFFF7700)),
+                      ],
+                    ),
                   ),
                 ),
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-              // Group Visibility
-              const Text('Group Visibility', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: RadioListTile<String>(
-                      title: const Text('Public', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                      value: 'public',
-                      groupValue: _visibility,
-                      activeColor: const Color(0xFFFF7A00),
-                      onChanged: (val) => setState(() => _visibility = val!),
+                // Display Selected Admin Yatra Summary Card
+                if (_selectedAdminYatra != null)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFFF7700).withValues(alpha: 0.3)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFF7700).withValues(alpha: 0.08),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(
+                                _selectedAdminYatra!.image,
+                                width: 50,
+                                height: 50,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(Icons.temple_hindu_rounded, size: 36, color: Color(0xFFFF7700)),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(_selectedAdminYatra!.title, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15, color: const Color(0xFF2E2A36))),
+                                  const SizedBox(height: 2),
+                                  Text('Admin Predefined Yatra', style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFFFF7700), fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, color: Color(0xFFEFE6DB))),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _buildCalcStat('Distance', _selectedAdminYatra!.distance, Icons.straighten_rounded),
+                            _buildCalcStat('Est. Steps', _selectedAdminYatra!.steps, Icons.directions_walk_rounded),
+                            _buildCalcStat('Est. Days', _selectedAdminYatra!.duration, Icons.calendar_today_rounded),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                  Expanded(
-                    child: RadioListTile<String>(
-                      title: const Text('Private', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                      value: 'private',
-                      groupValue: _visibility,
-                      activeColor: const Color(0xFFFF7A00),
-                      onChanged: (val) => setState(() => _visibility = val!),
+              ] else ...[
+                // Custom Yatra Pickers (Start Temple & End Temple)
+                Text('Start Location / Starting Temple *', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF2E2A36))),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: () => _showTemplePickerDialog(context, isStart: true),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFEFE6DB)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.02),
+                          blurRadius: 8,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.my_location_rounded, color: Color(0xFFFF7700), size: 22),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _startTemple != null ? '${_startTemple!.name} (${_startTemple!.city})' : 'Tap to search & select Start Location',
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              fontWeight: _startTemple != null ? FontWeight.bold : FontWeight.w500,
+                              color: _startTemple != null ? const Color(0xFF2E2A36) : const Color(0xFF2E2A36).withValues(alpha: 0.4),
+                            ),
+                          ),
+                        ),
+                        const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFFFF7700)),
+                      ],
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 16),
+                ),
+                const SizedBox(height: 16),
 
-              // Members Section
+                Text('Select Temple / Yatra Destination *', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF2E2A36))),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: () => _showTemplePickerDialog(context, isStart: false),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFEFE6DB)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.02),
+                          blurRadius: 8,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.temple_hindu_rounded, color: Color(0xFFFF7700), size: 22),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _selectedTemple != null ? '${_selectedTemple!.name} (${_selectedTemple!.city})' : 'Tap to search & select Destination Temple',
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              fontWeight: _selectedTemple != null ? FontWeight.bold : FontWeight.w500,
+                              color: _selectedTemple != null ? const Color(0xFF2E2A36) : const Color(0xFF2E2A36).withValues(alpha: 0.4),
+                            ),
+                          ),
+                        ),
+                        const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFFFF7700)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Auto Distance & Calculations Display for Custom Yatra
+                if (_calculatingDistance)
+                  const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(color: Color(0xFFFF7700))))
+                else if (_selectedTemple != null || _startTemple != null)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFFF7700).withValues(alpha: 0.3)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFF7700).withValues(alpha: 0.08),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _buildCalcStat('Distance', '${_totalDistanceKm.toStringAsFixed(1)} KM', Icons.straighten_rounded),
+                        _buildCalcStat('Est. Steps', '$_estimatedSteps', Icons.directions_walk_rounded),
+                        _buildCalcStat('Est. Days', '$_estimatedDays Days', Icons.calendar_today_rounded),
+                      ],
+                    ),
+                  ),
+              ],
+
+              const SizedBox(height: 20),
+
+              // Add Members Header + Sync Contacts Button
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Add Members (${_selectedMembers.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text('Add Members (${_selectedMembers.length})', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF2E2A36))),
                   TextButton.icon(
                     onPressed: _openAddMembers,
-                    icon: const Icon(Icons.person_add, color: Color(0xFFFF7A00), size: 18),
-                    label: const Text('Sync Contacts', style: TextStyle(color: Color(0xFFFF7A00), fontWeight: FontWeight.bold)),
+                    icon: const Icon(Icons.person_add_alt_1_rounded, color: Color(0xFFFF7700), size: 18),
+                    label: Text('Sync Contacts', style: GoogleFonts.outfit(color: const Color(0xFFFF7700), fontWeight: FontWeight.bold, fontSize: 13)),
                   ),
                 ],
               ),
               if (_selectedMembers.isNotEmpty)
                 Wrap(
                   spacing: 8,
-                  children: _selectedMembers.map<Widget>((member) {
+                  runSpacing: 8,
+                  children: _selectedMembers.map((m) {
                     return Chip(
+                      backgroundColor: Colors.white,
+                      side: const BorderSide(color: Color(0xFFEFE6DB)),
                       avatar: CircleAvatar(
-                        backgroundColor: Colors.orange.shade100,
-                        child: Text(member.name.isNotEmpty ? member.name[0].toUpperCase() : 'U', style: const TextStyle(color: Color(0xFFFF7A00), fontSize: 12)),
+                        backgroundColor: const Color(0xFFFF7700),
+                        child: Text(m.name.isNotEmpty ? m.name[0].toUpperCase() : '?', style: GoogleFonts.outfit(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                       ),
-                      label: Text(member.name, style: const TextStyle(fontSize: 12)),
+                      label: Text(m.name, style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF2E2A36), fontWeight: FontWeight.w600)),
                       onDeleted: () {
-                        setState(() => _selectedMembers.remove(member));
+                        setState(() => _selectedMembers.remove(m));
                       },
                     );
                   }).toList(),
@@ -337,17 +659,22 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
               const SizedBox(height: 16),
 
               // Description
-              const Text('Description (Optional)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              Text('Description (Optional)', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF2E2A36))),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _descriptionController,
                 maxLines: 3,
                 maxLength: 500,
+                style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF2E2A36), fontWeight: FontWeight.w500),
                 decoration: InputDecoration(
                   hintText: 'Add yatra rules, spiritual quotes, or guidance...',
+                  hintStyle: GoogleFonts.outfit(color: const Color(0xFF2E2A36).withValues(alpha: 0.4), fontSize: 13),
                   filled: true,
                   fillColor: Colors.white,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFEFE6DB))),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFEFE6DB))),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFFF7700))),
                 ),
               ),
               const SizedBox(height: 24),
@@ -355,18 +682,21 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
               // Submit Button
               SizedBox(
                 width: double.infinity,
-                height: 50,
+                height: 52,
                 child: ElevatedButton(
                   onPressed: _submitting ? null : _createGroup,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF7A00),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    backgroundColor: const Color(0xFFFF7700),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 2,
                   ),
                   child: _submitting
                       ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('Create Yatra Group', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                      : Text('Create Yatra Group', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
+              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -377,56 +707,186 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
   Widget _buildCalcStat(String title, String value, IconData icon) {
     return Column(
       children: [
-        Icon(icon, color: const Color(0xFFFF7A00), size: 20),
+        Icon(icon, color: const Color(0xFFFF7700), size: 22),
         const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-        Text(title, style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
+        Text(value, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF2E2A36))),
+        Text(title, style: GoogleFonts.outfit(color: const Color(0xFF2E2A36).withValues(alpha: 0.6), fontSize: 11)),
       ],
     );
   }
 
-  void _showTemplePickerDialog(BuildContext context) {
+  void _showAdminYatraPickerDialog(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      backgroundColor: const Color(0xFFFFE8D6),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Container(
               height: MediaQuery.of(context).size.height * 0.75,
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Select Temple', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
+                  Text(
+                    'Select Admin Predefined Yatra',
+                    style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _adminYatraSearchController,
+                    style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF2E2A36)),
+                    decoration: InputDecoration(
+                      hintText: 'Search by Yatra title...',
+                      hintStyle: GoogleFonts.outfit(color: Colors.grey.shade400, fontSize: 13),
+                      prefixIcon: const Icon(Icons.search, color: Color(0xFFFF7700)),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFEFE6DB))),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFEFE6DB))),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFFF7700))),
+                    ),
+                    onChanged: (val) {
+                      _fetchAdminYatras(search: val).then((_) => setModalState(() {}));
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  Expanded(
+                    child: _loadingAdminYatras
+                        ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF7700)))
+                        : ListView.separated(
+                            itemCount: _adminYatraList.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 8),
+                            itemBuilder: (context, index) {
+                              final yatra = _adminYatraList[index];
+                              return Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: const Color(0xFFEFE6DB)),
+                                ),
+                                child: ListTile(
+                                  leading: ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Image.network(
+                                      yatra.image,
+                                      width: 44,
+                                      height: 44,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(Icons.temple_hindu_rounded, size: 28, color: Color(0xFFFF7700)),
+                                    ),
+                                  ),
+                                  title: Text(yatra.title, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36), fontSize: 15)),
+                                  subtitle: Text('${yatra.distance} • ${yatra.duration}', style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey.shade600)),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    setState(() {
+                                      _selectedAdminYatra = yatra;
+                                      final rawDist = double.tryParse(yatra.distance.replaceAll(RegExp(r'[^\d.]'), '')) ?? 0.0;
+                                      _totalDistanceKm = rawDist;
+
+                                      final rawSteps = yatra.estimatedStepsNum > 0
+                                          ? yatra.estimatedStepsNum
+                                          : int.tryParse(yatra.steps.replaceAll(RegExp(r'\D'), '')) ?? (_totalDistanceKm * 1400).round();
+                                      _estimatedSteps = rawSteps;
+
+                                      final rawDays = yatra.estimatedDaysNum > 0
+                                          ? yatra.estimatedDaysNum
+                                          : int.tryParse(yatra.duration.replaceAll(RegExp(r'\D'), '')) ?? (_totalDistanceKm / 30.0).ceil();
+                                      _estimatedDays = rawDays;
+                                    });
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showTemplePickerDialog(BuildContext context, {required bool isStart}) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFFFFE8D6),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.75,
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isStart ? 'Select Start Location / Temple' : 'Select Destination Temple',
+                    style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
+                  ),
+                  const SizedBox(height: 14),
                   TextField(
                     controller: _templeSearchController,
+                    style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF2E2A36)),
                     decoration: InputDecoration(
                       hintText: 'Search by Temple name, city, state...',
-                      prefixIcon: const Icon(Icons.search),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      hintStyle: GoogleFonts.outfit(color: Colors.grey.shade400, fontSize: 13),
+                      prefixIcon: const Icon(Icons.search, color: Color(0xFFFF7700)),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFEFE6DB))),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFEFE6DB))),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFFF7700))),
                     ),
                     onChanged: (val) {
                       _fetchTemples(search: val).then((_) => setModalState(() {}));
                     },
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   Expanded(
                     child: _loadingTemples
-                        ? const Center(child: CircularProgressIndicator())
-                        : ListView.builder(
+                        ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF7700)))
+                        : ListView.separated(
                             itemCount: _templeList.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 8),
                             itemBuilder: (context, index) {
                               final temple = _templeList[index];
-                              return ListTile(
-                                leading: const Icon(Icons.temple_hindu, color: Color(0xFFFF7A00)),
-                                title: Text(temple.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text('${temple.city}, ${temple.state}'),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  _calculateDistance(temple);
-                                },
+                              return Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: const Color(0xFFEFE6DB)),
+                                ),
+                                child: ListTile(
+                                  leading: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFF7700).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Icon(isStart ? Icons.my_location_rounded : Icons.temple_hindu_rounded, color: const Color(0xFFFF7700), size: 22),
+                                  ),
+                                  title: Text(temple.name, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36), fontSize: 15)),
+                                  subtitle: Text('${temple.city}, ${temple.state}', style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey.shade600)),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    setState(() {
+                                      if (isStart) {
+                                        _startTemple = temple;
+                                      } else {
+                                        _selectedTemple = temple;
+                                      }
+                                    });
+                                    _calculateDistance();
+                                  },
+                                ),
                               );
                             },
                           ),

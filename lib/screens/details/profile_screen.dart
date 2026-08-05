@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../login_screen.dart';
+import '../profile/edit_profile_screen.dart';
+import '../profile/change_password_screen.dart';
+import '../profile/terms_conditions_screen.dart';
+import '../profile/privacy_policy_screen.dart';
+import '../profile/help_support_screen.dart';
 import '../../services/api_service.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -32,10 +37,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadProfileData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _userName = prefs.getString('user_name') ?? 'Guest User';
-      _userEmail = prefs.getString('user_email') ?? 'no-email@example.com';
+      _userName = prefs.getString('user_name') ?? 'Ayush Kyada';
+      _userEmail = prefs.getString('user_email') ?? 'ayush@example.com';
       _profilePic = prefs.getString('profile_pic') ?? '';
-      String phoneRaw = prefs.getString('user_phone') ?? '';
+      String phoneRaw = prefs.getString('user_phone') ?? '8128753230';
       if (phoneRaw.isEmpty) {
         _userPhone = 'No phone number';
       } else if (phoneRaw.startsWith('+91')) {
@@ -54,7 +59,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (storedPath.isEmpty) {
       return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=60';
     }
-    if (storedPath.startsWith('http')) {
+    if (storedPath.startsWith('http') || storedPath.startsWith('/')) {
       return storedPath;
     }
     final baseDomain = ApiService.baseUrl.replaceAll('/user', '');
@@ -100,9 +105,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               await prefs.remove('user_email');
               await prefs.remove('user_phone');
               await prefs.remove('profile_pic');
-              
+
               if (context.mounted) {
-                Navigator.pop(context); // close dialog
+                Navigator.pop(context);
                 Navigator.pushAndRemoveUntil(
                   context,
                   MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -125,7 +130,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final bool isTab = widget.isTab;
     final double bottomPad = MediaQuery.of(context).padding.bottom;
     return Scaffold(
-      backgroundColor: const Color(0xFFFFE8D6), // Light cream theme
+      backgroundColor: const Color(0xFFFFE8D6),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -143,6 +148,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_note_rounded, color: Color(0xFFFF7700), size: 28),
+            onPressed: () async {
+              final updated = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(builder: (context) => const EditProfileScreen()),
+              );
+              if (updated == true) _loadProfileData();
+            },
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
@@ -153,27 +170,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               const SizedBox(height: 10),
 
-              // Profile Avatar Card
+              // Profile Avatar Header
               Center(
                 child: Column(
                   children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: const Color(0xFFFF7700), width: 2.0),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFFFF7700).withValues(alpha: 0.15),
-                            blurRadius: 15,
+                    Stack(
+                      alignment: Alignment.bottomRight,
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: const Color(0xFFFF7700), width: 2.5),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFFF7700).withValues(alpha: 0.15),
+                                blurRadius: 15,
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      child: CircleAvatar(
-                        radius: 50,
-                        backgroundImage: NetworkImage(
-                          _getProfilePicUrl(_profilePic),
+                          child: CircleAvatar(
+                            radius: 52,
+                            backgroundImage: NetworkImage(_getProfilePicUrl(_profilePic)),
+                          ),
                         ),
-                      ),
+                        GestureDetector(
+                          onTap: () async {
+                            final updated = await Navigator.push<bool>(
+                              context,
+                              MaterialPageRoute(builder: (context) => const EditProfileScreen()),
+                            );
+                            if (updated == true) _loadProfileData();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFFF7700),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.edit, color: Colors.white, size: 16),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -186,7 +223,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '$_userEmail • $_userPhone',
+                      '$_userPhone • $_userEmail',
                       style: GoogleFonts.outfit(
                         fontSize: 13,
                         color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
@@ -196,7 +233,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
 
-              const SizedBox(height: 30),
+              const SizedBox(height: 24),
 
               // Devotional Stats Row
               Row(
@@ -209,36 +246,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
 
-              const SizedBox(height: 30),
+              const SizedBox(height: 28),
 
-              // Settings Header
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  "App Settings",
-                  style: GoogleFonts.outfit(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF2E2A36),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Settings list container
+              // 1. Account Settings
+              _buildSectionHeader("Account Settings"),
+              const SizedBox(height: 10),
               Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: const Color(0xFFEFE6DB)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.02),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+                decoration: _cardBoxDecoration(),
+                child: Column(
+                  children: [
+                    _buildNavTile(
+                      icon: Icons.person_outline_rounded,
+                      title: "Edit Profile",
+                      subtitle: "Update name, photo & spiritual bio",
+                      onTap: () async {
+                        final updated = await Navigator.push<bool>(
+                          context,
+                          MaterialPageRoute(builder: (context) => const EditProfileScreen()),
+                        );
+                        if (updated == true) _loadProfileData();
+                      },
+                    ),
+                    const Divider(color: Color(0xFFEFE6DB), height: 1),
+                    _buildNavTile(
+                      icon: Icons.lock_outline_rounded,
+                      title: "Change Password",
+                      subtitle: "Security & login credentials",
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const ChangePasswordScreen()),
+                        );
+                      },
                     ),
                   ],
                 ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // 2. App Preferences
+              _buildSectionHeader("App Preferences"),
+              const SizedBox(height: 10),
+              Container(
+                decoration: _cardBoxDecoration(),
                 child: Column(
                   children: [
                     _buildSwitchTile(
@@ -262,7 +313,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       onChanged: (val) => setState(() => _soundEffects = val),
                     ),
                     const Divider(color: Color(0xFFEFE6DB), height: 1),
-                    // Language picker
                     ListTile(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
                       title: Text(
@@ -270,7 +320,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         style: GoogleFonts.outfit(color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold, fontSize: 14),
                       ),
                       subtitle: Text(
-                        "Currently set to English",
+                        "Currently set to $_selectedLanguage",
                         style: GoogleFonts.outfit(color: const Color(0xFF2E2A36).withValues(alpha: 0.5), fontSize: 12),
                       ),
                       trailing: DropdownButton<String>(
@@ -278,9 +328,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         dropdownColor: Colors.white,
                         underline: const SizedBox(),
                         style: GoogleFonts.outfit(color: const Color(0xFFFF7700), fontWeight: FontWeight.bold, fontSize: 14),
-                        items: ["English", "Hindi (हिंदी)", "Gujarati (ગુજરાતી)"].map((String val) {
+                        items: ["English", "Hindi", "Gujarati"].map((String val) {
                           return DropdownMenuItem<String>(
-                            value: val.split(' ')[0],
+                            value: val,
                             child: Text(val),
                           );
                         }).toList(),
@@ -295,12 +345,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
 
-              const SizedBox(height: 35),
+              const SizedBox(height: 24),
+
+              // 3. Legal & Support
+              _buildSectionHeader("Legal & Help"),
+              const SizedBox(height: 10),
+              Container(
+                decoration: _cardBoxDecoration(),
+                child: Column(
+                  children: [
+                    _buildNavTile(
+                      icon: Icons.description_outlined,
+                      title: "Terms & Conditions",
+                      subtitle: "App rules & spiritual guidelines",
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const TermsConditionsScreen()),
+                        );
+                      },
+                    ),
+                    const Divider(color: Color(0xFFEFE6DB), height: 1),
+                    _buildNavTile(
+                      icon: Icons.shield_outlined,
+                      title: "Privacy Policy",
+                      subtitle: "Data protection & privacy details",
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const PrivacyPolicyScreen()),
+                        );
+                      },
+                    ),
+                    const Divider(color: Color(0xFFEFE6DB), height: 1),
+                    _buildNavTile(
+                      icon: Icons.help_outline_rounded,
+                      title: "Help & Support",
+                      subtitle: "FAQs, contact support & app info",
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const HelpSupportScreen()),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 32),
 
               // Logout Button
               SizedBox(
                 width: double.infinity,
-                height: 48,
+                height: 50,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
@@ -311,10 +409,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  icon: const Icon(Icons.logout_rounded, size: 18),
+                  icon: const Icon(Icons.logout_rounded, size: 20),
                   label: Text(
                     "Log Out from Account",
-                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14),
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                   onPressed: _showLogoutConfirmDialog,
                 ),
@@ -322,6 +420,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
               SizedBox(height: isTab ? 140 + bottomPad : 40.0),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  BoxDecoration _cardBoxDecoration() {
+    return BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: const Color(0xFFEFE6DB)),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.02),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        title,
+        style: GoogleFonts.outfit(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: const Color(0xFF2E2A36),
         ),
       ),
     );
@@ -349,6 +476,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
           style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF2E2A36).withValues(alpha: 0.5)),
         ),
       ],
+    );
+  }
+
+  Widget _buildNavTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFF7700).withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: const Color(0xFFFF7700), size: 20),
+      ),
+      title: Text(
+        title,
+        style: GoogleFonts.outfit(color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold, fontSize: 14),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: GoogleFonts.outfit(color: const Color(0xFF2E2A36).withValues(alpha: 0.5), fontSize: 12),
+      ),
+      trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
+      onTap: onTap,
     );
   }
 

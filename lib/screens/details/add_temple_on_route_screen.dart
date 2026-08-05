@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'yatra_route_summary_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/api_service.dart';
 
 class TempleRouteItem {
   final String name;
@@ -9,8 +10,8 @@ class TempleRouteItem {
   final String imageAsset;
   final String phone;
   final String schedule;
-  final double? lat;   // GPS latitude  (optional – null = no proximity check)
-  final double? lng;   // GPS longitude
+  final double? lat;
+  final double? lng;
 
   const TempleRouteItem({
     required this.name,
@@ -30,6 +31,8 @@ class AddTempleOnRouteScreen extends StatefulWidget {
   final String duration;
   final String sangha;
   final String imageAsset;
+  final List<TempleRouteItem>? initialSelectedTemples;
+  final List<dynamic>? routeTemplesData;
 
   const AddTempleOnRouteScreen({
     super.key,
@@ -39,6 +42,8 @@ class AddTempleOnRouteScreen extends StatefulWidget {
     required this.duration,
     required this.sangha,
     required this.imageAsset,
+    this.initialSelectedTemples,
+    this.routeTemplesData,
   });
 
   @override
@@ -61,78 +66,90 @@ class _AddTempleOnRouteScreenState extends State<AddTempleOnRouteScreen> {
   final TextEditingController _searchController = TextEditingController();
   final Set<String> _selectedTempleIds = <String>{};
 
-  final List<TempleRouteItem> _popularTemples = const [
-    TempleRouteItem(
-      name: 'Harshad Mata Temple',
-      distance: '210KM',
-      imageAsset: 'assets/images/somnath_temple.png',
-      phone: '9876543210',
-      schedule: 'Day 1 • 05:00 AM',
-      lat: 21.6270,
-      lng: 72.1730,
-    ),
-    TempleRouteItem(
-      name: 'Nageshwar Jyotirlinga',
-      distance: '210KM',
-      imageAsset: 'assets/images/dwarka_temple.jpg',
-      phone: '9988776655',
-      schedule: 'Day 1 • 05:00 AM',
-      lat: 22.2451,
-      lng: 68.9702,
-    ),
-    TempleRouteItem(
-      name: 'Madhavpur Krishna Temple',
-      distance: '210KM',
-      imageAsset: 'assets/images/image_2.png',
-      phone: '9090909090',
-      schedule: 'Day 2 • 09:30 AM',
-      lat: 21.2985,
-      lng: 70.0147,
-    ),
-    TempleRouteItem(
-      name: 'Kirti Mandir Porbandar',
-      distance: '210KM',
-      imageAsset: 'assets/images/image_4.png',
-      phone: '9123456780',
-      schedule: 'Day 4 • 08:45 AM',
-      lat: 21.6422,
-      lng: 69.6098,
-    ),
-  ];
+  bool _isLoading = false;
+  List<TempleRouteItem> _apiTemples = [];
 
-  final List<TempleRouteItem> _searchResultTemples = const [
-    TempleRouteItem(
-      name: 'Bhalka Tirth',
-      distance: '210KM',
-      imageAsset: 'assets/images/download_1.png',
-      phone: '9871200000',
-      schedule: 'Day 3 • 04:00 PM',
-      lat: 20.9067,
-      lng: 70.3535,
-    ),
-    TempleRouteItem(
-      name: 'Dwarkadhish Temple',
-      distance: '210KM',
-      imageAsset: 'assets/images/somnath_temple_new.png',
-      phone: '9900011122',
-      schedule: 'Day 5 • Evening Aarti',
-      lat: 22.2394,
-      lng: 68.9678,
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialSelectedTemples != null) {
+      for (final item in widget.initialSelectedTemples!) {
+        _selectedTempleIds.add(_templeId(item));
+      }
+    }
+    _loadTemples();
+  }
+
+  Future<void> _loadTemples({String search = ''}) async {
+    setState(() { _isLoading = true; });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      final res = await ApiService.getTemplesForGroup(token, search: search);
+
+      final List docs = (res['docs'] is List)
+          ? res['docs']
+          : (res is List ? res : []);
+
+      final List<TempleRouteItem> fetched = [];
+      for (int i = 0; i < docs.length; i++) {
+        final item = docs[i];
+        final name = item['name']?.toString() ?? 'Temple';
+        final city = item['city']?.toString() ?? '';
+        final state = item['state']?.toString() ?? '';
+        final locationStr = [city, state].where((s) => s.isNotEmpty).join(', ');
+        
+        String img = item['thumbnailImage']?.toString() ?? item['bannerImage']?.toString() ?? '';
+        if (img.isEmpty || (!img.startsWith('http') && !img.startsWith('assets/'))) {
+          img = 'assets/images/somnath_temple_new.png';
+        }
+
+        final lat = double.tryParse(item['latitude']?.toString() ?? '');
+        final lng = double.tryParse(item['longitude']?.toString() ?? '');
+
+        fetched.add(
+          TempleRouteItem(
+            name: name,
+            distance: locationStr.isNotEmpty ? locationStr : 'Shrimandir',
+            imageAsset: img,
+            phone: item['_id']?.toString() ?? '$i',
+            schedule: 'Stop ${i + 1} • Available for Darshan',
+            lat: lat,
+            lng: lng,
+          ),
+        );
+      }
+
+      setState(() {
+        _apiTemples = fetched;
+      });
+    } catch (e) {
+      debugPrint('Error loading temples: $e');
+    } finally {
+      if (mounted) setState(() { _isLoading = false; });
+    }
+  }
+
+  bool get _isAllSelected =>
+      _apiTemples.isNotEmpty &&
+      _apiTemples.every((item) => _selectedTempleIds.contains(_templeId(item)));
+
+  void _toggleSelectAll() {
+    setState(() {
+      if (_isAllSelected) {
+        _selectedTempleIds.clear();
+      } else {
+        for (final item in _apiTemples) {
+          _selectedTempleIds.add(_templeId(item));
+        }
+      }
+    });
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
-  }
-
-  List<TempleRouteItem> _applyFilter(List<TempleRouteItem> items) {
-    final query = _searchController.text.trim().toLowerCase();
-    if (query.isEmpty) return items;
-    return items.where((item) {
-      return item.name.toLowerCase().contains(query) || item.phone.contains(query);
-    }).toList();
   }
 
   String _templeId(TempleRouteItem item) => '${item.name}|${item.phone}';
@@ -149,42 +166,24 @@ class _AddTempleOnRouteScreenState extends State<AddTempleOnRouteScreen> {
   }
 
   void _openRouteSummary() {
-    final allTemples = <TempleRouteItem>[
-      ..._popularTemples,
-      ..._searchResultTemples,
-    ];
-
-    final selected = allTemples.where((item) {
+    final selected = _apiTemples.where((item) {
       return _selectedTempleIds.contains(_templeId(item));
     }).toList();
 
-    if (selected.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select at least one temple.')),
-      );
-      return;
+    // Also include any initial selected temples if they were selected
+    if (widget.initialSelectedTemples != null) {
+      for (final item in widget.initialSelectedTemples!) {
+        if (_selectedTempleIds.contains(_templeId(item)) && !selected.any((s) => _templeId(s) == _templeId(item))) {
+          selected.add(item);
+        }
+      }
     }
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => YatraRouteSummaryScreen(
-          title: widget.title,
-          distance: widget.distance,
-          steps: widget.steps,
-          duration: widget.duration,
-          sangha: widget.sangha,
-          imageAsset: widget.imageAsset,
-          selectedTemples: selected,
-        ),
-      ),
-    );
+    Navigator.of(context).pop(selected);
   }
 
   @override
   Widget build(BuildContext context) {
-    final popular = _applyFilter(_popularTemples);
-    final results = _applyFilter(_searchResultTemples);
-
     return Scaffold(
       backgroundColor: _bg,
       bottomNavigationBar: SafeArea(
@@ -247,19 +246,22 @@ class _AddTempleOnRouteScreenState extends State<AddTempleOnRouteScreen> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Text(
-                    'Add Temple on Route',
-                    style: GoogleFonts.outfit(
-                      color: _titleText,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 24,
+                  Expanded(
+                    child: Text(
+                      'Add Temple on Route',
+                      style: GoogleFonts.outfit(
+                        color: _titleText,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 22,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
               child: Container(
                 height: 44,
                 decoration: BoxDecoration(
@@ -269,21 +271,21 @@ class _AddTempleOnRouteScreenState extends State<AddTempleOnRouteScreen> {
                 ),
                 child: TextField(
                   controller: _searchController,
-                  onChanged: (_) => setState(() {}),
+                  onChanged: (val) => _loadTemples(search: val.trim()),
                   style: GoogleFonts.outfit(
                     color: _titleText,
                     fontSize: 15,
                     fontWeight: FontWeight.w400,
                   ),
                   decoration: InputDecoration(
-                    hintText: 'Search by name or phone number',
+                    hintText: 'Search by name, city or state',
                     hintStyle: GoogleFonts.outfit(
                       color: const Color(0xFFC8A882),
                       fontSize: 15,
                     ),
-                    prefixIcon: Icon(
+                    prefixIcon: const Icon(
                       Icons.search_rounded,
-                      color: const Color(0xFFC8A882),
+                      color: Color(0xFFC8A882),
                       size: 20,
                     ),
                     border: InputBorder.none,
@@ -292,41 +294,67 @@ class _AddTempleOnRouteScreenState extends State<AddTempleOnRouteScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 16),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _SectionTitle(text: 'Popular Temples', color: _accent),
-                    const SizedBox(height: 8),
-                    ...popular.map(
-                      (item) => _TempleItemRow(
-                        item: item,
-                        accent: _accent,
-                        mutedText: _mutedText,
-                        isSelected: _selectedTempleIds.contains(_templeId(item)),
-                        selectedTempleSvg: _selectedTempleSvg,
-                        onToggle: () => _toggleTemple(item),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    _SectionTitle(text: 'Search Results', color: _accent),
-                    const SizedBox(height: 8),
-                    ...results.map(
-                      (item) => _TempleItemRow(
-                        item: item,
-                        accent: _accent,
-                        mutedText: _mutedText,
-                        isSelected: _selectedTempleIds.contains(_templeId(item)),
-                        selectedTempleSvg: _selectedTempleSvg,
-                        onToggle: () => _toggleTemple(item),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator(color: _accent))
+                  : _apiTemples.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No temples found.',
+                            style: GoogleFonts.outfit(color: _mutedText, fontSize: 15),
+                          ),
+                        )
+                      : SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  _SectionTitle(text: 'Available Route Temples', color: _accent),
+                                  InkWell(
+                                    onTap: _toggleSelectAll,
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            _isAllSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                                            size: 18,
+                                            color: _accent,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            _isAllSelected ? 'Deselect All' : 'Select All',
+                                            style: GoogleFonts.outfit(
+                                              color: _accent,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              ..._apiTemples.map(
+                                (item) => _TempleItemRow(
+                                  item: item,
+                                  accent: _accent,
+                                  mutedText: _mutedText,
+                                  isSelected: _selectedTempleIds.contains(_templeId(item)),
+                                  selectedTempleSvg: _selectedTempleSvg,
+                                  onToggle: () => _toggleTemple(item),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
             ),
           ],
         ),

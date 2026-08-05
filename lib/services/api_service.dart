@@ -2379,13 +2379,13 @@ class ApiService {
   // ==========================================
 
   // GET /user/yatra-group/temples
-  static Future<Map<String, dynamic>> getTemplesForGroup(String token, {String search = '', int page = 1}) async {
+  static Future<Map<String, dynamic>> getTemplesForGroup(String token, {String search = '', int page = 1, int limit = 1000}) async {
     try {
       final uri = Uri.parse('$baseUrl/user/yatra-group/temples').replace(
         queryParameters: {
           'search': search,
           'page': '$page',
-          'limit': '20',
+          'limit': '$limit',
         },
       );
       final response = await _safeGet(uri, headers: _authHeaders(token));
@@ -2400,6 +2400,7 @@ class ApiService {
   static Future<Map<String, dynamic>> calculateTempleDistance(
     String token, {
     required String templeId,
+    String? startTempleId,
     double? startLat,
     double? startLng,
   }) async {
@@ -2409,6 +2410,7 @@ class ApiService {
         headers: _jsonHeaders(token: token),
         body: jsonEncode({
           'templeId': templeId,
+          if (startTempleId != null) 'startTempleId': startTempleId,
           if (startLat != null) 'startLat': startLat,
           if (startLng != null) 'startLng': startLng,
         }),
@@ -2458,17 +2460,12 @@ class ApiService {
 
   // POST /user/yatra-group/create
   static Future<Map<String, dynamic>> createYatraGroup(String token, Map<String, dynamic> payload) async {
-    try {
-      final response = await _safePost(
-        Uri.parse('$baseUrl/user/yatra-group/create'),
-        headers: _jsonHeaders(token: token),
-        body: jsonEncode(payload),
-      );
-      return _processResponse(response)['Data'] ?? {};
-    } catch (e) {
-      print('Error creating Yatra group: $e');
-      return {};
-    }
+    final response = await _safePost(
+      Uri.parse('$baseUrl/user/yatra-group/create'),
+      headers: _jsonHeaders(token: token),
+      body: jsonEncode(payload),
+    );
+    return _processResponse(response)['Data'] ?? {};
   }
 
   // POST /user/yatra-group/invite/send
@@ -2641,22 +2638,7 @@ class ApiService {
     return _processResponse(response)['Data'] ?? {};
   }
 
-  // POST /user/yatra-group/invite/send
-  static Future<Map<String, dynamic>> sendGroupInvitations(
-    String token,
-    String groupId,
-    List<String> inviteeIds,
-  ) async {
-    final response = await _safePost(
-      Uri.parse('$baseUrl/user/yatra-group/invite/send'),
-      headers: _jsonHeaders(token: token),
-      body: jsonEncode({
-        'groupId': groupId,
-        'inviteeIds': inviteeIds,
-      }),
-    );
-    return _processResponse(response)['Data'] ?? {};
-  }
+
 
   // POST /user/yatra-group/members/remove
   static Future<Map<String, dynamic>> removeGroupMember(
