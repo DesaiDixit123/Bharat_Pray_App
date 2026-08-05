@@ -83,41 +83,176 @@ class _AddTempleOnRouteScreenState extends State<AddTempleOnRouteScreen> {
   Future<void> _loadTemples({String search = ''}) async {
     setState(() { _isLoading = true; });
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token') ?? '';
-      final res = await ApiService.getTemplesForGroup(token, search: search);
-
-      final List docs = (res['docs'] is List)
-          ? res['docs']
-          : (res is List ? res : []);
-
       final List<TempleRouteItem> fetched = [];
-      for (int i = 0; i < docs.length; i++) {
-        final item = docs[i];
-        final name = item['name']?.toString() ?? 'Temple';
-        final city = item['city']?.toString() ?? '';
-        final state = item['state']?.toString() ?? '';
-        final locationStr = [city, state].where((s) => s.isNotEmpty).join(', ');
-        
-        String img = item['thumbnailImage']?.toString() ?? item['bannerImage']?.toString() ?? '';
-        if (img.isEmpty || (!img.startsWith('http') && !img.startsWith('assets/'))) {
-          img = 'assets/images/somnath_temple_new.png';
+
+      // Fetch DB temples lookup dictionary to resolve unpopulated templeId IDs!
+      List allDbTemples = [];
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final token = prefs.getString('auth_token') ?? '';
+        final res = await ApiService.getTemplesForGroup(token, search: '');
+        allDbTemples = (res['docs'] is List)
+            ? res['docs']
+            : (res is List ? res : []);
+      } catch (err) {
+        debugPrint('DB Temples lookup fetch error: $err');
+      }
+
+      if (widget.routeTemplesData != null && widget.routeTemplesData!.isNotEmpty) {
+        final query = search.trim().toLowerCase();
+
+        for (int i = 0; i < widget.routeTemplesData!.length; i++) {
+          final item = widget.routeTemplesData![i];
+          if (item == null) continue;
+
+          // Extract templeId ID string
+          String tIdStr = '';
+          if (item is Map) {
+            if (item['templeId'] is Map) {
+              tIdStr = item['templeId']['_id']?.toString() ?? '';
+            } else if (item['templeId'] != null) {
+              tIdStr = item['templeId'].toString();
+            }
+            if (tIdStr.isEmpty) {
+              tIdStr = item['_id']?.toString() ?? '';
+            }
+          }
+
+          // Match with DB temples lookup if available
+          Map? dbMatched;
+          if (tIdStr.isNotEmpty && allDbTemples.isNotEmpty) {
+            for (final dbT in allDbTemples) {
+              if (dbT is Map && dbT['_id']?.toString() == tIdStr) {
+                dbMatched = dbT;
+                break;
+              }
+            }
+          }
+
+          // 1. Extract Name accurately
+          String name = '';
+          if (item is Map) {
+            if (item['name'] != null && item['name'].toString().trim().isNotEmpty) {
+              name = item['name'].toString().trim();
+            }
+            if (name.isEmpty && item['templeId'] is Map && item['templeId']['name'] != null) {
+              name = item['templeId']['name'].toString().trim();
+            }
+            if (name.isEmpty && dbMatched != null && dbMatched['name'] != null) {
+              name = dbMatched['name'].toString().trim();
+            }
+            if (name.isEmpty && item['templeName'] != null && item['templeName'].toString().trim().isNotEmpty) {
+              name = item['templeName'].toString().trim();
+            }
+            if (name.isEmpty && item['title'] != null && item['title'].toString().trim().isNotEmpty) {
+              name = item['title'].toString().trim();
+            }
+            if (name.isEmpty && item['address'] != null && item['address'].toString().trim().isNotEmpty) {
+              name = item['address'].toString().trim();
+            }
+          }
+          if (name.isEmpty) {
+            if (i < allDbTemples.length && allDbTemples[i] is Map && allDbTemples[i]['name'] != null) {
+              name = allDbTemples[i]['name'].toString().trim();
+            } else {
+              name = 'Temple Stop #${i + 1}';
+            }
+          }
+
+          // 2. Extract Location (City, State, or Address)
+          String locationStr = '';
+          if (item is Map) {
+            final Map? tObj = (item['templeId'] is Map) ? (item['templeId'] as Map) : (dbMatched ?? item);
+            final city = (tObj?['city'] ?? item['city'])?.toString() ?? '';
+            final state = (tObj?['state'] ?? item['state'])?.toString() ?? '';
+            final address = (tObj?['address'] ?? item['address'])?.toString() ?? '';
+
+            final loc = [city, state].where((s) => s.trim().isNotEmpty).join(', ');
+            locationStr = loc.isNotEmpty ? loc : address;
+          }
+          if (locationStr.trim().isEmpty) {
+            locationStr = 'Sacred Stop on Yatra Path';
+          }
+
+          // 3. Search Filter
+          if (query.isNotEmpty) {
+            final matches = name.toLowerCase().contains(query) ||
+                            locationStr.toLowerCase().contains(query);
+            if (!matches) continue;
+          }
+
+          // 4. Extract Image & resolve URL
+          String img = '';
+          if (item is Map) {
+            final Map? tObj = (item['templeId'] is Map) ? (item['templeId'] as Map) : (dbMatched ?? item);
+            img = (tObj?['thumbnailImage'] ?? tObj?['bannerImage'] ?? item['thumbnailImage'] ?? item['bannerImage'] ?? item['image'])?.toString() ?? '';
+          }
+          final resolvedImg = ApiService.resolveImageUrl(img);
+
+          // 5. Extract Coordinates
+          double? lat;
+          double? lng;
+          if (item is Map) {
+            final Map? tObj = (item['templeId'] is Map) ? (item['templeId'] as Map) : (dbMatched ?? item);
+            lat = double.tryParse((tObj?['latitude'] ?? item['latitude'] ?? '').toString());
+            lng = double.tryParse((tObj?['longitude'] ?? item['longitude'] ?? '').toString());
+          }
+
+          // 6. Format Distance matching Admin Timeline
+          dynamic distStartRaw = item is Map ? (item['distanceFromStart'] ?? item['distance']) : null;
+          dynamic distPrevRaw = item is Map ? item['distanceFromPrevious'] : null;
+
+          String distInfo = 'Stop #${i + 1}';
+          if (distStartRaw != null && distStartRaw.toString().isNotEmpty) {
+            final num distStart = num.tryParse(distStartRaw.toString()) ?? 0;
+            distInfo += ' • ${distStart.toStringAsFixed(2)} KM from Start';
+          }
+          if (distPrevRaw != null && distPrevRaw.toString().isNotEmpty) {
+            final num distPrev = num.tryParse(distPrevRaw.toString()) ?? 0;
+            if (distPrev > 0) {
+              distInfo += ' (+${distPrev.toStringAsFixed(2)} KM)';
+            }
+          }
+
+          fetched.add(
+            TempleRouteItem(
+              name: name,
+              distance: locationStr,
+              imageAsset: resolvedImg,
+              phone: tIdStr.isNotEmpty ? tIdStr : '$i',
+              schedule: distInfo,
+              lat: lat,
+              lng: lng,
+            ),
+          );
         }
+      } else {
+        // Fallback: fetch general DB temples if no routeTemplesData was configured
+        for (int i = 0; i < allDbTemples.length; i++) {
+          final item = allDbTemples[i];
+          final name = item['name']?.toString() ?? 'Temple';
+          final city = item['city']?.toString() ?? '';
+          final state = item['state']?.toString() ?? '';
+          final locationStr = [city, state].where((s) => s.isNotEmpty).join(', ');
 
-        final lat = double.tryParse(item['latitude']?.toString() ?? '');
-        final lng = double.tryParse(item['longitude']?.toString() ?? '');
+          String img = item['thumbnailImage']?.toString() ?? item['bannerImage']?.toString() ?? '';
+          final resolvedImg = ApiService.resolveImageUrl(img);
 
-        fetched.add(
-          TempleRouteItem(
-            name: name,
-            distance: locationStr.isNotEmpty ? locationStr : 'Shrimandir',
-            imageAsset: img,
-            phone: item['_id']?.toString() ?? '$i',
-            schedule: 'Stop ${i + 1} • Available for Darshan',
-            lat: lat,
-            lng: lng,
-          ),
-        );
+          final lat = double.tryParse(item['latitude']?.toString() ?? '');
+          final lng = double.tryParse(item['longitude']?.toString() ?? '');
+
+          fetched.add(
+            TempleRouteItem(
+              name: name,
+              distance: locationStr.isNotEmpty ? locationStr : 'Shrimandir',
+              imageAsset: resolvedImg,
+              phone: item['_id']?.toString() ?? '$i',
+              schedule: 'Stop #${i + 1} • Available for Darshan',
+              lat: lat,
+              lng: lng,
+            ),
+          );
+        }
       }
 
       setState(() {
@@ -301,7 +436,7 @@ class _AddTempleOnRouteScreenState extends State<AddTempleOnRouteScreen> {
                   : _apiTemples.isEmpty
                       ? Center(
                           child: Text(
-                            'No temples found.',
+                            'No temples found on this route.',
                             style: GoogleFonts.outfit(color: _mutedText, fontSize: 15),
                           ),
                         )
@@ -399,6 +534,35 @@ class _TempleItemRow extends StatelessWidget {
     required this.onToggle,
   });
 
+  Widget _buildImage(String path) {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return Image.network(
+        path,
+        width: 70,
+        height: 70,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Image.asset(
+          'assets/images/somnath_temple_new.png',
+          width: 70,
+          height: 70,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+    return Image.asset(
+      path.isNotEmpty ? path : 'assets/images/somnath_temple_new.png',
+      width: 70,
+      height: 70,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => Image.asset(
+        'assets/images/somnath_temple_new.png',
+        width: 70,
+        height: 70,
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -407,20 +571,7 @@ class _TempleItemRow extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(14),
-            child: Image.asset(
-              item.imageAsset,
-              width: 70,
-              height: 70,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  width: 70,
-                  height: 70,
-                  color: const Color(0xFFF3ECE4),
-                  child: const Icon(Icons.image_not_supported_rounded, color: Color(0xFFC8A882)),
-                );
-              },
-            ),
+            child: _buildImage(item.imageAsset),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -446,6 +597,17 @@ class _TempleItemRow extends StatelessWidget {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
+                if (item.schedule.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    item.schedule,
+                    style: GoogleFonts.outfit(
+                      color: const Color(0xFF6B4226),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

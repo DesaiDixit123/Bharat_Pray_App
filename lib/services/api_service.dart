@@ -11,9 +11,9 @@ class ApiService {
   // Set to true to use the live production server, false for local testing
   static const bool isLive = false;
 
-  // Local backend IP: Mac's Wi-Fi IP = 192.168.29.249, Port = 3020
-  static const String _localIp = '192.168.29.249';
-  static const int _localPort = 3020;
+  // Local backend IP: Wi-Fi IP = 192.168.29.113, Port = 3021
+  static const String _localIp = '192.168.29.113';
+  static const int _localPort = 3021;
   static String get baseUrl {
     if (isLive) {
       return 'https://api.bharatpray.com';
@@ -64,11 +64,15 @@ class ApiService {
     if (trimmed.startsWith('assets/')) return trimmed; // Keep local assets as is
 
     if (!isLive) {
-      // Remap production URL or localhost to active local IP base URL
+      // Remap production URL or localhost/127.0.0.1 to active local IP base URL
       trimmed = trimmed.replaceAll('https://api.bharatpray.com', baseUrl);
       trimmed = trimmed.replaceAll('http://api.bharatpray.com', baseUrl);
+      trimmed = trimmed.replaceAll('http://localhost:3021', baseUrl);
+      trimmed = trimmed.replaceAll('http://127.0.0.1:3021', baseUrl);
       trimmed = trimmed.replaceAll('http://localhost:3020', baseUrl);
       trimmed = trimmed.replaceAll('http://127.0.0.1:3020', baseUrl);
+      trimmed = trimmed.replaceAll('http://192.168.29.249:3020', baseUrl);
+      trimmed = trimmed.replaceAll('http://192.168.29.249:3021', baseUrl);
     }
         
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
@@ -2226,6 +2230,24 @@ class ApiService {
     } catch (e) {
       print('Error fetching journey progress: $e');
       return {};
+    }
+  }
+
+  // GET /user/yatra/solo/nearby
+  static Future<List<dynamic>> getNearbyDevotees(String token, {double? latitude, double? longitude}) async {
+    try {
+      final query = (latitude != null && longitude != null) ? '?lat=$latitude&lng=$longitude' : '';
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/user/yatra/solo/nearby$query'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      return _processResponse(response)['Data'] ?? [];
+    } catch (e) {
+      print('Error fetching nearby devotees: $e');
+      return [];
     }
   }
 

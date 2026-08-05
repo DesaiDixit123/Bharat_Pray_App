@@ -6,6 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/api_service.dart';
+import '../../services/yatra_tracking_service.dart';
+import 'package:geolocator/geolocator.dart';
 import 'add_temple_on_route_screen.dart';
 import 'yatra_live_sangha_screen.dart';
 import 'yatra_completed_screen.dart';
@@ -49,15 +51,151 @@ class _StartYatraOverviewScreenState extends State<StartYatraOverviewScreen> {
   bool _isLoading = false;
   List<TempleRouteItem> _addedRouteTemples = [];
 
+  Future<bool> _ensureLocationPermissionAndService() async {
+    final trackingService = YatraTrackingService();
+    final permState = await trackingService.checkAndRequestPermission();
+
+    if (permState == LocationPermissionState.granted) {
+      return true;
+    }
+
+    if (!mounted) return false;
+
+    if (permState == LocationPermissionState.serviceDisabled) {
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: const Color(0xFFFFE8D6),
+          title: Row(
+            children: [
+              const Icon(Icons.location_off_rounded, color: Color(0xFFFF7A00), size: 28),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Location (GPS) Disabled',
+                  style: GoogleFonts.outfit(
+                    color: const Color(0xFF2E2A36),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'GPS Location Services are turned off on your device. Please turn on Location/GPS to track your live Yatra progress and confirm distance.',
+            style: GoogleFonts.outfit(
+              color: const Color(0xFF6B4226),
+              fontSize: 14,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey[700])),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF7A00),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await Geolocator.openLocationSettings();
+              },
+              icon: const Icon(Icons.settings, size: 18),
+              label: Text('Enable GPS', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+      return false;
+    }
+
+    if (permState == LocationPermissionState.denied || permState == LocationPermissionState.permanentlyDenied) {
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: const Color(0xFFFFE8D6),
+          title: Row(
+            children: [
+              const Icon(Icons.security_rounded, color: Color(0xFFFF7A00), size: 28),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Location Permission Needed',
+                  style: GoogleFonts.outfit(
+                    color: const Color(0xFF2E2A36),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'BharatPray requires location access to record your walking steps, distance covered, and live Yatra progress.',
+            style: GoogleFonts.outfit(
+              color: const Color(0xFF6B4226),
+              fontSize: 14,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey[700])),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF7A00),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                if (permState == LocationPermissionState.permanentlyDenied) {
+                  await Geolocator.openAppSettings();
+                } else {
+                  await Geolocator.requestPermission();
+                }
+              },
+              icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+              label: Text(
+                permState == LocationPermissionState.permanentlyDenied ? 'Open Settings' : 'Grant Permission',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      );
+      return false;
+    }
+
+    return false;
+  }
+
   void _startLiveYatra() async {
     setState(() { _isLoading = true; });
+
+    // 1. Ensure Location Permission and GPS Service are enabled before starting Yatra
+    final bool hasLocation = await _ensureLocationPermissionAndService();
+    if (!hasLocation) {
+      if (mounted) setState(() { _isLoading = false; });
+      return;
+    }
+
     String journeyId = '';
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token') ?? '';
       if (token.isNotEmpty) {
         final result = await ApiService.startYatra(token, widget.id);
-        journeyId = result['_id'] ?? '';
+        journeyId = result['_id'] ?? result['journeyId'] ?? '';
       }
     } catch (e) {
       debugPrint('Error starting yatra: $e');

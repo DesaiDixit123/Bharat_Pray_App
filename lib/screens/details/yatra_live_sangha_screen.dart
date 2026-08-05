@@ -8,6 +8,8 @@ import 'individual_progress_screen.dart';
 import 'yatra_chat_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/api_service.dart';
+import '../../controllers/live_yatra_controller.dart';
+import '../../models/live_yatra_models.dart';
 import 'package:bharat_pray/screens/details/app_icons.dart';
 import 'package:video_player/video_player.dart';
 import 'package:geolocator/geolocator.dart';
@@ -70,15 +72,24 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
   
   // Live stats tracking
   double _liveDistanceKm = 0.0;
-  final int _onlineDevotees = 1240;
+  final int _onlineDevotees = 1;
 
   static const String _backArrowSvg = '''<svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
 <path d="M2.87301 8.24994L8.56917 13.9461L7.49996 14.9999L0 7.49996L7.49996 0L8.56917 1.05382L2.87301 6.74998H14.9999V8.24994H2.87301Z" fill="#FFFFFF"/>
 </svg>''';
 
+  final LiveYatraController _liveController = LiveYatraController();
+
   @override
   void initState() {
     super.initState();
+    _liveController.setInitialParams(
+      journeyId: widget.journeyId,
+      title: widget.title,
+      totalDistanceStr: widget.distance,
+    );
+    _liveController.addListener(_onLiveControllerChanged);
+
     _runController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
@@ -342,8 +353,14 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     );
   }
 
+  void _onLiveControllerChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _liveController.removeListener(_onLiveControllerChanged);
+    _liveController.dispose();
     _liveWalkingTimer?.cancel();
     _loopSeekTimer?.cancel();
     _locationSubscription?.cancel();
@@ -368,6 +385,9 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     });
     _runController.repeat();
 
+    // Start live tracking via LiveYatraController
+    _liveController.startTracking();
+
     // Queue standby controller at 1s, and play active controller at 1s
     final activeCtrl = _useWalkingA ? _walkingVideoControllerA : _walkingVideoControllerB;
     final standbyCtrl = _useWalkingA ? _walkingVideoControllerB : _walkingVideoControllerA;
@@ -386,37 +406,8 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
       });
     }
 
-    // _scheduleTempleAlertPreview(); // TODO: re-enable when temple popup is needed
-    _startLocationTracking(); // Real GPS proximity tracking
+    _startLocationTracking();
     _resumeBackendJourney();
-
-    // Start live pedometer simulation
-    _liveWalkingTimer?.cancel();
-    _liveWalkingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final token = prefs.getString('auth_token') ?? '';
-        if (token.isNotEmpty && widget.journeyId.isNotEmpty) {
-          await ApiService.updateJourneyLocation(token, widget.journeyId, 500, 400.0);
-          
-          if (mounted) {
-            setState(() {
-              _liveDistanceKm += 0.4;
-            });
-          }
-          
-          final progressData = await ApiService.getJourneyProgress(token, widget.journeyId);
-          if (progressData.isNotEmpty) {
-            final progress = (progressData['progress'] ?? 0) / 100.0;
-            if (progress >= 1.0) {
-              _stopRun(isComplete: true);
-            }
-          }
-        }
-      } catch (e) {
-        debugPrint('Error in live walking timer: $e');
-      }
-    });
   }
 
   void _resumeBackendJourney() async {
@@ -431,9 +422,46 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     }
   }
 
+  void _confirmAndStopRun() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFFFFF5EC),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Stop Live Tracking?',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: const Color(0xFF3B2A1B)),
+        ),
+        content: Text(
+          'Are you sure you want to stop live tracking for this Yatra?',
+          style: GoogleFonts.outfit(color: const Color(0xFF5A5146)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('Cancel', style: GoogleFonts.outfit(color: const Color(0xFFC8A882))),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD12B2B),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _stopRun();
+            },
+            child: Text('Stop', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _stopRun({bool isComplete = false}) {
     if (!_isRunning) return;
 
+    _liveController.stopTracking();
     _liveWalkingTimer?.cancel();
     _loopSeekTimer?.cancel();
     _locationSubscription?.cancel();
@@ -576,7 +604,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
       builder: (context) {
         return Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 34),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
           child: Container(
             decoration: BoxDecoration(
               color: const Color(0xFFFFF5EC),
@@ -594,21 +622,46 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 84,
-                  height: 84,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: const Color(0xFFCFA87B), width: 2),
-                  ),
-                  child: ClipOval(
-                    child: Image.asset(
-                      traveler.image,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const ColoredBox(color: Color(0xFFE6D6C4)),
+                Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    Container(
+                      width: 84,
+                      height: 84,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0xFFCFA87B), width: 2),
+                      ),
+                      child: ClipOval(
+                        child: traveler.image.startsWith('http')
+                            ? Image.network(
+                                traveler.image,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const ColoredBox(color: Color(0xFFE6D6C4)),
+                              )
+                            : Image.asset(
+                                traveler.image,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const ColoredBox(color: Color(0xFFE6D6C4)),
+                              ),
+                      ),
                     ),
-                  ),
+                    if (traveler.isOnline)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2E8A3A),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        child: Text(
+                          'Online',
+                          style: GoogleFonts.outfit(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 10),
                 Text(
@@ -642,7 +695,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
                         child: _TravelerStatItem(
                           icon: Icons.location_on_rounded,
                           primary: traveler.km,
-                          secondary: 'KM',
+                          secondary: 'KM Completed',
                         ),
                       ),
                       Expanded(
@@ -662,6 +715,32 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
                     ],
                   ),
                 ),
+                if (traveler.kmRemaining.isNotEmpty && traveler.kmRemaining != '0' && traveler.kmRemaining != '0.0') ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF0E0),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.flag_rounded, color: Color(0xFFFF7A00), size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                          '${traveler.kmRemaining} KM Remaining to Destination',
+                          style: GoogleFonts.outfit(
+                            color: const Color(0xFFFF7A00),
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 SizedBox(
                   width: double.infinity,
@@ -809,8 +888,11 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
                   ),
                   if (!widget.isFromCreateGroup) ...[
                     _LiveSanghaCard(
-                      onlineDevotees: _onlineDevotees,
-                      distanceKm: _liveDistanceKm,
+                      onlineDevotees: _liveController.state.activeDevoteesCount,
+                      kmCompleted: _liveController.state.kmCompleted > 0 ? _liveController.state.kmCompleted : _liveDistanceKm,
+                      kmRemaining: _liveController.state.kmRemaining,
+                      totalDistanceKm: _liveController.state.totalDistanceKm,
+                      progressPercent: _liveController.state.progressPercent,
                     ),
                     const Spacer(),
                     Align(
@@ -827,12 +909,13 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
                     ),
                     const SizedBox(height: 10),
                     _TravelerStrip(
+                      liveDevotees: _liveController.state.nearbyDevotees,
                       onTravelerTap: _showTravelerProfilePopup,
                     ),
                   ] else ...[
                     const Spacer(),
                     _TotalGroupProgressCard(
-                      progressText: '14%',
+                      progressText: '${_liveController.state.progressPercent.toInt()}%',
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -861,7 +944,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                            onPressed: _isRunning ? _stopRun : null,
+                            onPressed: _isRunning ? _confirmAndStopRun : null,
                             child: Text(
                               'Stop',
                               style: GoogleFonts.outfit(
@@ -969,50 +1052,90 @@ class _TotalGroupProgressCard extends StatelessWidget {
 
 class _LiveSanghaCard extends StatelessWidget {
   final int onlineDevotees;
-  final double distanceKm;
+  final double kmCompleted;
+  final double kmRemaining;
+  final double totalDistanceKm;
+  final double progressPercent;
 
   const _LiveSanghaCard({
     required this.onlineDevotees,
-    required this.distanceKm,
+    required this.kmCompleted,
+    required this.kmRemaining,
+    required this.totalDistanceKm,
+    required this.progressPercent,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.88),
-        borderRadius: BorderRadius.circular(14),
+        color: Colors.white.withOpacity(0.92),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFEADCCF), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF3DDE1A),
-                  shape: BoxShape.circle,
-                ),
+              Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF3DDE1A),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'LIVE SANGHA',
+                    style: GoogleFonts.outfit(
+                      color: const Color(0xFFFF7A00),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Text(
-                'LIVE SANGHA',
-                style: GoogleFonts.outfit(
-                  color: const Color(0xFFFF7A00),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.5,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF0E0),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${progressPercent.toStringAsFixed(1)}% Completed',
+                  style: GoogleFonts.outfit(
+                    color: const Color(0xFFFF7A00),
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Container(height: 1, color: const Color(0xFFD7B792)),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: (progressPercent / 100.0).clamp(0.0, 1.0),
+              backgroundColor: const Color(0xFFFFEAD5),
+              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFF7A00)),
+              minHeight: 6,
+            ),
+          ),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -1022,38 +1145,62 @@ class _LiveSanghaCard extends StatelessWidget {
                     Text(
                       '$onlineDevotees',
                       style: GoogleFonts.outfit(
-                        color: const Color(0xFF5F5F5F),
-                        fontSize: 24,
-                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFF3B2A1B),
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                     Text(
-                      'Devotees Online',
+                      'Devotees',
                       style: GoogleFonts.outfit(
-                        color: const Color(0xFFC8A882),
-                        fontSize: 12,
+                        color: const Color(0xFF9E846B),
+                        fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
                 ),
               ),
+              Container(width: 1, height: 28, color: const Color(0xFFE5D5C5)),
               Expanded(
                 child: Column(
                   children: [
                     Text(
-                      distanceKm.toStringAsFixed(1),
+                      '${kmCompleted.toStringAsFixed(2)} KM',
                       style: GoogleFonts.outfit(
-                        color: const Color(0xFF5F5F5F),
-                        fontSize: 24,
-                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFF2E8A3A),
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                     Text(
-                      'Km Completed',
+                      'Completed',
                       style: GoogleFonts.outfit(
-                        color: const Color(0xFFC8A882),
-                        fontSize: 12,
+                        color: const Color(0xFF9E846B),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(width: 1, height: 28, color: const Color(0xFFE5D5C5)),
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      '${kmRemaining.toStringAsFixed(2)} KM',
+                      style: GoogleFonts.outfit(
+                        color: const Color(0xFFD12B2B),
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      'Remaining',
+                      style: GoogleFonts.outfit(
+                        color: const Color(0xFF9E846B),
+                        fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -1069,38 +1216,56 @@ class _LiveSanghaCard extends StatelessWidget {
 }
 
 class _TravelerStrip extends StatelessWidget {
-  const _TravelerStrip({required this.onTravelerTap});
+  const _TravelerStrip({
+    required this.onTravelerTap,
+    this.liveDevotees = const [],
+  });
 
   final ValueChanged<_TravelerProfile> onTravelerTap;
+  final List<LiveDevoteeModel> liveDevotees;
 
   @override
   Widget build(BuildContext context) {
-    final travelers = <_TravelerProfile>[
-      const _TravelerProfile(
-        name: 'Arjun S.',
-        distance: '0.4 km away',
-        image: 'assets/images/deity_shiva.png',
-        km: '336',
-        steps: '99,000',
-        days: '4.5',
-      ),
-      const _TravelerProfile(
-        name: 'Priya M.',
-        distance: '1.2 km away',
-        image: 'assets/images/deity_krishna.png',
-        km: '290',
-        steps: '81,400',
-        days: '5.2',
-      ),
-      const _TravelerProfile(
-        name: 'Ravi P.',
-        distance: '2.4 km away',
-        image: 'assets/images/deity_ram.png',
-        km: '264',
-        steps: '76,850',
-        days: '6.0',
-      ),
-    ];
+    if (liveDevotees.isEmpty) {
+      return Container(
+        height: 50,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1B1B1B).withOpacity(0.65),
+          borderRadius: BorderRadius.circular(25),
+          border: Border.all(color: const Color(0xFFC8A882).withOpacity(0.4), width: 1),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.people_outline_rounded, color: Color(0xFFFF9B20), size: 18),
+            const SizedBox(width: 8),
+            Text(
+              'No other pilgrims currently live on this route',
+              style: GoogleFonts.outfit(
+                color: Colors.white.withOpacity(0.85),
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final travelers = liveDevotees.map((d) {
+      return _TravelerProfile(
+        name: d.name,
+        distance: d.distanceText,
+        image: d.profilePic.isNotEmpty ? d.profilePic : 'assets/images/deity_shiva.png',
+        km: d.kmCompleted.toStringAsFixed(1),
+        steps: d.steps.toString(),
+        days: d.days,
+        kmRemaining: d.kmRemaining.toStringAsFixed(1),
+        isOnline: d.isOnline,
+      );
+    }).toList();
 
     return SizedBox(
       height: 58,
@@ -1121,21 +1286,44 @@ class _TravelerStrip extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xFFFF7A00), width: 1),
-                    ),
-                    child: ClipOval(
-                      child: Image.asset(
-                        traveler.image,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const ColoredBox(color: Color(0xFF2A2A2A)),
+                  Stack(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: const Color(0xFFFF7A00), width: 1),
+                        ),
+                        child: ClipOval(
+                          child: traveler.image.startsWith('http')
+                              ? Image.network(
+                                  traveler.image,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) => const ColoredBox(color: Color(0xFF2A2A2A)),
+                                )
+                              : Image.asset(
+                                  traveler.image,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) => const ColoredBox(color: Color(0xFF2A2A2A)),
+                                ),
+                        ),
                       ),
-                    ),
+                      if (traveler.isOnline)
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF3DDE1A),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: const Color(0xFF1B1B1B), width: 1.5),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(width: 8),
                   Column(
@@ -1178,6 +1366,8 @@ class _TravelerProfile {
     required this.km,
     required this.steps,
     required this.days,
+    this.kmRemaining = '0',
+    this.isOnline = true,
   });
 
   final String name;
@@ -1186,6 +1376,8 @@ class _TravelerProfile {
   final String km;
   final String steps;
   final String days;
+  final String kmRemaining;
+  final bool isOnline;
 }
 
 class _TravelerStatItem extends StatelessWidget {
