@@ -62,10 +62,8 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
   StreamSubscription<Position>? _locationSubscription;
   final Set<String> _templeAlertShownFor = {}; // track which temples already triggered
 
-  // 3 video controllers
-  VideoPlayerController? _walkingVideoControllerA;     // Continue_walking.mp4 (Ping-Pong A)
-  VideoPlayerController? _walkingVideoControllerB;     // Continue_walking.mp4 (Ping-Pong B)
-  bool _useWalkingA = true; // Tracks which walking controller is active
+  // Walking Video Controller (1st_Scene.mp4)
+  VideoPlayerController? _walkingVideoController;
 
   VideoPlayerController? _templeReachingVideoController; // Temple_reaching.mp4
   VideoPlayerController? _templeEntranceVideoController; // Temple_entrarance.mp4
@@ -97,44 +95,21 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
       duration: const Duration(milliseconds: 1400),
     );
 
-    // Video 1A & 1B: 1st_Scene.mp4 — double buffered for 0-second seamless looping (MUTED)
-    _walkingVideoControllerA = VideoPlayerController.asset(
+    // Video 1: 1st_Scene.mp4 — native 0-gap looping without crossfade animation (MUTED)
+    _walkingVideoController = VideoPlayerController.asset(
       'assets/images/1st_Scene.mp4',
     )..initialize().then((_) {
         if (mounted) {
-          _walkingVideoControllerA!.setVolume(0.0);
-          _walkingVideoControllerA!.setLooping(false);
-          _walkingVideoControllerA!.addListener(_onWalkingVideoPositionChanged);
+          _walkingVideoController!.setVolume(0.0);
+          _walkingVideoController!.setLooping(true);
           setState(() {});
         }
       }).catchError((_) {
-        _walkingVideoControllerA = VideoPlayerController.asset('assets/images/New_walking.mp4')
+        _walkingVideoController = VideoPlayerController.asset('assets/images/New_walking.mp4')
           ..initialize().then((_) {
             if (mounted) {
-              _walkingVideoControllerA!.setVolume(0.0);
-              _walkingVideoControllerA!.setLooping(false);
-              _walkingVideoControllerA!.addListener(_onWalkingVideoPositionChanged);
-              setState(() {});
-            }
-          });
-      });
-
-    _walkingVideoControllerB = VideoPlayerController.asset(
-      'assets/images/1st_Scene.mp4',
-    )..initialize().then((_) {
-        if (mounted) {
-          _walkingVideoControllerB!.setVolume(0.0);
-          _walkingVideoControllerB!.setLooping(false);
-          _walkingVideoControllerB!.addListener(_onWalkingVideoPositionChanged);
-          setState(() {});
-        }
-      }).catchError((_) {
-        _walkingVideoControllerB = VideoPlayerController.asset('assets/images/New_walking.mp4')
-          ..initialize().then((_) {
-            if (mounted) {
-              _walkingVideoControllerB!.setVolume(0.0);
-              _walkingVideoControllerB!.setLooping(false);
-              _walkingVideoControllerB!.addListener(_onWalkingVideoPositionChanged);
+              _walkingVideoController!.setVolume(0.0);
+              _walkingVideoController!.setLooping(true);
               setState(() {});
             }
           });
@@ -197,39 +172,6 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
       });
   }
 
-  // ─── Seamless loop: Ping-Pong technique for 0-second gap
-  void _onWalkingVideoPositionChanged() {
-    if (_currentVideoMode != YatraVideoMode.walking) return;
-    
-    final activeCtrl = _useWalkingA ? _walkingVideoControllerA : _walkingVideoControllerB;
-    final standbyCtrl = _useWalkingA ? _walkingVideoControllerB : _walkingVideoControllerA;
-    
-    if (activeCtrl == null || !activeCtrl.value.isInitialized) return;
-    if (standbyCtrl == null || !standbyCtrl.value.isInitialized) return;
-    
-    final pos = activeCtrl.value.position;
-    final totalDurationMs = activeCtrl.value.duration.inMilliseconds;
-    if (totalDurationMs <= 0) return;
-    
-    final loopEnd = totalDurationMs;
-        
-    // Start the 2-second crossfade exactly 2000ms before the end of the full video
-    if (pos.inMilliseconds >= loopEnd - 2000) {
-      standbyCtrl.setVolume(0.0);
-      standbyCtrl.play();
-      
-      setState(() {
-        _useWalkingA = !_useWalkingA;
-      });
-      
-      Future.delayed(const Duration(milliseconds: 2050), () {
-        if (mounted) {
-          activeCtrl.pause();
-          activeCtrl.seekTo(Duration.zero);
-        }
-      });
-    }
-  }
 
   void _onTempleReachingStatusChanged() {
     if (_currentVideoMode != YatraVideoMode.templeReaching) return;
@@ -263,21 +205,17 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
       _currentVideoMode = YatraVideoMode.walking;
     });
     
-    final activeCtrl = _useWalkingA ? _walkingVideoControllerA : _walkingVideoControllerB;
-    final standbyCtrl = _useWalkingA ? _walkingVideoControllerB : _walkingVideoControllerA;
-    
-    if (_isRunning) {
-      standbyCtrl?.setVolume(0.0);
-      activeCtrl?.setVolume(0.0);
-      standbyCtrl?.seekTo(Duration.zero).then((_) => standbyCtrl.pause());
-      activeCtrl?.seekTo(Duration.zero).then((_) => activeCtrl.play());
+    if (_isRunning && _walkingVideoController != null) {
+      _walkingVideoController!.setVolume(0.0);
+      _walkingVideoController!.setLooping(true);
+      _walkingVideoController!.play();
     }
   }
 
   /// Play 2nd_Scene.mp4 once, then show the choice popup.
   void _switchToTempleReachingVideo() {
-    _walkingVideoControllerA?.pause();
-    _walkingVideoControllerB?.pause();
+    _walkingVideoController?.pause();
+
     setState(() {
       _currentVideoMode = YatraVideoMode.templeReaching;
     });
@@ -420,14 +358,12 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     _gps5SecPollTimer?.cancel();
     _locationSubscription?.cancel();
     _runController.dispose();
-    _walkingVideoControllerA?.removeListener(_onWalkingVideoPositionChanged);
-    _walkingVideoControllerB?.removeListener(_onWalkingVideoPositionChanged);
     _templeReachingVideoController?.removeListener(_onTempleReachingStatusChanged);
     _templeEntranceVideoController?.removeListener(_onTempleEntranceStatusChanged);
-    _walkingVideoControllerA?.dispose();
-    _walkingVideoControllerB?.dispose();
+    _walkingVideoController?.dispose();
     _templeReachingVideoController?.dispose();
     _templeEntranceVideoController?.dispose();
+
     super.dispose();
   }
 
@@ -443,23 +379,17 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     // Start live tracking via LiveYatraController
     _liveController.startTracking();
 
-    // Play active controller from start, queue standby controller (both MUTED)
-    final activeCtrl = _useWalkingA ? _walkingVideoControllerA : _walkingVideoControllerB;
-    final standbyCtrl = _useWalkingA ? _walkingVideoControllerB : _walkingVideoControllerA;
-    
-    if (activeCtrl != null && activeCtrl.value.isInitialized &&
-        standbyCtrl != null && standbyCtrl.value.isInitialized) {
-      activeCtrl.setVolume(0.0);
-      standbyCtrl.setVolume(0.0);
-      standbyCtrl.seekTo(Duration.zero).then((_) => standbyCtrl.pause());
-      activeCtrl.seekTo(Duration.zero).then((_) => activeCtrl.play());
+    // Play walking video natively in loop when user taps Start (MUTED)
+    if (_walkingVideoController != null && _walkingVideoController!.value.isInitialized) {
+      _walkingVideoController!.setVolume(0.0);
+      _walkingVideoController!.setLooping(true);
+      _walkingVideoController!.seekTo(Duration.zero).then((_) => _walkingVideoController!.play());
     } else {
-      activeCtrl?.initialize().then((_) {
+      _walkingVideoController?.initialize().then((_) {
         if (mounted && _isRunning) {
-          activeCtrl.setVolume(0.0);
-          standbyCtrl?.setVolume(0.0);
-          standbyCtrl?.seekTo(Duration.zero).then((_) => standbyCtrl.pause());
-          activeCtrl.seekTo(Duration.zero).then((_) => activeCtrl.play());
+          _walkingVideoController!.setVolume(0.0);
+          _walkingVideoController!.setLooping(true);
+          _walkingVideoController!.seekTo(Duration.zero).then((_) => _walkingVideoController!.play());
           setState(() {});
         }
       });
@@ -528,8 +458,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     _runController.stop();
     _runController.reset();
 
-    _walkingVideoControllerA?.pause();
-    _walkingVideoControllerB?.pause();
+    _walkingVideoController?.pause();
     _templeReachingVideoController?.pause();
     _templeEntranceVideoController?.pause();
 
@@ -710,8 +639,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
   }
 
   void _triggerDestinationCompletionFlow(Position pos) async {
-    _walkingVideoControllerA?.pause();
-    _walkingVideoControllerB?.pause();
+    _walkingVideoController?.pause();
     setState(() {
       _currentVideoMode = YatraVideoMode.templeReaching;
     });
@@ -993,16 +921,9 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
                 // Render the loading indicator at the bottom if nothing is ready
                 const Center(child: CircularProgressIndicator(color: Color(0xFFFF7A00))),
                 
-                if (_currentVideoMode == YatraVideoMode.walking) ...[
-                  // Bottom layer: Video B is ALWAYS opaque. This prevents any black background 
-                  // from showing through during the crossfade.
-                  _buildVideoLayer(_walkingVideoControllerB, isVisible: true, alwaysOpaque: true),
-                  
-                  // Top layer: Video A fades in and out over Video B.
-                  // When A fades out (1 -> 0), B is revealed underneath flawlessly.
-                  // When A fades in (0 -> 1), it covers B flawlessly.
-                  _buildVideoLayer(_walkingVideoControllerA, isVisible: _useWalkingA, alwaysOpaque: false),
-                ],
+                if (_currentVideoMode == YatraVideoMode.walking)
+                  _buildVideoLayer(_walkingVideoController, isVisible: true, alwaysOpaque: true),
+
                 
                 if (_currentVideoMode == YatraVideoMode.templeReaching)
                   _buildVideoLayer(_templeReachingVideoController, isVisible: true, alwaysOpaque: true),

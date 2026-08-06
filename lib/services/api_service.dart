@@ -9,10 +9,10 @@ import '../models/journey_models.dart';
 
 class ApiService {
   // Set to true to use the live production server, false for local testing
-  static const bool isLive = false;
+  static const bool isLive = true;
 
-  // Local backend IP: Wi-Fi IP = 10.192.149.19, Port = 3021
-  static const String _localIp = '10.192.149.19';
+  // Local backend IP: Wi-Fi IP / ADB Reverse = 127.0.0.1, Port = 3021
+  static const String _localIp = '127.0.0.1';
   static const int _localPort = 3021;
   static String get baseUrl {
     if (isLive) {
@@ -63,17 +63,18 @@ class ApiService {
     var trimmed = url.trim();
     if (trimmed.startsWith('assets/')) return trimmed; // Keep local assets as is
 
-    if (!isLive) {
-      // Remap production URL or localhost/127.0.0.1 to active local IP base URL
-      trimmed = trimmed.replaceAll('https://api.bharatpray.com', baseUrl);
-      trimmed = trimmed.replaceAll('http://api.bharatpray.com', baseUrl);
-      trimmed = trimmed.replaceAll('http://localhost:3021', baseUrl);
-      trimmed = trimmed.replaceAll('http://127.0.0.1:3021', baseUrl);
-      trimmed = trimmed.replaceAll('http://localhost:3020', baseUrl);
-      trimmed = trimmed.replaceAll('http://127.0.0.1:3020', baseUrl);
-      trimmed = trimmed.replaceAll('http://192.168.29.249:3020', baseUrl);
-      trimmed = trimmed.replaceAll('http://192.168.29.249:3021', baseUrl);
-    }
+    // Remap any production/legacy IP host to active baseUrl
+    trimmed = trimmed.replaceAll('https://api.bharatpray.com', baseUrl);
+    trimmed = trimmed.replaceAll('http://api.bharatpray.com', baseUrl);
+    trimmed = trimmed.replaceAll('http://localhost:3021', baseUrl);
+    trimmed = trimmed.replaceAll('http://127.0.0.1:3021', baseUrl);
+    trimmed = trimmed.replaceAll('http://localhost:3020', baseUrl);
+    trimmed = trimmed.replaceAll('http://127.0.0.1:3020', baseUrl);
+    trimmed = trimmed.replaceAll('http://192.168.29.249:3020', baseUrl);
+    trimmed = trimmed.replaceAll('http://192.168.29.249:3021', baseUrl);
+    trimmed = trimmed.replaceAll('http://192.168.29.113:3021', baseUrl);
+    trimmed = trimmed.replaceAll('http://10.192.149.19:3021', baseUrl);
+    trimmed = trimmed.replaceAll('http://10.192.149.19:3020', baseUrl);
         
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       return trimmed;
