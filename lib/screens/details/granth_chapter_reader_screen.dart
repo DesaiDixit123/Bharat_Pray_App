@@ -276,8 +276,8 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   }
 
   Widget _buildBookView(BuildContext context) {
-    final paperColor = _sepiaMode ? const Color(0xFFF8EEDB) : const Color(0xFFEAE4D8);
-    final bookHeight = _getBookHeight(context);
+    final paperColor = _sepiaMode ? const Color(0xFFF9F4E8) : const Color(0xFFF3EFE6);
+    final bookHeight = math.max(_getBookHeight(context), 460.0);
 
     return AnimatedSize(
       duration: const Duration(milliseconds: 220),
@@ -287,37 +287,42 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
         height: bookHeight,
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
+            color: const Color(0xFF26150B), // Rich mahogany leather cover
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.5), width: 1.5),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.28),
-                blurRadius: 24,
+                color: Colors.black.withValues(alpha: 0.45),
+                blurRadius: 28,
+                spreadRadius: 2,
                 offset: const Offset(0, 14),
+              ),
+              BoxShadow(
+                color: const Color(0xFFD4AF37).withValues(alpha: 0.12),
+                blurRadius: 12,
+                spreadRadius: 1,
               ),
             ],
           ),
           child: Stack(
             children: [
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(28),
-                    color: paperColor,
-                  ),
-                ),
-              ),
+              // Realistic Stacked Paper Edge on Right & Bottom (Layered Physical Pages)
               Positioned(
-                left: 0,
-                top: 14,
-                bottom: 14,
-                width: 18,
+                right: 0,
+                top: 10,
+                bottom: 10,
+                width: 10,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(28)),
+                    borderRadius: const BorderRadius.horizontal(right: Radius.circular(8)),
                     gradient: LinearGradient(
                       colors: [
-                        const Color(0xFF3E2A1E).withOpacity(0.72),
-                        const Color(0xFFFAF1E2).withOpacity(0.0),
+                        const Color(0xFFD2C1A8),
+                        const Color(0xFFEFE4D2),
+                        const Color(0xFFC7B398),
+                        const Color(0xFFF5EBDC),
+                        const Color(0xFFBBA78B),
+                        const Color(0xFFECE1CE),
                       ],
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
@@ -325,42 +330,64 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
                   ),
                 ),
               ),
+
+              // Main Parchment Page Sheet
               Positioned(
-                right: 12,
-                top: 18,
-                bottom: 18,
-                width: 18,
-                child: Column(
-                  children: List.generate(11, (index) {
-                    return Expanded(
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 1.5),
-                        decoration: BoxDecoration(
-                          color: index.isEven ? const Color(0xFFD5B892) : const Color(0xFFF6E8D1),
-                          borderRadius: BorderRadius.circular(4),
+                left: 12,
+                right: 8,
+                top: 8,
+                bottom: 8,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    color: paperColor,
+                    child: Stack(
+                      children: [
+                        // Left Spine Crease Shadow (3D Book Binding Fold)
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: 22,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.black.withValues(alpha: 0.38),
+                                  Colors.black.withValues(alpha: 0.18),
+                                  Colors.black.withValues(alpha: 0.05),
+                                  Colors.transparent,
+                                ],
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    );
-                  }),
-                ),
-              ),
-              Positioned.fill(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(26, 26, 28, 26),
-                  child: FlipPage(
-                    controller: _flipController,
-                    initialPage: _currentVerseIndex,
-                    edgeHitZoneFraction: 0.35,
-                    animationDuration: const Duration(milliseconds: 320),
-                    pages: List<Widget>.generate(
-                      _verses.length,
-                      (index) => _buildVersePage(_verses[index]),
+
+                        // Interactive Moveable Page Flip View
+                        Positioned.fill(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                            child: FlipPage(
+                              controller: _flipController,
+                              initialPage: _currentVerseIndex,
+                              edgeHitZoneFraction: 0.40,
+                              animationDuration: const Duration(milliseconds: 380),
+                              pages: List<Widget>.generate(
+                                _verses.length,
+                                (index) => _buildVersePage(_verses[index], index),
+                              ),
+                              onPageChanged: (index) {
+                                setState(() {
+                                  _currentVerseIndex = index;
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    onPageChanged: (index) {
-                      setState(() {
-                        _currentVerseIndex = index;
-                      });
-                    },
                   ),
                 ),
               ),
@@ -371,68 +398,121 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     );
   }
 
-  Widget _buildVersePage(Map<String, String> verse) {
-    final bodyColor = const Color(0xFF33261A);
+  Widget _buildVersePage(Map<String, String> verse, int pageIndex) {
+    final bodyColor = _sepiaMode ? const Color(0xFF332014) : const Color(0xFF261910);
+    final paperBg = _sepiaMode ? const Color(0xFFF9F4E8) : const Color(0xFFF3EFE6);
+    final sanskritText = verse['sanskrit'] ?? '';
+    final transliterationText = verse['transliteration'] ?? '';
+    final englishText = verse['english'] ?? '';
 
     return Container(
-      color: _sepiaMode ? const Color(0xFFF8EEDB) : const Color(0xFFEAE4D8),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        const SizedBox(height: 28),
-        Text(
-          verse['sanskrit'] ?? '',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.notoSerifDevanagari(
-            fontSize: _readerFontSize + 4,
-            height: 1.8,
-            color: bodyColor,
-            fontWeight: FontWeight.w600,
-          ),
+      color: paperBg,
+      padding: const EdgeInsets.all(12),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.45), width: 1.2),
         ),
-        const SizedBox(height: 30),
-        Text(
-          verse['transliteration'] ?? '',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.outfit(
-            fontSize: _readerFontSize + 1,
-            height: 1.7,
-            color: bodyColor.withOpacity(0.88),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 28),
-        Container(
-          width: 74,
-          height: 2.5,
+        padding: const EdgeInsets.all(16),
+        child: Container(
           decoration: BoxDecoration(
-            color: bodyColor.withOpacity(0.42),
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.25), width: 0.8),
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Top Sacred Vedic Header & OM Motif
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('❖ ──────── ', style: GoogleFonts.outfit(color: const Color(0xFFC59239), fontSize: 11)),
+                  Text('ॐ', style: GoogleFonts.notoSerifDevanagari(fontSize: 20, color: const Color(0xFF5C1405), fontWeight: FontWeight.bold)),
+                  Text(' ──────── ❖', style: GoogleFonts.outfit(color: const Color(0xFFC59239), fontSize: 11)),
+                ],
+              ),
+              const SizedBox(height: 18),
+
+              // Sanskrit / Devanagari Verse Text
+              if (sanskritText.isNotEmpty) ...[
+                Text(
+                  sanskritText,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.notoSerifDevanagari(
+                    fontSize: _readerFontSize + 4,
+                    height: 1.85,
+                    color: const Color(0xFF4A1005),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+
+              // Transliteration (if available)
+              if (transliterationText.isNotEmpty) ...[
+                Text(
+                  transliterationText,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.outfit(
+                    fontSize: _readerFontSize,
+                    height: 1.65,
+                    color: bodyColor.withValues(alpha: 0.85),
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+
+              // Golden Vedic Divider Line
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 50,
+                    height: 1.2,
+                    color: const Color(0xFFC59239).withValues(alpha: 0.6),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text('❖', style: GoogleFonts.outfit(color: const Color(0xFFC59239), fontSize: 10)),
+                  ),
+                  Container(
+                    width: 50,
+                    height: 1.2,
+                    color: const Color(0xFFC59239).withValues(alpha: 0.6),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // English Meaning Label & Content
+              Text(
+                'English Translation',
+                style: GoogleFonts.outfit(
+                  fontSize: _readerFontSize + 1,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF5C1405),
+                  letterSpacing: 0.4,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                englishText,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: _readerFontSize,
+                  height: 1.75,
+                  color: bodyColor.withValues(alpha: 0.92),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
           ),
         ),
-        const SizedBox(height: 30),
-        Text(
-          'English Meaning',
-          style: GoogleFonts.outfit(
-            fontSize: _readerFontSize + 1,
-            fontWeight: FontWeight.w700,
-            color: bodyColor,
-          ),
-        ),
-        const SizedBox(height: 18),
-        Text(
-          verse['english'] ?? '',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.outfit(
-            fontSize: _readerFontSize,
-            height: 1.8,
-            color: bodyColor.withOpacity(0.88),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 28),
-      ],
       ),
     );
   }
