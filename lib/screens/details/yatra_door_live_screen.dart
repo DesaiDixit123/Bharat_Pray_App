@@ -95,7 +95,7 @@ class _YatraDoorLiveScreenState extends State<YatraDoorLiveScreen>
                       colors: [
                         Colors.transparent,
                         Colors.transparent,
-                        Colors.black.withOpacity(0.55),
+                        Colors.black.withValues(alpha: 0.55),
                       ],
                       stops: const [0.0, 0.72, 1.0],
                     ),
@@ -184,10 +184,10 @@ class _YatraDoorLiveScreenState extends State<YatraDoorLiveScreen>
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.22),
+                      color: Colors.white.withValues(alpha: 0.22),
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.55),
+                        color: Colors.white.withValues(alpha: 0.55),
                         width: 1,
                       ),
                     ),
@@ -257,7 +257,7 @@ class _YatraDoorLiveScreenState extends State<YatraDoorLiveScreen>
                                   Text(
                                     'Scroll Down',
                                     style: GoogleFonts.outfit(
-                                      color: Colors.white.withOpacity(0.85),
+                                      color: Colors.white.withValues(alpha: 0.85),
                                       fontSize: 14,
                                       fontWeight: FontWeight.w400,
                                     ),
@@ -265,7 +265,7 @@ class _YatraDoorLiveScreenState extends State<YatraDoorLiveScreen>
                                   Text(
                                     'See Yours Certificate.',
                                     style: GoogleFonts.outfit(
-                                      color: Colors.white.withOpacity(0.70),
+                                      color: Colors.white.withValues(alpha: 0.70),
                                       fontSize: 12,
                                       fontWeight: FontWeight.w400,
                                     ),

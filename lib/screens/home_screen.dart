@@ -11,11 +11,11 @@ import 'details/yatra_screen.dart';
 import 'details/profile_screen.dart';
 import 'details/bhajan_category_screen.dart';
 import 'details/granth_screen.dart';
-import 'details/utsav_screen.dart';
 import 'details/deity_detail_screen.dart';
 import 'details/festival_detail_screen.dart';
 import 'details/darshan_tab_content.dart';
 import 'details/deity_temples_screen.dart';
+import 'details/festivals_home_tab_content.dart';
 import 'prayer_detail_screen.dart';
 import '../models/prayer.dart';
 import '../services/api_service.dart';
@@ -182,7 +182,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: const Color(0xFFFF7700).withOpacity(0.2),
+                        color: const Color(0xFFFF7700).withValues(alpha: 0.2),
                         width: 1.5,
                       ),
                     ),
@@ -353,12 +353,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         decoration: InputDecoration(
                           hintText: 'Search gods, temples, bhajans...',
                           hintStyle: GoogleFonts.outfit( // Corrected from withValues to withOpacity
-                            color: const Color(0xFF2E2A36).withOpacity(0.4),
+                            color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
                             fontSize: 14,
                           ),
                           prefixIcon: Icon(
                             Icons.search_rounded,
-                            color: const Color(0xFF2E2A36).withOpacity(0.4),
+                            color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
                           ),
                           border: InputBorder.none,
                           contentPadding: const EdgeInsets.symmetric(vertical: 13),
@@ -376,7 +376,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFFF7700).withOpacity(0.3),
+                          color: const Color(0xFFFF7700).withValues(alpha: 0.3),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -446,7 +446,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       label: 'Utsav Vibes',
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const UtsavScreen()),
+                        MaterialPageRoute(builder: (context) => const FestivalsHomeTabContent()),
                       ),
                     ),
                   ),
@@ -938,7 +938,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         style: GoogleFonts.poppins(
                           fontSize: 14,             
                             fontWeight: FontWeight.w400,
-                            color: Colors.white.withOpacity(0.5), // blur/faded look
+                            color: Colors.white.withValues(alpha: 0.5), // blur/faded look
                           height: 16 / 14,          // line-height: 16px → height ratio = 16/14
                           letterSpacing: 0,         // letter-spacing: 0px
                         ),
@@ -1009,7 +1009,7 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(12), // Figma: radius = 12px
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -1163,7 +1163,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       end: Alignment.bottomCenter,
                       colors: [
                         Colors.transparent,
-                        Colors.black.withOpacity(0.75),
+                        Colors.black.withValues(alpha: 0.75),
                       ],
                     ),
                   ),
@@ -1366,8 +1366,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        themeColor.withOpacity(0.0),
-                        themeColor.withOpacity(0.9), // Rich solid color fade at the bottom
+                        themeColor.withValues(alpha: 0.0),
+                        themeColor.withValues(alpha: 0.9), // Rich solid color fade at the bottom
                       ],
                     ),
                   ),
@@ -1621,7 +1621,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Text(
               content, style: GoogleFonts.outfit(
                 fontSize: 14,
-                color: const Color(0xFF2E2A36).withOpacity(0.8),
+                color: const Color(0xFF2E2A36).withValues(alpha: 0.8),
                 height: 1.4,
               ),
             ),
@@ -1662,7 +1662,7 @@ class ArchedNavBarPainter extends CustomPainter {
       ..strokeWidth = 1.0;
 
     final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.04)
+      ..color = Colors.black.withValues(alpha: 0.04)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
 
     // Host rect (the white bar from y=30.5 to y=79.5)

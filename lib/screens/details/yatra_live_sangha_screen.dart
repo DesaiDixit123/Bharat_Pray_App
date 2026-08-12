@@ -245,7 +245,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.black.withOpacity(0.45),
+      barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (ctx) {
         return Dialog(
           backgroundColor: Colors.transparent,
@@ -256,7 +256,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFF8400).withOpacity(0.45),
+                  color: const Color(0xFFFF8400).withValues(alpha: 0.45),
                   blurRadius: 26,
                   spreadRadius: 2,
                 ),
@@ -695,7 +695,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
   void _showTravelerProfilePopup(_TravelerProfile traveler) {
     showDialog<void>(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.35),
+      barrierColor: Colors.black.withValues(alpha: 0.35),
       builder: (context) {
         return Dialog(
           backgroundColor: Colors.transparent,
@@ -707,7 +707,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
               border: Border.all(color: const Color(0xFFF0CA9F), width: 1),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFF8A00).withOpacity(0.28),
+                  color: const Color(0xFFFF8A00).withValues(alpha: 0.28),
                   blurRadius: 22,
                   spreadRadius: 1,
                 ),
@@ -946,9 +946,9 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.22),
+                          color: Colors.white.withValues(alpha: 0.22),
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white.withOpacity(0.45), width: 1),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.45), width: 1),
                         ),
                         child: Center(
                           child: SvgPicture.string(
@@ -974,7 +974,7 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
                       child: Text(
                         'TRAVELERS ON YOUR ROUTE',
                         style: GoogleFonts.outfit(
-                          color: Colors.white.withOpacity(0.72),
+                          color: Colors.white.withValues(alpha: 0.72),
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.35,
@@ -1088,7 +1088,7 @@ class _TotalGroupProgressCard extends StatelessWidget {
           height: 54,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.95),
+            color: Colors.white.withValues(alpha: 0.95),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: const Color(0xFFE0C5A3), width: 1),
           ),
@@ -1145,8 +1145,8 @@ class _LiveSanghaCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.92),
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.white.withValues(alpha: 0.88),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFEADCCF), width: 1),
         boxShadow: [
           BoxShadow(
@@ -1355,7 +1355,7 @@ class _TravelerStrip extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFF1B1B1B).withOpacity(0.78),
+                color: const Color(0xFF1B1B1B).withValues(alpha: 0.78),
                 borderRadius: BorderRadius.circular(29),
                 border: Border.all(color: const Color(0xFFC8A882), width: 1),
               ),

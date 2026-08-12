@@ -238,14 +238,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  flutter_contacts:
-    dependency: "direct main"
-    description:
-      name: flutter_contacts
-      sha256: "388d32cd33f16640ee169570128c933b45f3259bddbfae7a100bb49e5ffea9ae"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.1.9+2"
   flutter_lints:
     dependency: "direct dev"
     description:
@@ -480,14 +472,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.2"
-  intl:
-    dependency: "direct main"
-    description:
-      name: intl
-      sha256: d6f56758b7d3014a48af9701c085700aac781a92a87a62b1333b46d8879661cf
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.19.0"
   jni:
     dependency: transitive
     description:
@@ -600,6 +584,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
+  page_flip:
+    dependency: "direct main"
+    description:
+      name: page_flip
+      sha256: e5bdcaa7d0fdff09ecdd8bd8fd4718ba3ec1b0d237de57a07b9c0f4d522cb387
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.5+1"
   path:
     dependency: transitive
     description:

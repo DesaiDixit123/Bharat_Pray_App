@@ -352,10 +352,10 @@ class _StartYatraOverviewScreenState extends State<StartYatraOverviewScreen> {
                                 gradient: LinearGradient(
                                   begin: Alignment.topCenter,
                                   end: Alignment.bottomCenter,
-                                  colors: [
-                                    Colors.black.withOpacity(0.35),
-                                    Colors.black.withOpacity(0.15),
-                                    Colors.black.withOpacity(0.75),
+                                  colors: [ // Corrected from withValues to withOpacity
+                                    Colors.black.withValues(alpha: 0.14),
+                                    Colors.black.withValues(alpha: 0.25),
+                                    Colors.black.withValues(alpha: 0.62),
                                   ],
                                   stops: const [0.0, 0.45, 1.0],
                                 ),
@@ -640,9 +640,9 @@ class _BackButton extends StatelessWidget {
         width: 48,
         height: 48,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.22),
+          color: Colors.white.withValues(alpha: 0.22),
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.white.withOpacity(0.55), width: 1.0),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.55), width: 1.0),
         ),
         child: Center(
           child: SvgPicture.string(
