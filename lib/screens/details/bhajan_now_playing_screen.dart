@@ -451,7 +451,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFFF7700).withOpacity(0.09),
+                      color: const Color(0xFFFF7700).withValues(alpha: 0.09),
                       blurRadius: 14,
                       offset: const Offset(0, 6),
                     ),
@@ -485,7 +485,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
               style: GoogleFonts.outfit(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
-                color: const Color(0xFF2E2A36).withOpacity(0.58),
+                color: const Color(0xFF2E2A36).withValues(alpha: 0.58),
               ),
             ),
             const SizedBox(height: 16),
@@ -540,7 +540,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
                     style: GoogleFonts.outfit(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: const Color(0xFF2E2A36).withOpacity(0.62),
+                      color: const Color(0xFF2E2A36).withValues(alpha: 0.62),
                     ),
                   ),
                   Text(
@@ -548,7 +548,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
                     style: GoogleFonts.outfit(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: const Color(0xFF2E2A36).withOpacity(0.62),
+                      color: const Color(0xFF2E2A36).withValues(alpha: 0.62),
                     ),
                   ),
                 ],
@@ -564,7 +564,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
                     Icons.skip_previous_rounded,
                     size: 42,
                     color: _previousTrack == null
-                        ? const Color(0xFF2E2A36).withOpacity(0.28)
+                        ? const Color(0xFF2E2A36).withValues(alpha: 0.28)
                         : const Color(0xFF2E2A36),
                   ),
                   onPressed: _previousTrack == null ? null : () => _openTrack(_previousTrack!),
@@ -591,7 +591,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
                     Icons.skip_next_rounded,
                     size: 42,
                     color: _nextTrack == null
-                        ? const Color(0xFF2E2A36).withOpacity(0.28)
+                        ? const Color(0xFF2E2A36).withValues(alpha: 0.28)
                         : const Color(0xFF2E2A36),
                   ),
                   onPressed: _nextTrack == null ? null : () => _openTrack(_nextTrack!),
@@ -608,7 +608,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
                   style: GoogleFonts.outfit(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0xFF2E2A36).withOpacity(0.65),
+                    color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
                   ),
                 ),
                 Switch(
@@ -639,7 +639,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
                       style: GoogleFonts.outfit(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: const Color(0xFF2E2A36).withOpacity(0.45),
+                        color: const Color(0xFF2E2A36).withValues(alpha: 0.45),
                       ),
                     ),
                   ],
@@ -651,7 +651,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
                     'No upcoming tracks.',
                     style: GoogleFonts.outfit(
                       fontSize: 14,
-                      color: const Color(0xFF2E2A36).withOpacity(0.6),
+                      color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
                     ),
                   ),
               ] else ...[
@@ -662,7 +662,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
                     style: GoogleFonts.outfit(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: const Color(0xFF2E2A36).withOpacity(0.42),
+                      color: const Color(0xFF2E2A36).withValues(alpha: 0.42),
                     ),
                   ),
                 ),
@@ -709,7 +709,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
           style: GoogleFonts.outfit(
             fontSize: 15,
             fontWeight: FontWeight.w500,
-            color: const Color(0xFF2E2A36).withOpacity(0.58),
+            color: const Color(0xFF2E2A36).withValues(alpha: 0.58),
           ),
         ),
         const SizedBox(height: 20),
@@ -748,8 +748,8 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
             borderRadius: BorderRadius.circular(16),
             gradient: LinearGradient(
               colors: [
-                const Color(0xFFFFF6EE).withOpacity(0),
-                const Color(0xFFF4DDBF).withOpacity(0.6),
+                const Color(0xFFFFF6EE).withValues(alpha: 0),
+                const Color(0xFFF4DDBF).withValues(alpha: 0.6),
               ],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -758,7 +758,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
           alignment: Alignment.bottomCenter,
           child: Icon(
             Icons.temple_hindu_rounded,
-            color: const Color(0xFFD4B28C).withOpacity(0.6),
+            color: const Color(0xFFD4B28C).withValues(alpha: 0.6),
             size: 48,
           ),
         ),
@@ -804,7 +804,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
                   widget.currentTrack.singer,
                   style: GoogleFonts.outfit(
                     fontSize: 12,
-                    color: const Color(0xFF2E2A36).withOpacity(0.56),
+                    color: const Color(0xFF2E2A36).withValues(alpha: 0.56),
                   ),
                 ),
               ],
@@ -895,7 +895,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
           track.singer,
           style: GoogleFonts.outfit(
             fontSize: 13,
-            color: const Color(0xFF2E2A36).withOpacity(0.56),
+            color: const Color(0xFF2E2A36).withValues(alpha: 0.56),
           ),
         ),
         trailing: const Icon(Icons.queue_music_rounded, color: Color(0xFFAF957C)),

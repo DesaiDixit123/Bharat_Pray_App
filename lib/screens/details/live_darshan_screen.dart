@@ -614,9 +614,9 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
             width: 54,
             height: 54,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
+              color: color.withValues(alpha: 0.15),
               shape: BoxShape.circle,
-              border: Border.all(color: color.withOpacity(0.3), width: 1),
+              border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
             ),
             child: Icon(icon, color: color, size: 26),
           ),
@@ -1501,9 +1501,9 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.08),
+                        color: Colors.white.withValues(alpha: 0.08),
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white.withOpacity(0.12)),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
                       ),
                       child: const Icon(
                         Icons.arrow_back_ios_new_rounded,
@@ -1566,10 +1566,10 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                       width: double.infinity,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: Colors.white.withOpacity(0.15)),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.5),
+                            color: Colors.black.withValues(alpha: 0.5),
                             blurRadius: 20,
                             offset: const Offset(0, 10),
                           ),
@@ -1602,7 +1602,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                                     end: Alignment.bottomCenter,
                                     colors: [
                                       Colors.transparent,
-                                      Colors.black.withOpacity(0.85),
+                                      Colors.black.withValues(alpha: 0.85),
                                     ],
                                   ),
                                 ),
@@ -1617,7 +1617,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                     decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(0.6),
+                                      color: Colors.black.withValues(alpha: 0.6),
                                       borderRadius: BorderRadius.circular(20),
                                       border: Border.all(color: Colors.white24),
                                     ),
@@ -1674,7 +1674,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFFFF7A00).withOpacity(0.35),
+                                  color: const Color(0xFFFF7A00).withValues(alpha: 0.35),
                                   blurRadius: 16,
                                   offset: const Offset(0, 6),
                                 ),
@@ -1719,9 +1719,9 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                                 child: Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.04),
+                                    color: Colors.white.withValues(alpha: 0.04),
                                     borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Colors.white.withOpacity(0.08)),
+                                    border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                                   ),
                                   child: Column(
                                     children: [
@@ -1749,9 +1749,9 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                                 child: Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.04),
+                                    color: Colors.white.withValues(alpha: 0.04),
                                     borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Colors.white.withOpacity(0.08)),
+                                    border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                                   ),
                                   child: Column(
                                     children: [
@@ -1792,7 +1792,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                           backgroundColor: const Color(0xFFFF7A00),
                           foregroundColor: Colors.white,
                           elevation: 4,
-                          shadowColor: const Color(0xFFFF7A00).withOpacity(0.4),
+                          shadowColor: const Color(0xFFFF7A00).withValues(alpha: 0.4),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(26),
                           ),
@@ -1830,7 +1830,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                       height: 50,
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: Colors.white.withOpacity(0.2), width: 1.0),
+                          side: BorderSide(color: Colors.white.withValues(alpha: 0.2), width: 1.0),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(25),
                           ),

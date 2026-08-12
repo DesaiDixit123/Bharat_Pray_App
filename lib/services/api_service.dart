@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'dart:typed_data';
 import '../models/user_model.dart';
 import '../models/yatra_model.dart';
 import '../models/journey_models.dart';
@@ -1021,9 +1020,12 @@ class ApiService {
   }
 
   // GET /api/granth-category
-  static Future<List<dynamic>> getGranthCategories() async {
+  static Future<List<dynamic>> getGranthCategories({String? token}) async {
     return _runGranthApi('GET /api/granth-category', () async {
-      final response = await _safeGet(Uri.parse('$baseUrl/api/granth-category'));
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/api/granth-category'),
+        headers: _optionalAuthHeaders(token), // Pass token if available
+      );
       return _processResponse(response)['Data'] ?? [];
     });
   }
@@ -1031,6 +1033,7 @@ class ApiService {
   // GET /api/granth-category/:categoryId/granths
   static Future<Map<String, dynamic>> getGranthsByCategory(
     String categoryId, {
+    String? token, // Add optional token parameter
     int page = 1,
     int limit = 10,
   }) async {
@@ -1038,7 +1041,7 @@ class ApiService {
       final uri = Uri.parse('$baseUrl/api/granth-category/$categoryId/granths').replace(
         queryParameters: {'page': '$page', 'limit': '$limit'},
       );
-      final response = await _safeGet(uri);
+      final response = await _safeGet(uri, headers: _optionalAuthHeaders(token)); // Pass token
       return _processResponse(response)['Data'] ?? {};
     });
   }

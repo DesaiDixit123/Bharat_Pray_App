@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/api_service.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPreferences
 
 import 'granth_chapter_list_screen.dart';
 
@@ -39,7 +41,11 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
       if (categoryId.isEmpty) {
         throw Exception('Category ID is missing.');
       }
-      final data = await ApiService.getGranthsByCategory(categoryId, limit: 50);
+
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token'); 
+
+      final data = await ApiService.getGranthsByCategory(categoryId, token: token, limit: 50);
       if (!mounted) return;
       setState(() {
         _granths = data['docs'] ?? [];
@@ -62,15 +68,13 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: Color(0xFF2E2A36),
+        leading: Center(
+          child: _GranthBackButton(
+            onTap: () => Navigator.pop(context),
           ),
-          onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          widget.category['title'] as String,
+          (widget.category['title'] ?? widget.category['name'] ?? '') as String,
           style: GoogleFonts.outfit(
             color: const Color(0xFF2E2A36),
             fontWeight: FontWeight.bold,
@@ -113,7 +117,7 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
       return Center(
         child: Text(
           'No granths available in this category.', style: GoogleFonts.outfit(
-            color: const Color(0xFF2E2A36).withOpacity(0.6))),
+            color: const Color(0xFF2E2A36).withValues(alpha: 0.6))),
       );
     }
 
@@ -133,7 +137,7 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFFF7700).withOpacity(0.2),
+                color: const Color(0xFFFF7700).withValues(alpha: 0.2),
                 blurRadius: 24,
                 offset: const Offset(0, 10),
               ),
@@ -146,21 +150,28 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
                 bottom: 0,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(20),
-                  child: ApiService.resolveImageUrl(widget.category['image'] as String? ?? '').startsWith('http')
-                      ? Image.network(
-                          ApiService.resolveImageUrl(widget.category['image'] as String? ?? ''),
-                          width: 134,
-                          height: 150,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => _placeholderImage(),
-                        )
-                      : Image.asset(
-                          widget.category['image'] as String,
-                          width: 134,
-                          height: 150,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => _placeholderImage(),
-                        ),
+                  child: Builder(builder: (context) {
+                    final imageUrl = ApiService.resolveImageUrl(widget.category['image'] as String?);
+                    if (imageUrl.isNotEmpty) {
+                      return imageUrl.startsWith('http')
+                          ? Image.network(
+                              imageUrl,
+                              width: 134,
+                              height: 150,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => _placeholderImage(),
+                            )
+                          : Image.asset(
+                              imageUrl,
+                              width: 134,
+                              height: 150,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => _placeholderImage(),
+                            );
+                    } else {
+                      return _placeholderImage();
+                    }
+                  }),
                 ),
               ),
               Positioned(
@@ -187,7 +198,7 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
                         fontSize: 13,
                         fontWeight: FontWeight.w500, // Corrected from withValues to withOpacity
                         height: 1.45,
-                        color: Colors.white.withOpacity(0.92),
+                        color: Colors.white.withValues(alpha: 0.92),
                       ),
                     ),
                   ],
@@ -207,12 +218,20 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
       width: 134,
       height: 150, // Corrected from withValues to withOpacity
       alignment: Alignment.center,
-      color: Colors.white.withOpacity(0.12),
+      color: Colors.white.withValues(alpha: 0.12),
       child: const Icon(
                           Icons.menu_book_rounded,
                           color: Colors.white,
                           size: 40,
       ),
+    );
+  }
+
+  Widget _granthPlaceholderIcon() {
+    return const Icon(
+      Icons.menu_book_rounded,
+      color: Color(0xFFB56E28),
+      size: 24,
     );
   }
 
@@ -225,7 +244,7 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
         border: Border.all(color: const Color(0xFFF3E4D6)),
         boxShadow: [
           BoxShadow( // Corrected from withValues to withOpacity
-            color: const Color(0xFFFF7700).withOpacity(0.06),
+            color: const Color(0xFFFF7700).withValues(alpha: 0.06),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -257,20 +276,30 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
                     color: const Color(0xFFFFF1E5),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: ApiService.resolveImageUrl(granth['coverImage'] as String? ?? '').startsWith('http')
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            ApiService.resolveImageUrl(granth['coverImage'] as String? ?? ''),
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => const Icon(
-                          Icons.menu_book_rounded,
-                          color: Color(0xFFB56E28),
-                          size: 24,
-                            ),
-                          ),
-                        )
-                      : const Icon(Icons.menu_book_rounded, color: Color(0xFFB56E28), size: 24),
+                  child: Builder(builder: (context) {
+                    final imageUrl = ApiService.resolveImageUrl(granth['coverImage'] as String?);
+                    if (imageUrl.isNotEmpty) {
+                      return imageUrl.startsWith('http')
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(
+                                imageUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) => _granthPlaceholderIcon(),
+                              ),
+                            )
+                          : ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.asset(
+                                imageUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) => _granthPlaceholderIcon(),
+                              ),
+                            );
+                    } else {
+                      return _granthPlaceholderIcon();
+                    }
+                  }),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -279,7 +308,7 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        granth['title'] as String,
+                        (granth['name'] ?? granth['title'] ?? '') as String,
                         style: GoogleFonts.outfit(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
@@ -292,7 +321,7 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
                         style: GoogleFonts.outfit(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          color: const Color(0xFF2E2A36).withOpacity(0.52),
+                          color: const Color(0xFF2E2A36).withValues(alpha: 0.52),
                         ),
                       ),
                     ],
@@ -318,3 +347,37 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
     );
   }
 }
+
+class _GranthBackButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _GranthBackButton({required this.onTap});
+
+  static const String _backArrowSvg = '<svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">'
+      '<path d="M2.87301 8.24994L8.56917 13.9461L7.49996 14.9999L0 7.49996L7.49996 0L8.56917 1.05382L2.87301 6.74998H14.9999V8.24994H2.87301Z" fill="#C8A882"/>'
+      '</svg>';
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          border: Border.all(color: const Color(0xFFC8A882), width: 1.0),
+        ),
+        child: Center(
+          child: SvgPicture.string(
+            _backArrowSvg,
+            width: 15,
+            height: 15,
+          ),
+        ),
+      ),
+    );
+  }
+}
+

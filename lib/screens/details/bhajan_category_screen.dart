@@ -136,7 +136,7 @@ class _BhajanScreenState extends State<BhajanScreen> {
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFF7700).withOpacity(0.12),
+            color: const Color(0xFFFF7700).withValues(alpha: 0.12),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -180,7 +180,7 @@ class _BhajanScreenState extends State<BhajanScreen> {
                     style: GoogleFonts.outfit(
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
-                      color: Colors.white.withOpacity(0.95),
+                      color: Colors.white.withValues(alpha: 0.95),
                       height: 1.35,
                     ),
                   ),
@@ -202,7 +202,7 @@ class _BhajanScreenState extends State<BhajanScreen> {
             _error,
             style: GoogleFonts.outfit(
               fontSize: 15,
-              color: const Color(0xFF2E2A36).withOpacity(0.7),
+              color: const Color(0xFF2E2A36).withValues(alpha: 0.7),
             ),
           ),
           const SizedBox(height: 12),
@@ -224,7 +224,7 @@ class _BhajanScreenState extends State<BhajanScreen> {
           'No bhajan categories found.',
           style: GoogleFonts.outfit(
             fontSize: 15,
-            color: const Color(0xFF2E2A36).withOpacity(0.6),
+            color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
           ),
         ),
       ),
@@ -240,7 +240,7 @@ class _BhajanScreenState extends State<BhajanScreen> {
         border: Border.all(color: const Color(0xFFF3E4D6)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -276,7 +276,7 @@ class _BhajanScreenState extends State<BhajanScreen> {
                       style: GoogleFonts.outfit(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        color: const Color(0xFF2E2A36).withOpacity(0.58),
+                        color: const Color(0xFF2E2A36).withValues(alpha: 0.58),
                       ),
                     ),
                   ],

@@ -217,7 +217,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
                 // Dark vignette
                 Positioned.fill(
-                  child: Container(color: Colors.black.withOpacity(0.35)),
+                  child: Container(color: Colors.black.withValues(alpha: 0.35)),
                 ),
 
                 // Back button
@@ -227,10 +227,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   child: SafeArea(
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.3),
+                        color: Colors.black.withValues(alpha: 0.3),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.12),
+                          color: Colors.white.withValues(alpha: 0.12),
                           width: 1.0,
                         ),
                       ),
@@ -256,10 +256,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                           child: Container(
                             padding: const EdgeInsets.all(28.0),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.45),
+                              color: Colors.black.withValues(alpha: 0.45),
                               borderRadius: BorderRadius.circular(32),
                               border: Border.all(
-                                color: Colors.white.withOpacity(0.12),
+                                color: Colors.white.withValues(alpha: 0.12),
                                 width: 1.2,
                               ),
                             ),
@@ -299,7 +299,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                   'A verification code has been sent to',
                                   style: GoogleFonts.outfit(
                                     fontSize: 14,
-                                    color: Colors.white.withOpacity(0.7),
+                                    color: Colors.white.withValues(alpha: 0.7),
                                   ),
                                   textAlign: TextAlign.center,
                                 ),
@@ -318,10 +318,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFFF7700).withOpacity(0.08),
+                                      color: const Color(0xFFFF7700).withValues(alpha: 0.08),
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
-                                        color: const Color(0xFFFF7700).withOpacity(0.24),
+                                        color: const Color(0xFFFF7700).withValues(alpha: 0.24),
                                         width: 1.0,
                                       ),
                                     ),
@@ -346,10 +346,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                       height: 50,
                                       child: Container(
                                         decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.04),
+                                          color: Colors.white.withValues(alpha: 0.04),
                                           borderRadius: BorderRadius.circular(12),
                                           border: Border.all(
-                                            color: Colors.white.withOpacity(0.12),
+                                            color: Colors.white.withValues(alpha: 0.12),
                                             width: 1.0,
                                           ),
                                         ),
@@ -408,7 +408,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                     text: TextSpan(
                                       text: _canResend ? '' : 'Resend in ',
                                       style: GoogleFonts.outfit(
-                                        color: Colors.white.withOpacity(0.6),
+                                        color: Colors.white.withValues(alpha: 0.6),
                                         fontSize: 14,
                                       ),
                                       children: [
@@ -470,7 +470,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                   'By clicking verify, you agree to receive spiritual updates and daily prayer notifications.',
                                   style: GoogleFonts.outfit(
                                     fontSize: 12,
-                                    color: Colors.white.withOpacity(0.4),
+                                    color: Colors.white.withValues(alpha: 0.4),
                                     height: 1.4,
                                   ),
                                   textAlign: TextAlign.center,

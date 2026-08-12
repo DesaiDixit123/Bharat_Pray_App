@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/api_service.dart';
 
 import 'granth_chapter_reader_screen.dart';
@@ -27,6 +29,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
   @override
   void initState() {
     super.initState();
+    _loadSavedChapters();
     _loadChapters();
   }
 
@@ -56,15 +59,31 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
       });
     }
   }
+  Future<void> _loadSavedChapters() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getStringList('saved_chapters') ?? [];
+      if (mounted) {
+        setState(() {
+          _savedChapterIds.addAll(saved);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading saved chapters: $e');
+    }
+  }
+
   String _chapterId(Map<String, dynamic> chapter) {
-    final number = chapter['number']?.toString() ?? '';
-    final title = chapter['title']?.toString() ?? '';
+    final id = chapter['_id']?.toString() ?? '';
+    if (id.isNotEmpty) return id;
+    final number = (chapter['number'] ?? chapter['chapterNumber'])?.toString() ?? '';
+    final title = (chapter['name'] ?? chapter['title'])?.toString() ?? '';
     return '$number-$title';
   }
 
-  void _toggleChapterSave(Map<String, dynamic> chapter) {
+  Future<void> _toggleChapterSave(Map<String, dynamic> chapter) async {
     final id = _chapterId(chapter);
-    final chapterTitle = chapter['title'] as String;
+    final chapterTitle = (chapter['name'] ?? chapter['title'] ?? '') as String;
     final isSaved = _savedChapterIds.contains(id);
 
     setState(() {
@@ -75,6 +94,14 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
       }
     });
 
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('saved_chapters', _savedChapterIds.toList());
+    } catch (e) {
+      debugPrint('Error saving chapters: $e');
+    }
+
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -95,29 +122,18 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: Color(0xFF2E2A36),
+        leading: Center(
+          child: _GranthBackButton(
+            onTap: () => Navigator.pop(context),
           ),
-          onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          widget.granth['title'] as String,
+          (widget.granth['name'] ?? widget.granth['title'] ?? '') as String,
           style: GoogleFonts.outfit(
             color: const Color(0xFF2E2A36),
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(
-              Icons.bookmark_border_rounded,
-              color: Color(0xFF2E2A36),
-            ),
-          ),
-        ],
       ),
       body: SafeArea(
         top: false,
@@ -172,20 +188,26 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-              ApiService.resolveImageUrl(widget.category['image'] as String? ?? '')
-                      .startsWith('http')
-                  ? Image.network(
-                        ApiService.resolveImageUrl(widget.category['image'] as String? ?? ''),
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => Container(color: const Color(0xFF8A4A18)),
-                      )
-                    : Image.asset(widget.category['image'] as String, fit: BoxFit.cover),
+              Builder(builder: (context) {
+                final imageUrl = ApiService.resolveImageUrl(widget.category['image'] as String?);
+                if (imageUrl.isNotEmpty) {
+                  return imageUrl.startsWith('http')
+                      ? Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => Container(color: const Color(0xFF8A4A18)),
+                        )
+                      : Image.asset(imageUrl, fit: BoxFit.cover);
+                } else {
+                  return Container(color: const Color(0xFF8A4A18)); // Placeholder if no image
+                }
+              }),
                 Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        Colors.black.withOpacity(0.42),
-                        const Color(0xFF7A3A0F).withOpacity(0.62),
+                        Colors.black.withValues(alpha: 0.42),
+                        const Color(0xFF7A3A0F).withValues(alpha: 0.62),
                       ],
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
@@ -199,7 +221,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       Text(
-                        widget.granth['title'] as String,
+                        (widget.granth['name'] ?? widget.granth['title'] ?? '') as String,
                         style: GoogleFonts.outfit(
                           fontSize: 24,
                           fontWeight: FontWeight.w700,
@@ -212,7 +234,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
                         style: GoogleFonts.outfit(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: Colors.white.withOpacity(0.92),
+                          color: Colors.white.withValues(alpha: 0.92),
                         ),
                       ),
                     ],
@@ -237,7 +259,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
             padding: const EdgeInsets.only(top: 40),
             child: Center(child: Text('No chapters found for this Granth.',
                 style: GoogleFonts.outfit(
-                    color: const Color(0xFF2E2A36).withOpacity(0.6)))),
+                    color: const Color(0xFF2E2A36).withValues(alpha: 0.6)))),
           )
         else
           ..._chapters.map((c) => _buildChapterCard(c as Map<String, dynamic>)),
@@ -256,7 +278,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
         border: Border.all(color: const Color(0xFFF3E4D6)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFF7700).withOpacity(0.06),
+            color: const Color(0xFFFF7700).withValues(alpha: 0.06),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -278,7 +300,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
                 width: 44,
@@ -300,7 +322,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      chapter['title'] as String,
+                      (chapter['name'] ?? chapter['title'] ?? '') as String,
                       style: GoogleFonts.outfit(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
@@ -313,28 +335,29 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
                       style: GoogleFonts.outfit(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: const Color(0xFF2E2A36).withOpacity(0.54),
+                        color: const Color(0xFF2E2A36).withValues(alpha: 0.54),
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              IconButton(
-                onPressed: () => _toggleChapterSave(chapter),
-                icon: Icon(
-                  isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                  color: isSaved ? const Color(0xFFFF8C1A) : const Color(0xFFBFA58B),
-                  size: 22,
+              GestureDetector(
+                onTap: () => _toggleChapterSave(chapter),
+                child: Tooltip(
+                  message: isSaved ? 'Unsave chapter' : 'Save chapter',
+                  child: Icon(
+                    isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                    color: isSaved ? const Color(0xFFFF8C1A) : const Color(0xFFBFA58B),
+                    size: 22,
+                  ),
                 ),
-                tooltip: isSaved ? 'Unsave chapter' : 'Save chapter',
               ),
-              const Center(
-                child: Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  color: Color(0xFFFF9B38),
-                  size: 18,
-                ),
+              const SizedBox(width: 10),
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: Color(0xFFFF9B38),
+                size: 18,
               ),
             ],
           ),
@@ -343,3 +366,37 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
     );
   }
 }
+
+class _GranthBackButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _GranthBackButton({required this.onTap});
+
+  static const String _backArrowSvg = '<svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">'
+      '<path d="M2.87301 8.24994L8.56917 13.9461L7.49996 14.9999L0 7.49996L7.49996 0L8.56917 1.05382L2.87301 6.74998H14.9999V8.24994H2.87301Z" fill="#C8A882"/>'
+      '</svg>';
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          border: Border.all(color: const Color(0xFFC8A882), width: 1.0),
+        ),
+        child: Center(
+          child: SvgPicture.string(
+            _backArrowSvg,
+            width: 15,
+            height: 15,
+          ),
+        ),
+      ),
+    );
+  }
+}
+

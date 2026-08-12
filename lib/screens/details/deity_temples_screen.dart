@@ -154,7 +154,7 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: const Color(0xFFFF7700).withOpacity(0.2),
+                        color: const Color(0xFFFF7700).withValues(alpha: 0.2),
                         width: 1.5,
                       ),
                     ),
@@ -280,8 +280,8 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFFFF7A00).withOpacity(0.05),
-            const Color(0xFFFF7A00).withOpacity(0.15),
+            const Color(0xFFFF7A00).withValues(alpha: 0.05),
+            const Color(0xFFFF7A00).withValues(alpha: 0.15),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -355,7 +355,7 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
               content,
               style: GoogleFonts.outfit(
                 fontSize: 14,
-                color: const Color(0xFF2E2A36).withOpacity(0.8),
+                color: const Color(0xFF2E2A36).withValues(alpha: 0.8),
                 height: 1.5,
               ),
             ),
@@ -373,7 +373,7 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
     required VoidCallback onTap,
   }) {
     final activeColor = const Color(0xFFFF7A00);
-    final inactiveColor = const Color(0xFF2E2A36).withOpacity(0.4);
+    final inactiveColor = const Color(0xFF2E2A36).withValues(alpha: 0.4);
 
     return GestureDetector(
       onTap: onTap,
@@ -642,7 +642,7 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
                                         'No temples found for this deity.',
                                         style: GoogleFonts.outfit(
                                           fontSize: 16,
-                                          color: const Color(0xFF2E2A36).withOpacity(0.5),
+                                          color: const Color(0xFF2E2A36).withValues(alpha: 0.5),
                                         ),
                                       ),
                                     )
@@ -703,7 +703,7 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
         border: Border.all(color: const Color(0xFFEFE6DB)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -750,7 +750,7 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.outfit(
                       fontSize: 11,
-                      color: const Color(0xFF2E2A36).withOpacity(0.5),
+                      color: const Color(0xFF2E2A36).withValues(alpha: 0.5),
                     ),
                   ),
                   const SizedBox(height: 8),

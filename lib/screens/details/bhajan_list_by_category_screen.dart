@@ -270,7 +270,7 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
                             'No bhajans available in this section.',
                             style: GoogleFonts.outfit(
                               fontSize: 15,
-                            color: const Color(0xFF2E2A36).withOpacity(0.6),
+                            color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
                             ),
                           ),
                         ),
@@ -323,7 +323,7 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
             _error,
             style: GoogleFonts.outfit(
               fontSize: 14,
-              color: const Color(0xFF2E2A36).withOpacity(0.7),
+              color: const Color(0xFF2E2A36).withValues(alpha: 0.7),
             ),
             textAlign: TextAlign.center,
           ),
@@ -345,7 +345,7 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFF7700).withOpacity(0.12),
+            color: const Color(0xFFFF7700).withValues(alpha: 0.12),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -392,7 +392,7 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
                         fontSize: 13,
                         height: 1.35,
                         fontWeight: FontWeight.w500,
-                        color: Colors.white.withOpacity(0.95),
+                        color: Colors.white.withValues(alpha: 0.95),
                       ),
                     ),
                   ),
@@ -433,7 +433,7 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
                 boxShadow: selected
                     ? [
                         BoxShadow(
-                          color: const Color(0xFFFF7700).withOpacity(0.25),
+                          color: const Color(0xFFFF7700).withValues(alpha: 0.25),
                           blurRadius: 8,
                           offset: const Offset(0, 4),
                         ),
@@ -475,7 +475,7 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
         border: Border.all(color: const Color(0xFFF3E4D6)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -504,7 +504,7 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
             track.singer,
             style: GoogleFonts.outfit(
               fontSize: 13,
-              color: const Color(0xFF2E2A36).withOpacity(0.55),
+              color: const Color(0xFF2E2A36).withValues(alpha: 0.55),
             ),
           ),
           trailing: SizedBox(
@@ -583,7 +583,7 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
                   track.singer,
                   style: GoogleFonts.outfit(
                     fontSize: 12,
-                    color: const Color(0xFF2E2A36).withOpacity(0.55),
+                    color: const Color(0xFF2E2A36).withValues(alpha: 0.55),
                   ),
                 ),
               ],
