@@ -47,6 +47,8 @@ dependencies:
   flip_page: ^0.1.3
   share_plus: ^13.3.0
   page_flip: ^0.2.5+1
+  flutter_contacts: ^1.1.7
+  intl: ^0.20.3
 
 dev_dependencies:
   flutter_test:
