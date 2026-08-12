@@ -9,11 +9,11 @@ import '../models/journey_models.dart';
 
 class ApiService {
   // Set to true to use the live production server, false for local testing
-  static const bool isLive = true;
+  static const bool isLive = false;
 
-  // Local backend IP: Wi-Fi IP / ADB Reverse = 127.0.0.1, Port = 3021
+  // Local backend IP: Active ADB Reverse USB Tunnel = 127.0.0.1, Port = 3020
   static const String _localIp = '127.0.0.1';
-  static const int _localPort = 3021;
+  static const int _localPort = 3020;
   static String get baseUrl {
     if (isLive) {
       return 'https://api.bharatpray.com';
@@ -63,12 +63,24 @@ class ApiService {
     var trimmed = url.trim();
     if (trimmed.startsWith('assets/')) return trimmed; // Keep local assets as is
 
+    // Keep absolute local filesystem paths unchanged (so local cache/picked files load correctly)
+    if (trimmed.startsWith('/data/') ||
+        trimmed.startsWith('/storage/') ||
+        trimmed.startsWith('file://') ||
+        trimmed.startsWith('/Users/')) {
+      return trimmed;
+    }
+
     // Remap any production/legacy IP host to active baseUrl
     trimmed = trimmed.replaceAll('https://api.bharatpray.com', baseUrl);
     trimmed = trimmed.replaceAll('http://api.bharatpray.com', baseUrl);
+    trimmed = trimmed.replaceAll('https://localhost:3021', baseUrl);
     trimmed = trimmed.replaceAll('http://localhost:3021', baseUrl);
+    trimmed = trimmed.replaceAll('https://127.0.0.1:3021', baseUrl);
     trimmed = trimmed.replaceAll('http://127.0.0.1:3021', baseUrl);
+    trimmed = trimmed.replaceAll('https://localhost:3020', baseUrl);
     trimmed = trimmed.replaceAll('http://localhost:3020', baseUrl);
+    trimmed = trimmed.replaceAll('https://127.0.0.1:3020', baseUrl);
     trimmed = trimmed.replaceAll('http://127.0.0.1:3020', baseUrl);
     trimmed = trimmed.replaceAll('http://192.168.29.249:3020', baseUrl);
     trimmed = trimmed.replaceAll('http://192.168.29.249:3021', baseUrl);
@@ -317,19 +329,71 @@ class ApiService {
   }
 
   // POST /user/jap/sync-progress
-  static Future<Map<String, dynamic>> syncJapProgress(String token, String japId, int count) async {
+  static Future<Map<String, dynamic>> syncJapProgress(
+    String token,
+    String japId,
+    int count, {
+    int? completedMalas,
+    String? sessionId,
+    DateTime? lastJapAt,
+  }) async {
+    final bodyPayload = <String, dynamic>{
+      'japId': japId,
+      'count': count,
+    };
+    if (completedMalas != null) bodyPayload['completedMalas'] = completedMalas;
+    if (sessionId != null) bodyPayload['sessionId'] = sessionId;
+    if (lastJapAt != null) bodyPayload['lastJapAt'] = lastJapAt.toIso8601String();
+
     final response = await _safePost(
       Uri.parse('$baseUrl/user/jap/sync-progress'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
+      body: json.encode(bodyPayload),
+    );
+    return _processResponse(response)['Data'] ?? {};
+  }
+
+  // POST /user/jap/start-session
+  static Future<Map<String, dynamic>> startJapSession(String token, String japId, {String? sessionId}) async {
+    final response = await _safePost(
+      Uri.parse('$baseUrl/user/jap/start-session'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
       body: json.encode({
         'japId': japId,
-        'count': count
+        if (sessionId != null) 'sessionId': sessionId,
       }),
     );
-    return _processResponse(response)['Data'];
+    return _processResponse(response)['Data'] ?? {};
+  }
+
+  // GET /user/jap/active-session/:id
+  static Future<Map<String, dynamic>> getActiveJapSession(String token, String japId) async {
+    final response = await _safeGet(
+      Uri.parse('$baseUrl/user/jap/active-session/$japId'),
+      headers: {
+        'Authorization': 'Bearer $token',
+      },
+    );
+    return _processResponse(response)['Data'] ?? {};
+  }
+
+  // POST /user/jap/complete-session
+  static Future<Map<String, dynamic>> completeJapSession(String token, String japId) async {
+    final response = await _safePost(
+      Uri.parse('$baseUrl/user/jap/complete-session'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({'japId': japId}),
+    );
+    return _processResponse(response)['Data'] ?? {};
   }
 
   // GET /user/darshan/list

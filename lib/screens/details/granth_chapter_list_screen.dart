@@ -64,7 +64,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
 
   void _toggleChapterSave(Map<String, dynamic> chapter) {
     final id = _chapterId(chapter);
-    final chapterTitle = chapter['title'] as String;
+    final chapterTitle = (chapter['title'] ?? chapter['name'] ?? 'Chapter').toString();
     final isSaved = _savedChapterIds.contains(id);
 
     setState(() {
@@ -103,7 +103,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          widget.granth['title'] as String,
+          (widget.granth['name'] ?? widget.granth['title'] ?? 'Granth').toString(),
           style: GoogleFonts.outfit(
             color: const Color(0xFF2E2A36),
             fontWeight: FontWeight.bold,
@@ -172,14 +172,14 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-              ApiService.resolveImageUrl(widget.category['image'] as String? ?? '')
+              ApiService.resolveImageUrl((widget.category['image'] ?? '').toString())
                       .startsWith('http')
                   ? Image.network(
-                        ApiService.resolveImageUrl(widget.category['image'] as String? ?? ''),
+                        ApiService.resolveImageUrl((widget.category['image'] ?? '').toString()),
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) => Container(color: const Color(0xFF8A4A18)),
                       )
-                    : Image.asset(widget.category['image'] as String, fit: BoxFit.cover),
+                  : Image.asset((widget.category['image'] ?? 'assets/images/granth_card.png').toString(), fit: BoxFit.cover, errorBuilder: (_, _, _) => Container(color: const Color(0xFF8A4A18))),
                 Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -199,7 +199,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       Text(
-                        widget.granth['title'] as String,
+                        (widget.granth['name'] ?? widget.granth['title'] ?? 'Sacred Granth').toString(),
                         style: GoogleFonts.outfit(
                           fontSize: 24,
                           fontWeight: FontWeight.w700,
@@ -208,7 +208,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        '${widget.granth['totalChapters'] ?? 0} Chapters',
+                        '${widget.granth['totalChapters'] ?? widget.granth['totalPages'] ?? _chapters.length} Chapters',
                         style: GoogleFonts.outfit(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -300,7 +300,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      chapter['title'] as String,
+                      (chapter['name'] ?? chapter['title'] ?? 'Chapter').toString(),
                       style: GoogleFonts.outfit(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
@@ -309,7 +309,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      chapter['translation'] as String? ?? 'Translation not available',
+                      (chapter['sanskritName'] ?? chapter['description'] ?? chapter['translation'] ?? 'Sacred chapter content').toString(),
                       style: GoogleFonts.outfit(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,

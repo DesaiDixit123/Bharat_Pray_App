@@ -1,71 +1,22 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'upload_god_photo_screen.dart';
-import 'dart:math' as math;
-import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../models/jap_models.dart';
+import '../../models/particles.dart';
 import '../../services/api_service.dart';
+import '../../services/jap_offline_repository.dart';
+import '../../services/jap_session_controller.dart';
+import 'darshan_runtime_screen.dart';
+import 'upload_god_photo_screen.dart';
 
 // ─────────────────────────────────────────────
-// Data model for a single Jap entry
-// ─────────────────────────────────────────────
-class JapEntry {
-  final String id;
-  final String name;
-  final String mantra;
-  final String imagePath;
-  final String? detailImagePath;
-  final String? audioUrl;
-  final int target;
-  int progress; // how many japs done so far
-  final String? particleShape;
-  final String? blessingTitle;
-  final String? blessingSubtitle;
-
-  JapEntry({
-    required this.id,
-    required this.name,
-    required this.mantra,
-    required this.imagePath,
-    this.detailImagePath,
-    this.audioUrl,
-    this.target = 108,
-    this.progress = 0,
-    this.particleShape,
-    this.blessingTitle,
-    this.blessingSubtitle,
-  });
-
-  static String _sanitizeUrl(String? url) {
-    return ApiService.resolveImageUrl(url);
-  }
-
-  factory JapEntry.fromJson(Map<String, dynamic> json) {
-    final rawThumb = json['thumbnail'] ?? '';
-    final rawDarshan = json['darshanImage'] ?? rawThumb;
-    final rawAudio = json['shlokAudio'] ?? '';
-
-    return JapEntry(
-      id: json['_id'] ?? '',
-      name: json['name'] ?? '',
-      mantra: json['shlokText'] ?? '',
-      imagePath: _sanitizeUrl(rawThumb),
-      detailImagePath: _sanitizeUrl(rawDarshan),
-      audioUrl: _sanitizeUrl(rawAudio),
-      target: json['targetCount'] ?? 108,
-      progress: json['progress'] ?? 0,
-      particleShape: json['particleShape'],
-      blessingTitle: json['blessingTitle'],
-      blessingSubtitle: json['blessingSubtitle'],
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-// Main List Screen
+// Main Jap List Screen
 // ─────────────────────────────────────────────
 class JapCounterScreen extends StatefulWidget {
   final bool isTab;
@@ -78,10 +29,16 @@ class JapCounterScreen extends StatefulWidget {
 class _JapCounterScreenState extends State<JapCounterScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
-  
+
   bool _isLoading = true;
   String _token = '';
-  List<JapEntry> _allJaps = [];
+  List<JapConfig> _allJaps = [];
+
+  // Dynamic user profile fields matching HomeScreen
+  String _profileName = 'Devotee';
+  String _profilePic = '';
+  int _notificationCount = 2;
+  int _messageCount = 1;
 
   @override
   void initState() {
@@ -90,36 +47,203 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
   }
 
   Future<void> _fetchJaps() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      _token = prefs.getString('auth_token') ?? '';
-      
-      if (_token.isNotEmpty) {
-        final data = await ApiService.getJapList(_token);
-        if (mounted) {
-          setState(() {
-            _allJaps = data.map((e) => JapEntry.fromJson(e)).toList();
-            _isLoading = false;
-          });
+    final prefs = await SharedPreferences.getInstance();
+    _token = prefs.getString('auth_token') ?? '';
+
+    // Load local SharedPreferences profile cache first
+    _profileName = prefs.getString('user_name') ?? 'Ayush Kyada';
+    _profilePic = prefs.getString('profile_pic') ?? '';
+
+    // 1. Fetch dynamic user info (non-blocking)
+    if (_token.isNotEmpty) {
+      try {
+        final homeData = await ApiService.getDarshanHome(_token);
+        if (homeData['user'] != null) {
+          _profileName = homeData['user']['name'] ?? _profileName;
+          _profilePic = homeData['user']['profile_pic'] ?? _profilePic;
+          _notificationCount = homeData['notificationCount'] ?? 2;
+          _messageCount = homeData['messageCount'] ?? 1;
         }
-      } else {
-        setState(() => _isLoading = false);
+      } catch (e) {
+        debugPrint('[JapCounterScreen] Error fetching user profile: $e');
+      }
+    }
+
+    // 2. Fetch remote japs (isolated try-catch so failures don't block offline japs)
+    List<JapConfig> remoteJaps = [];
+    if (_token.isNotEmpty) {
+      try {
+        final data = await ApiService.getJapList(_token);
+        remoteJaps = data.map((e) => JapConfig.fromJson(e)).toList();
+      } catch (e) {
+        debugPrint('[JapCounterScreen] Error fetching remote japs: $e');
+      }
+    }
+
+    // 3. Load custom user Japs from local offline storage (always runs)
+    List<JapConfig> customJaps = [];
+    try {
+      final customJapsRaw = await JapOfflineRepository.getCustomJaps();
+      customJaps = customJapsRaw
+          .map((e) => JapConfig.fromJson(e))
+          .toList();
+    } catch (e) {
+      debugPrint('[JapCounterScreen] Error loading local custom japs: $e');
+    }
+
+    // 4. Combine and overlay local cached progress
+    final combined = [...customJaps, ...remoteJaps];
+    try {
+      for (final jap in combined) {
+        final cached = await JapOfflineRepository.getProgress(
+          jap.id,
+          defaultTarget: jap.targetCount,
+        );
+        if (cached['count']! > 0 || cached['completedMalas']! > 0) {
+          final totalCached =
+              (cached['completedMalas']! * jap.targetCount) + cached['count']!;
+          if (totalCached > jap.progress) {
+            jap.progress = totalCached;
+          }
+        }
       }
     } catch (e) {
-      debugPrint('Error fetching japs: $e');
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      debugPrint('[JapCounterScreen] Error overlaying progress: $e');
+    }
+
+    if (mounted) {
+      setState(() {
+        _allJaps = combined;
+        _isLoading = false;
+      });
     }
   }
 
-  List<JapEntry> get _filteredJaps {
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) {
+      return 'Good Morning';
+    } else if (hour < 17) {
+      return 'Good Afternoon';
+    } else {
+      return 'Good Evening';
+    }
+  }
+
+  String _getGreetingIcon() {
+    final hour = DateTime.now().hour;
+    if (hour < 17) {
+      return '☀️';
+    } else {
+      return '🌙';
+    }
+  }
+
+  String _resolveProfilePic(String pic) {
+    return ApiService.resolveImageUrl(pic);
+  }
+
+  String _getMailSvg(int count) {
+    final fill = count > 0 ? '#FF0000' : 'none';
+    return '''<svg width="26" height="24" viewBox="0 0 26 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M6.01417 3.9978C3.80516 3.9978 2.01416 5.7888 2.01416 7.9978V15.9978C2.01416 18.2068 3.80516 19.9978 6.01417 19.9978H18.0142C20.2232 19.9978 22.0142 18.2068 22.0142 15.9978V7.9978C22.0142 5.7888 20.2232 3.9978 18.0142 3.9978H6.01417ZM6.01417 5.9978H18.0142C19.0222 5.9978 19.8552 6.73781 19.9932 7.70781C19.0352 8.60081 17.6112 9.6968 16.6702 10.3728C14.5052 11.9278 12.6002 12.9978 12.0142 12.9978C11.4282 12.9978 9.52317 11.9288 7.35816 10.3728C6.41716 9.6968 5.49217 8.9658 4.79517 8.3728C4.49817 8.1198 4.27816 7.9158 4.10816 7.7478C4.24616 6.7778 5.00616 5.9978 6.01417 5.9978ZM4.02417 10.3518C6.56218 12.4048 10.2812 14.9858 12.0142 14.9978C13.1432 15.0058 15.0742 13.9278 17.0442 12.5668C18.0632 11.8618 19.1972 11.0248 20.0152 10.3378L20.0142 15.9978C20.0142 17.1028 19.1192 17.9978 18.0142 17.9978H6.01417C4.90916 17.9978 4.01416 17.1028 4.01416 15.9978L4.02417 10.3518Z" fill="#6B4226"/>
+<circle cx="22" cy="4.5" r="4" fill="$fill"/>
+</svg>''';
+  }
+
+  String _getBellSvg(int count) {
+    final fill = count > 0 ? '#FF0000' : 'none';
+    return '''<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 6.43994V9.76994" stroke="#6B4226" stroke-width="1.5" stroke-miterlimit="10" stroke-linecap="round"/>
+<path d="M12.02 2C8.34002 2 5.36002 4.98 5.36002 8.66V10.76C5.36002 11.44 5.08002 12.46 4.73002 13.04L3.46002 15.16C2.68002 16.47 3.22002 17.93 4.66002 18.41C9.44002 20 14.61 20 19.39 18.41C20.74 17.96 21.32 16.38 20.59 15.16L19.32 13.04C18.97 12.46 18.69 11.43 18.69 10.76V8.66C18.68 5 15.68 2 12.02 2Z" stroke="#6B4226" stroke-width="1.5" stroke-miterlimit="10" stroke-linecap="round"/>
+<path d="M15.33 18.8199C15.33 20.6499 13.83 22.1499 12 22.1499C11.09 22.1499 10.25 21.7699 9.65004 21.1699C9.05004 20.5699 8.67004 19.7299 8.67004 18.8199" stroke="#6B4226" stroke-width="1.5" stroke-miterlimit="10"/>
+<circle cx="18" cy="4.5" r="4" fill="$fill"/>
+</svg>''';
+  }
+
+  void _showMailNotificationSheet(
+    BuildContext context,
+    String title,
+    String content,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (BuildContext context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFFFFF0E6),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.outfit(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF2E2A36),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Color(0xFF2E2A36)),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFEFE6DB)),
+                ),
+                child: Text(
+                  content,
+                  style: GoogleFonts.outfit(
+                    fontSize: 14,
+                    color: const Color(0xFF2E2A36).withValues(alpha: 0.8),
+                    height: 1.5,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  List<JapConfig> get _filteredJaps {
     if (_searchQuery.isEmpty) return _allJaps;
     final q = _searchQuery.toLowerCase();
     return _allJaps
-        .where((j) =>
-            j.name.toLowerCase().contains(q) ||
-            j.mantra.toLowerCase().contains(q))
+        .where(
+          (j) =>
+              j.name.toLowerCase().contains(q) ||
+              j.shlokText.toLowerCase().contains(q),
+        )
         .toList();
   }
 
@@ -129,26 +253,84 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
     super.dispose();
   }
 
-  void _openJapDetail(JapEntry entry) async {
+  void _openJapDetail(JapConfig entry) async {
     final updatedProgress = await Navigator.push<int>(
       context,
-      MaterialPageRoute(
-        builder: (_) => JapDetailScreen(entry: entry),
-      ),
+      MaterialPageRoute(builder: (_) => JapDetailScreen(entry: entry)),
     );
+
     if (updatedProgress != null) {
       setState(() {
         entry.progress = updatedProgress;
       });
-      
-      // Sync to backend if it's a valid remote Jap (valid MongoDB ObjectId length)
+
+      // Save locally
+      await JapOfflineRepository.saveProgress(
+        japId: entry.id,
+        count: updatedProgress % entry.targetCount,
+        completedMalas: updatedProgress ~/ entry.targetCount,
+      );
+
+      // Trigger cloud sync if remote
       if (_token.isNotEmpty && entry.id.isNotEmpty && entry.id.length == 24) {
         try {
           await ApiService.syncJapProgress(_token, entry.id, updatedProgress);
+          await JapOfflineRepository.markSynced(entry.id);
         } catch (e) {
-          debugPrint('Error syncing progress: $e');
+          debugPrint('[JapCounterScreen] Background sync error: $e');
         }
       }
+    }
+  }
+
+  Future<void> _onAddPhotoTap() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const UploadGodPhotoScreen()),
+    );
+    if (result == null || !mounted) return;
+
+    if (result is CustomJapDetails) {
+      final newCustomConfig = JapConfig(
+        id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
+        name: result.name,
+        thumbnailUrl: result.coverImagePath,
+        darshanImageUrl: result.godImagePath,
+        shlokText: '',
+        shlokAudioUrl: result.audioFilePath,
+        targetCount: result.chantCount,
+        progress: 0,
+        effectPack: EffectPack.resolve(
+          name: result.name,
+          particleShape: result.particleEffect,
+        ),
+      );
+
+      await JapOfflineRepository.saveCustomJap({
+        '_id': newCustomConfig.id,
+        'name': newCustomConfig.name,
+        'thumbnail': newCustomConfig.thumbnailUrl,
+        'darshanImage': newCustomConfig.darshanImageUrl,
+        'shlokText': newCustomConfig.shlokText,
+        'shlokAudio': newCustomConfig.shlokAudioUrl,
+        'targetCount': newCustomConfig.targetCount,
+        'progress': 0,
+      });
+
+      if (!mounted) return;
+      setState(() {
+        _allJaps.insert(0, newCustomConfig);
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFFFF7700),
+          content: Text(
+            'Added "${result.name}" successfully!',
+            style: GoogleFonts.outfit(color: Colors.white),
+          ),
+        ),
+      );
     }
   }
 
@@ -161,37 +343,124 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header ──────────────────────────────
+            // ── Dynamic Header Matching HomeScreen ────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 22,
-                    backgroundImage:
-                        const AssetImage('assets/images/image_3.png'),
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFFFFE6D5),
+                      border: Border.all(
+                        color: const Color(0xFFFF7700).withValues(alpha: 0.2),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: ClipOval(
+                      child: _profilePic.isNotEmpty
+                          ? Image.network(
+                              _resolveProfilePic(_profilePic),
+                              width: 48,
+                              height: 48,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Center(
+                                  child: Text(
+                                    _profileName.isNotEmpty
+                                        ? _profileName[0].toUpperCase()
+                                        : 'U',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFFFF7700),
+                                    ),
+                                  ),
+                                );
+                              },
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return const Center(
+                                  child: CircularProgressIndicator(
+                                    color: Color(0xFFFF7700),
+                                    strokeWidth: 2,
+                                  ),
+                                );
+                              },
+                            )
+                          : Center(
+                              child: Text(
+                                _profileName.isNotEmpty
+                                    ? _profileName[0].toUpperCase()
+                                    : 'U',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFFFF7700),
+                                ),
+                              ),
+                            ),
+                    ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Jai Shree Ram 🙏',
-                            style: GoogleFonts.outfit(
+                        Row(
+                          children: [
+                            Text(
+                              'Jai Shree Ram',
+                              style: GoogleFonts.outfit(
+                                fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                fontSize: 15,
-                                color: const Color(0xFF2E2A36))),
-                        Text('Good Morning, Shiv 🌟',
-                            style: GoogleFonts.outfit(
-                                fontSize: 12,
-                                color: const Color(0xFF2E2A36)
-                                    .withValues(alpha: 0.5))),
+                                color: const Color(0xFF2E2A36),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Text('🙏', style: TextStyle(fontSize: 14)),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_getGreeting()}, $_profileName ${_getGreetingIcon()}',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ],
                     ),
                   ),
-                  _iconBtn(Icons.mail_outline_rounded),
-                  const SizedBox(width: 8),
-                  _iconBtn(Icons.notifications_none_rounded, hasDot: true),
+                  GestureDetector(
+                    onTap: () => _showMailNotificationSheet(
+                      context,
+                      "Messages",
+                      "You have a new message from the Somnath Temple Trust: 'The morning Aarti timings have been adjusted to 06:00 AM due to the summer season.'",
+                    ),
+                    child: SvgPicture.string(
+                      _getMailSvg(_messageCount),
+                      width: 24,
+                      height: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  GestureDetector(
+                    onTap: () => _showMailNotificationSheet(
+                      context,
+                      "Notifications",
+                      "📿 Daily Chant Reminder: You have not completed your Jap goals for today. Tap the center bead button to start chanting.",
+                    ),
+                    child: SvgPicture.string(
+                      _getBellSvg(_notificationCount),
+                      width: 24,
+                      height: 24,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -203,7 +472,6 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
                 children: [
-                  // Go back button (width: 40, height: 40, border: 1px solid #C8A882, radius: 124)
                   GestureDetector(
                     onTap: () {
                       if (Navigator.canPop(context)) {
@@ -216,7 +484,10 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
-                        border: Border.all(color: const Color(0xFFC8A882), width: 1.0),
+                        border: Border.all(
+                          color: const Color(0xFFC8A882),
+                          width: 1.0,
+                        ),
                       ),
                       child: Center(
                         child: SvgPicture.string(
@@ -230,14 +501,16 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  // Search bar (width: 297, height: 43, border: 1px solid #C8A882, radius: 89)
                   Expanded(
                     child: Container(
                       height: 43,
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(89),
-                        border: Border.all(color: const Color(0xFFC8A882), width: 1.0),
+                        border: Border.all(
+                          color: const Color(0xFFC8A882),
+                          width: 1.0,
+                        ),
                       ),
                       child: TextField(
                         controller: _searchController,
@@ -247,10 +520,12 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                           color: const Color(0xFFC8A882),
                         ),
                         decoration: InputDecoration(
-                          hintText: 'Search gods, temples, bhajans...',
+                          hintText: 'Search gods, temples, mantras...',
                           hintStyle: GoogleFonts.outfit(
                             fontSize: 13,
-                            color: const Color(0xFFC8A882).withValues(alpha: 0.6),
+                            color: const Color(
+                              0xFFC8A882,
+                            ).withValues(alpha: 0.6),
                           ),
                           prefixIcon: Padding(
                             padding: const EdgeInsets.all(12),
@@ -269,12 +544,17 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                                     _searchController.clear();
                                     setState(() => _searchQuery = '');
                                   },
-                                  child: const Icon(Icons.close_rounded,
-                                      color: Color(0xFFC8A882), size: 18),
+                                  child: const Icon(
+                                    Icons.close_rounded,
+                                    color: Color(0xFFC8A882),
+                                    size: 18,
+                                  ),
                                 )
                               : null,
                           border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                          ),
                         ),
                       ),
                     ),
@@ -289,41 +569,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: GestureDetector(
-                onTap: () async {
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const UploadGodPhotoScreen(),
-                    ),
-                  );
-                  if (result == null) return;
-                  if (!context.mounted) return;
-                  
-                  if (result is CustomJapDetails) {
-                    setState(() {
-                      _allJaps.insert(
-                        0,
-                        JapEntry(
-                          id: DateTime.now().millisecondsSinceEpoch.toString(),
-                          name: result.name,
-                          mantra: result.mantra,
-                          imagePath: result.imagePath,
-                          target: result.target,
-                          progress: 0,
-                        ),
-                      );
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        backgroundColor: const Color(0xFFFF7700),
-                        content: Text(
-                          'Added "${result.name}" successfully!',
-                          style: GoogleFonts.outfit(color: Colors.white),
-                        ),
-                      ),
-                    );
-                  }
-                },
+                onTap: _onAddPhotoTap,
                 child: Container(
                   height: 50,
                   width: double.infinity,
@@ -336,15 +582,20 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.add_rounded,
-                          color: Colors.white, size: 22),
+                      const Icon(
+                        Icons.add_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
                       const SizedBox(width: 6),
-                      Text('Add Photo',
-                          style: GoogleFonts.poppins(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w400,
-                              fontSize: 14,
-                              height: 1.0)),
+                      Text(
+                        'Add Photo',
+                        style: GoogleFonts.outfit(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -358,9 +609,11 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
               child: RefreshIndicator(
                 color: const Color(0xFFFF7700),
                 onRefresh: _fetchJaps,
-                child: _isLoading 
+                child: _isLoading
                     ? const Center(
-                        child: CircularProgressIndicator(color: Color(0xFFFF7700)),
+                        child: CircularProgressIndicator(
+                          color: Color(0xFFFF7700),
+                        ),
                       )
                     : filtered.isEmpty
                     ? ListView(
@@ -369,25 +622,31 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                           SizedBox(
                             height: 300,
                             child: Center(
-                              child: Text('No results found',
-                                  style: GoogleFonts.outfit(
-                                      color: const Color(0xFF2E2A36)
-                                          .withValues(alpha: 0.4),
-                                      fontSize: 15)),
+                              child: Text(
+                                'No results found',
+                                style: GoogleFonts.outfit(
+                                  color: const Color(
+                                    0xFF2E2A36,
+                                  ).withValues(alpha: 0.4),
+                                  fontSize: 15,
+                                ),
+                              ),
                             ),
                           ),
                         ],
                       )
                     : ListView.separated(
-                        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                        physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics(),
+                        ),
                         padding: EdgeInsets.fromLTRB(
-                            16,
-                            0,
-                            16,
-                            widget.isTab
-                                ? 140 +
-                                    MediaQuery.of(context).padding.bottom
-                                : 20),
+                          16,
+                          0,
+                          16,
+                          widget.isTab
+                              ? 140 + MediaQuery.of(context).padding.bottom
+                              : 20,
+                        ),
                         itemCount: filtered.length,
                         separatorBuilder: (ctx, idx) =>
                             const SizedBox(height: 14),
@@ -407,210 +666,210 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
     );
   }
 
-  Widget _iconBtn(IconData icon, {bool hasDot = false}) {
-    return Stack(
-      children: [
-        Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFFEFE6DB)),
-          ),
-          child: Icon(icon, size: 20, color: const Color(0xFF2E2A36)),
-        ),
-        if (hasDot)
-          Positioned(
-            top: 4,
-            right: 4,
-            child: Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                color: Color(0xFFFF3B42),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
+
 }
 
 // ─────────────────────────────────────────────
-// Individual Jap Card  (width:353, height:200, radius:32)
+// Individual Jap Card
 // ─────────────────────────────────────────────
 class _JapCard extends StatelessWidget {
-  final JapEntry entry;
+  final JapConfig entry;
   final VoidCallback onTap;
 
   const _JapCard({required this.entry, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final double fraction = entry.progress / entry.target;
-    final bool inProgress = entry.progress > 0 && entry.progress < entry.target;
-    final bool completed = entry.progress >= entry.target;
+    final progress = entry.progress;
+    final target = entry.targetCount;
+    final progressRatio = (progress / target).clamp(0.0, 1.0);
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 353,
-        height: 200,
+        height: 180,
+        width: double.infinity,
         decoration: BoxDecoration(
+          color: Colors.white,
           borderRadius: BorderRadius.circular(32),
+          border: Border.all(
+            color: const Color(0xFFC8A882).withValues(alpha: 0.35),
+            width: 1.0,
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.18),
+              color: const Color(0xFF2E2A36).withValues(alpha: 0.04),
               blurRadius: 16,
-              offset: const Offset(0, 6),
+              offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(32),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Background image
-              entry.imagePath.startsWith('http')
-                  ? Image.network(entry.imagePath, fit: BoxFit.cover)
-                  : entry.imagePath.startsWith('assets/')
-                      ? Image.asset(entry.imagePath, fit: BoxFit.cover)
-                      : Image.file(File(entry.imagePath), fit: BoxFit.cover),
-
-              // Gradient overlay (transparent top → black bottom)
-              Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Color(0xCC000000),
-                    ],
-                    stops: [0.35, 1.0],
-                  ),
-                ),
+        child: Row(
+          children: [
+            // Left Image
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(32),
+                bottomLeft: Radius.circular(32),
               ),
+              child: SizedBox(
+                width: 140,
+                height: double.infinity,
+                child: _buildImage(entry.thumbnailUrl),
+              ),
+            ),
 
-              // Content
-              Padding(
-                padding: const EdgeInsets.all(20),
+            // Right Info Content
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Spacer(),
-
-                    // God name
                     Text(
                       entry.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.outfit(
-                        color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 18,
+                        fontSize: 17,
+                        color: const Color(0xFF2E2A36),
                       ),
                     ),
-
-                    const SizedBox(height: 2),
-
-                    // Mantra text
+                    const SizedBox(height: 4),
                     Text(
-                      entry.mantra,
-                      style: GoogleFonts.notoSans(
-                        color: const Color(0xFFFF9933),
-                        fontSize: 13,
+                      entry.shlokText,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.notoSerifDevanagari(
+                        fontSize: 12,
+                        color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
+                        height: 1.3,
                       ),
                     ),
+                    const Spacer(),
 
-                    const SizedBox(height: 10),
-
-                    // Progress bar row
+                    // Progress Bar
                     Row(
                       children: [
-                        // Progress bar
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Count text
-                              Text(
-                                '${entry.progress.toString().padLeft(2, '0')}/${entry.target}',
-                                style: GoogleFonts.outfit(
-                                  color: Colors.white.withValues(alpha: 0.75),
-                                  fontSize: 11,
-                                ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: LinearProgressIndicator(
+                              value: progressRatio,
+                              backgroundColor: const Color(0xFFFFF0E6),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                entry.effectPack.primaryColor,
                               ),
-                              const SizedBox(height: 4),
-                              // Bar
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Stack(
-                                  children: [
-                                    // Background (white)
-                                    Container(
-                                      height: 6,
-                                      color: Colors.white.withValues(alpha: 0.3),
-                                    ),
-                                    // Foreground (orange fill)
-                                    FractionallySizedBox(
-                                      widthFactor: fraction.clamp(0.0, 1.0),
-                                      child: Container(
-                                        height: 6,
-                                        decoration: const BoxDecoration(
-                                          gradient: LinearGradient(
-                                            colors: [
-                                              Color(0xFFFF9933),
-                                              Color(0xFFFF6600),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                              minHeight: 6,
+                            ),
                           ),
                         ),
-
-                        const SizedBox(width: 12),
-
-                        // Action Button
-                        GestureDetector(
-                          onTap: onTap,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 18, vertical: 9),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFFFF9933), Color(0xFFFF6600)],
-                              ),
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                            child: Text(
-                              completed
-                                  ? 'Completed'
-                                  : inProgress
-                                      ? 'Continue'
-                                      : 'Start Jap',
-                              style: GoogleFonts.beVietnamPro(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                                height: 1.5,
-                              ),
-                            ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '$progress / $target',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            color: entry.effectPack.primaryColor,
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 8),
+
+                    // Chant CTA Button
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              entry.effectPack.primaryColor,
+                              entry.effectPack.secondaryColor,
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          'Chant 📿',
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
-            ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImage(String path) {
+    if (path.isEmpty) {
+      return Container(
+        color: const Color(0xFFFFF0E6),
+        child: const Icon(
+          Icons.image_outlined,
+          color: Color(0xFFC8A882),
+          size: 36,
+        ),
+      );
+    }
+    if (path.startsWith('http')) {
+      return Image.network(
+        path,
+        fit: BoxFit.cover,
+        // Downsample to thumbnail dimensions to avoid decoding full-res images into memory
+        cacheWidth: 280,
+        cacheHeight: 360,
+        errorBuilder: (_, _, _) => Container(
+          color: const Color(0xFFFFF0E6),
+          child: const Icon(
+            Icons.broken_image_outlined,
+            color: Color(0xFFC8A882),
+            size: 36,
           ),
+        ),
+      );
+    }
+    if (path.startsWith('assets/')) {
+      return Image.asset(
+        path,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Container(
+          color: const Color(0xFFFFF0E6),
+          child: const Icon(
+            Icons.broken_image_outlined,
+            color: Color(0xFFC8A882),
+            size: 36,
+          ),
+        ),
+      );
+    }
+    return Image.file(
+      File(path),
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => Container(
+        color: const Color(0xFFFFF0E6),
+        child: const Icon(
+          Icons.broken_image_outlined,
+          color: Color(0xFFC8A882),
+          size: 36,
         ),
       ),
     );
@@ -618,10 +877,10 @@ class _JapCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────
-// Detail / Counting Screen – Image Reveal
+// Detail / Counting Screen – Image Reveal Engine
 // ─────────────────────────────────────────────
 class JapDetailScreen extends StatefulWidget {
-  final JapEntry entry;
+  final JapConfig entry;
   const JapDetailScreen({super.key, required this.entry});
 
   @override
@@ -630,76 +889,54 @@ class JapDetailScreen extends StatefulWidget {
 
 class _JapDetailScreenState extends State<JapDetailScreen>
     with TickerProviderStateMixin {
-  // ── State ──────────────────────────────────
-  late int _count;   // japs done in current mala
+  late int _count;
   late int _target;
   int _completedMalas = 0;
+  JapLifecycle _lifecycle = JapLifecycle.idle;
 
+  JapLifecycle get lifecycle => _lifecycle;
 
-
-  late List<int> _shuffledIndices;   // random reveal order (seeded per entry)
-  late List<Offset> _jitteredPoints; // organic points corresponding to grid cells
+  late List<int> _shuffledIndices;
+  late List<Offset> _jitteredPoints;
 
   late final AudioPlayer _audioPlayer;
-
-  // Single controller drives the "currently revealing" tile expansion
   late final AnimationController _revealController;
   late final AnimationController _completionController;
-  int? _revealingTile;               // tile index being animated right now
+  late final AnimationController _ambientController;
 
+  int? _revealingTile;
   bool _canTap = true;
   bool _isAudioPlaying = false;
   bool _isRevealAnimating = false;
-
-  void _tryUnlockTap() {
-    if (!_isAudioPlaying && !_isRevealAnimating && _count < _target) {
-      if (mounted) {
-        setState(() {
-          _canTap = true;
-        });
-      }
-    }
-  }
-
   bool _showContinueButton = false;
-  double _audioProgress = 0.0;
-  Duration _audioDuration = Duration.zero;
   double _buttonScale = 1.0;
+
+  DateTime _lastTapTime = DateTime.fromMillisecondsSinceEpoch(0);
+  static const Duration _debounceDuration = Duration(milliseconds: 80);
 
   ImageProvider? _imageProvider;
 
-  // Ambient loop controller and particles
-  late final AnimationController _ambientController;
   final List<EmberParticle> _embers = [];
-  final List<SmokeParticle> _smokeParticles = [];
   final List<GlowRing> _glowRings = [];
   final List<PetalParticle> _petals = [];
   final List<TapSparkParticle> _tapSparks = [];
   final List<SpiralSparkParticle> _spiralSparks = [];
   final List<FloatingOmText> _floatingOms = [];
+  final List<MistParticle> _mistParticles = [];
+  final List<DivineSymbolParticle> _divineSymbolParticles = [];
+  final List<SmokeParticle> _smokePuffs = [];
+  final List<PetalParticle> _tapPetals = [];
+  bool _autoRepeat = false;
+  DateTime _lastMistTime = DateTime.now();
 
-  Offset? _lastRevealPoint;
-  Offset? _currentAgarbattiPos;
-  double _smokeEmitTimer = 0.0;
-
-  // Predict the next reveal point based on the current count
-  Offset? get _nextRevealPoint {
-    if (_count >= _target) return null;
-    final nextRevealPos = _count % _target;
-    final tileIdx = _shuffledIndices[nextRevealPos];
-    return _jitteredPoints[tileIdx];
-  }
-
-  // ── Helpers ────────────────────────────────
   int get _totalProgress => (_completedMalas * _target) + _count;
 
-  // Build a fresh shuffled order seeded by entry name + mala number
+
   List<int> _buildShuffled(int malaSeed) {
     final rng = math.Random(widget.entry.name.hashCode ^ malaSeed);
     return List.generate(_target, (i) => i)..shuffle(rng);
   }
 
-  // Generate N jittered points (N = _target) so they cover the 353x650 area evenly but randomly
   List<Offset> _generateJitteredPoints(int malaSeed) {
     final rng = math.Random(widget.entry.name.hashCode ^ (malaSeed + 123));
     List<Offset> points = [];
@@ -720,10 +957,12 @@ class _JapDetailScreenState extends State<JapDetailScreen>
       final dx = (rng.nextDouble() * (cellWidth * 0.4)) - (cellWidth * 0.2);
       final dy = (rng.nextDouble() * (cellHeight * 0.4)) - (cellHeight * 0.2);
 
-      points.add(Offset(
-        (cellCenterX + dx).clamp(10.0, 343.0),
-        (cellCenterY + dy).clamp(10.0, 640.0),
-      ));
+      points.add(
+        Offset(
+          (cellCenterX + dx).clamp(10.0, 343.0),
+          (cellCenterY + dy).clamp(10.0, 640.0),
+        ),
+      );
     }
     return points;
   }
@@ -732,7 +971,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   void initState() {
     super.initState();
 
-    _target = widget.entry.target;
+    _target = widget.entry.targetCount;
     final totalProgress = widget.entry.progress;
     _completedMalas = totalProgress ~/ _target;
     _count = totalProgress % _target;
@@ -741,49 +980,28 @@ class _JapDetailScreenState extends State<JapDetailScreen>
     _jitteredPoints = _generateJitteredPoints(_completedMalas);
 
     _audioPlayer = AudioPlayer();
-    
-    _audioPlayer.onDurationChanged.listen((d) {
-      if (mounted) setState(() => _audioDuration = d);
-    });
-    
-    _audioPlayer.onPositionChanged.listen((p) {
-      if (mounted) {
-        setState(() {
-          if (_audioDuration.inMilliseconds > 0) {
-            _audioProgress = p.inMilliseconds / _audioDuration.inMilliseconds;
-          }
-        });
-      }
-    });
 
     _audioPlayer.onPlayerComplete.listen((_) {
       if (mounted) {
-        setState(() {
-          _isAudioPlaying = false;
-          _audioProgress = 0.0;
-        });
+        setState(() => _isAudioPlaying = false);
         _tryUnlockTap();
       }
     });
 
-    // Continuous ambient loop for floating embers, halo rotation, flower petals
-    _ambientController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 10),
-    )..addListener(() {
-        _updateParticlesNoSetState();
-      });
+    _ambientController =
+        AnimationController(vsync: this, duration: const Duration(seconds: 10))
+          ..addListener(() {
+            _updateParticlesNoSetState();
+          });
     _ambientController.repeat();
 
     _initEmbers();
 
-    // 500 ms controller to scale the mask erase radius on tap
     _revealController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 500),
     );
 
-    // 1200 ms controller for smooth veil dissolve on completion
     _completionController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
@@ -792,13 +1010,55 @@ class _JapDetailScreenState extends State<JapDetailScreen>
     if (_completedMalas > 0) {
       _completionController.value = 1.0;
       _showContinueButton = true;
+      _lifecycle = JapLifecycle.darshanActive;
+    } else if (_count > 0) {
+      _lifecycle = JapLifecycle.inProgress;
+    } else {
+      _lifecycle = JapLifecycle.started;
     }
 
-    // Restore last reveal point if we are continuing a partially completed mala
-    if (_count > 0 && _count < _target) {
-      final lastRevealPos = (_count - 1) % _target;
-      final tileIdx = _shuffledIndices[lastRevealPos];
-      _lastRevealPoint = _jitteredPoints[tileIdx];
+
+  }
+
+  void _tryUnlockTap() {
+    if (!_isRevealAnimating && !_isAudioPlaying && _count < _target) {
+      if (mounted) {
+        setState(() => _canTap = true);
+      }
+    }
+  }
+
+  void _resetMala() {
+    if (mounted) {
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _count = 0;
+        _completedMalas = 0;
+        _canTap = true;
+        _isAudioPlaying = false;
+        _isRevealAnimating = false;
+        _showContinueButton = false;
+        _lifecycle = JapLifecycle.started;
+        _shuffledIndices = _buildShuffled(0);
+        _jitteredPoints = _generateJitteredPoints(0);
+        _embers.clear();
+        _petals.clear();
+        _glowRings.clear();
+        _tapSparks.clear();
+        _spiralSparks.clear();
+        _floatingOms.clear();
+        _mistParticles.clear();
+        _divineSymbolParticles.clear();
+        _smokePuffs.clear();
+        _tapPetals.clear();
+      });
+      _completionController.reset();
+      _revealController.reset();
+      JapOfflineRepository.saveProgress(
+        japId: widget.entry.id,
+        count: 0,
+        completedMalas: 0,
+      );
     }
   }
 
@@ -806,124 +1066,84 @@ class _JapDetailScreenState extends State<JapDetailScreen>
     final rng = math.Random();
     _embers.clear();
     for (int i = 0; i < 25; i++) {
-      _embers.add(EmberParticle(
-        x: rng.nextDouble() * 393,
-        y: rng.nextDouble() * 1010,
-        vx: (rng.nextDouble() * 0.5) - 0.25,
-        vy: rng.nextDouble() * 0.6 + 0.4,
-        size: rng.nextDouble() * 2.8 + 1.2,
-        alpha: rng.nextDouble() * 0.45 + 0.15,
-        speedMultiplier: rng.nextDouble() * 0.5 + 0.8,
-      ));
+      _embers.add(
+        EmberParticle(
+          x: rng.nextDouble() * 393,
+          y: rng.nextDouble() * 1010,
+          vx: (rng.nextDouble() * 0.5) - 0.25,
+          vy: rng.nextDouble() * 0.6 + 0.4,
+          size: rng.nextDouble() * 2.8 + 1.2,
+          alpha: rng.nextDouble() * 0.45 + 0.15,
+          speedMultiplier: rng.nextDouble() * 0.5 + 0.8,
+        ),
+      );
     }
-  }
-
-  Color _getDeityPetalColor(math.Random rng) {
-    final nameLower = widget.entry.name.toLowerCase();
-    if (nameLower.contains('shiva') || nameLower.contains('mahadev')) {
-      return rng.nextBool()
-          ? (rng.nextBool() ? const Color(0xFFE8F4FC) : const Color(0xFFC5D8E0))
-          : const Color(0xFF81C784); // Ash silver & bilva leaf green
-    } else if (nameLower.contains('krishna') || nameLower.contains('radha')) {
-      return rng.nextBool()
-          ? (rng.nextBool() ? const Color(0xFF0D4F8B) : const Color(0xFF50C878))
-          : const Color(0xFFFF80AB); // Peacock blue & lotus pink
-    } else if (nameLower.contains('ganesh') || nameLower.contains('ganpati')) {
-      return rng.nextBool() ? const Color(0xFFFF6B35) : const Color(0xFFFFB300); // Marigold
-    } else if (nameLower.contains('hanuman')) {
-      return rng.nextBool() ? const Color(0xFFCC2200) : const Color(0xFFFF6600); // Sindoor & saffron
-    } else if (nameLower.contains('durga') || nameLower.contains('kali')) {
-      return rng.nextBool() ? const Color(0xFF990000) : const Color(0xFFFF1744); // Kumkum red
-    } else if (nameLower.contains('lakshmi')) {
-      return rng.nextBool() ? const Color(0xFFFF80AB) : const Color(0xFFFFE082); // Pink lotus & soft gold
-    } else if (nameLower.contains('vishnu')) {
-      return rng.nextBool() ? const Color(0xFF0277BD) : const Color(0xFFFFD700); // Ocean blue & gold
-    }
-    return rng.nextBool()
-        ? (rng.nextBool() ? const Color(0xFFE22D5A) : const Color(0xFFC2185B))
-        : (rng.nextBool() ? const Color(0xFFFFB300) : const Color(0xFFFF8F00));
   }
 
   void _initPetals() {
     final rng = math.Random();
-    final theme = TempleThemeConfig.fromEntry(widget.entry);
+    final pack = widget.entry.effectPack;
     _petals.clear();
     for (int i = 0; i < 30; i++) {
-      _petals.add(PetalParticle(
-        x: rng.nextDouble() * 393,
-        y: rng.nextDouble() * 1010 - 1010,
-        vy: rng.nextDouble() * 1.2 + 0.9,
-        angle: rng.nextDouble() * 2 * math.pi,
-        rotationSpeed: (rng.nextDouble() * 0.035) - 0.0175,
-        size: rng.nextDouble() * 8.0 + 8.0,
-        windFreq: rng.nextDouble() * 1.3 + 0.7,
-        windAmp: rng.nextDouble() * 1.2 + 0.6,
-        color: _getDeityPetalColor(rng),
-        shape: theme.particleShape,
-      ));
+      final color = pack.particleColors[i % pack.particleColors.length];
+      _petals.add(
+        PetalParticle(
+          x: rng.nextDouble() * 393,
+          y: rng.nextDouble() * 1010 - 1010,
+          vy: (rng.nextDouble() * 1.2 + 0.9) * pack.particleVelocity,
+          angle: rng.nextDouble() * 2 * math.pi,
+          rotationSpeed: (rng.nextDouble() * 0.035) - 0.0175,
+          size: rng.nextDouble() * 8.0 + 8.0,
+          windFreq: rng.nextDouble() * 1.3 + 0.7,
+          windAmp: rng.nextDouble() * 1.2 + 0.6,
+          color: color,
+          shape: pack.shape,
+        ),
+      );
     }
   }
 
   void _updateParticlesNoSetState() {
     final bool isCompleted = _completedMalas > 0 || _count >= _target;
 
-    // Update floating embers (across 393 x 1010 screen space)
     for (final ember in _embers) {
       ember.update(393, 1010);
     }
 
-    // Update glow rings (inside card space)
     _glowRings.removeWhere((ring) => !ring.update());
     _tapSparks.removeWhere((spark) => !spark.update());
     _spiralSparks.removeWhere((spark) => !spark.update());
     _floatingOms.removeWhere((om) => !om.update());
+    _mistParticles.removeWhere((mist) => !mist.update());
+    _divineSymbolParticles.removeWhere((sym) => !sym.update());
+    _smokePuffs.removeWhere((p) => !p.update());
+    for (final petal in _tapPetals) {
+      petal.update(353, 520);
+    }
+    _tapPetals.removeWhere((p) => p.y > 540);
 
-    // Smoothly hover Agarbatti to the NEXT reveal point to predict it
-    final targetPos = _nextRevealPoint ?? _lastRevealPoint;
-    if (targetPos != null) {
-      if (_currentAgarbattiPos == null) {
-        _currentAgarbattiPos = targetPos;
-      } else {
-        _currentAgarbattiPos = Offset.lerp(_currentAgarbattiPos, targetPos, 0.06); // medium floating speed
-      }
+    // Emit atmospheric mist periodically
+    final now = DateTime.now();
+    if (now.difference(_lastMistTime).inMilliseconds > 400 && _mistParticles.length < 12) {
+      _lastMistTime = now;
+      final rng = math.Random();
+      final pack = widget.entry.effectPack;
+      _mistParticles.add(
+        MistParticle(
+          x: rng.nextDouble() * 353,
+          y: 650.0 + rng.nextDouble() * 20,
+          vx: (rng.nextDouble() - 0.5) * 0.8,
+          vy: -(rng.nextDouble() * 1.2 + 0.6),
+          size: rng.nextDouble() * 50 + 40,
+          maxAlpha: rng.nextDouble() * 0.12 + 0.05,
+          maxLife: rng.nextDouble() * 3.0 + 2.5,
+          color: pack.haloGlowColor,
+        ),
+      );
     }
 
-    // Emit & update rising incense smoke (inside card space)
-    if (_currentAgarbattiPos != null && !isCompleted) {
-      _smokeEmitTimer += 0.016;
-      if (_smokeEmitTimer >= 0.25) { // emit very slowly (every 250ms) to minimize bubbles
-        _smokeEmitTimer = 0.0;
-        final rng = math.Random();
-        _smokeParticles.add(SmokeParticle(
-          x: _currentAgarbattiPos!.dx,
-          y: _currentAgarbattiPos!.dy,
-          vx: (rng.nextDouble() * 0.4) - 0.2, // tight sway
-          vy: rng.nextDouble() * 0.6 + 0.6,
-          size: rng.nextDouble() * 2.0 + 2.0, // tiny minimal bubbles
-          alpha: rng.nextDouble() * 0.10 + 0.08, // barely visible smoke
 
-          maxLife: rng.nextDouble() * 1.5 + 1.0, // dies faster
-          growthRate: rng.nextDouble() * 0.4 + 0.2, // grows slower
-        ));
 
-        // Emit intense glowing crackle embers from the burning tip like a fountain!
-        if (rng.nextDouble() > 0.15) { // 85% chance to emit an ember!
-          for (int i = 0; i < (rng.nextBool() ? 2 : 1); i++) { // Sometimes emit 2!
-            _tapSparks.add(TapSparkParticle(
-              position: _currentAgarbattiPos!,
-              vx: (rng.nextDouble() * 2.5) - 1.25, // scatter sideways violently
-              vy: rng.nextDouble() * 3.5 + 1.5, // shoot upwards!
-              size: rng.nextDouble() * 2.0 + 1.0,
-              color: rng.nextBool() ? const Color(0xFFFF3300) : const Color(0xFFFFCC00),
-              maxLife: rng.nextDouble() * 0.6 + 0.3,
-            ));
-          }
-        }
-      }
-    }
-    _smokeParticles.removeWhere((smoke) => !smoke.update());
-
-    // Update falling flower petals when completed
     if (isCompleted) {
       if (_petals.isEmpty) {
         _initPetals();
@@ -938,7 +1158,9 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_imageProvider == null) {
-      final path = widget.entry.detailImagePath ?? widget.entry.imagePath;
+      final path = widget.entry.darshanImageUrl.isNotEmpty
+          ? widget.entry.darshanImageUrl
+          : widget.entry.thumbnailUrl;
       if (path.startsWith('http')) {
         _imageProvider = NetworkImage(path);
       } else if (path.startsWith('assets/')) {
@@ -959,14 +1181,22 @@ class _JapDetailScreenState extends State<JapDetailScreen>
     super.dispose();
   }
 
-  // ── Tap handler ────────────────────────────
+  // ── Tap handler with Double-Tap Protection & Boundary Validation ──────
   void _increment() async {
-    if (!_canTap) return; // Strict lock: disallow tap while audio or reveal animation is active
+    // 1. Hardware Debounce Guard
+    final now = DateTime.now();
+    if (now.difference(_lastTapTime) < _debounceDuration) {
+      return;
+    }
+    _lastTapTime = now;
+
+    if (!_canTap) return;
     if (_completedMalas > 0 || _count >= _target) {
       _startNextMala();
       return;
     }
-    // Devotion Milestones (50% & 90%)
+
+    // 2. Devotion Milestones Haptics
     final int halfTarget = _target ~/ 2;
     final int nearCompletion = (_target * 0.9).round();
     if ((_count + 1) == halfTarget) {
@@ -977,7 +1207,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
       HapticFeedback.lightImpact();
     }
 
-    // Pick the next point in the shuffled order
+    // 3. Coordinate calculation
     final revealPos = _count % _target;
     final tileIdx = _shuffledIndices[revealPos];
     final revealPt = _jitteredPoints[tileIdx];
@@ -988,85 +1218,395 @@ class _JapDetailScreenState extends State<JapDetailScreen>
       _isAudioPlaying = true;
       _buttonScale = 0.82;
       _revealingTile = tileIdx;
-      _lastRevealPoint = revealPt;
-      _count++;
-      
-      // Only load celebratory animations once the full image gets revealed
+
+      _count = math.min(_count + 1, _target);
+      _lifecycle = _count >= _target
+          ? JapLifecycle.completed
+          : JapLifecycle.inProgress;
+
       if (_count >= _target) {
-        // 1. Radial Sparkle Explosion (12 divine gold/amber/white sparks)
         final rng = math.Random();
         for (int i = 0; i < 12; i++) {
-          final angle = (i / 12.0) * 2 * math.pi + (rng.nextDouble() * 0.4 - 0.2);
+          final angle =
+              (i / 12.0) * 2 * math.pi + (rng.nextDouble() * 0.4 - 0.2);
           final speed = rng.nextDouble() * 5.0 + 3.5;
           final sparkColors = [
-            const Color(0xFFFFD700), // Pure Gold
-            const Color(0xFFFF9100), // Amber
-            const Color(0xFFFFFFFF), // Divine White
-            const Color(0xFFFF5500), // Saffron
+            const Color(0xFFFFD700),
+            const Color(0xFFFF9100),
+            const Color(0xFFFFFFFF),
+            widget.entry.effectPack.primaryColor,
           ];
-          _tapSparks.add(TapSparkParticle(
-            position: revealPt,
-            vx: math.cos(angle) * speed,
-            vy: math.sin(angle) * speed,
-            maxLife: rng.nextDouble() * 0.35 + 0.35,
-            size: rng.nextDouble() * 4.0 + 3.0,
-            color: sparkColors[i % sparkColors.length],
-          ));
+          _tapSparks.add(
+            TapSparkParticle(
+              position: revealPt,
+              vx: math.cos(angle) * speed,
+              vy: math.sin(angle) * speed,
+              maxLife: rng.nextDouble() * 0.35 + 0.35,
+              size: rng.nextDouble() * 4.0 + 3.0,
+              color: sparkColors[i % sparkColors.length],
+            ),
+          );
         }
 
-        // 1b. Spiral Galaxy Swirl Sparks (8 double-helix spiral sparks)
         for (int i = 0; i < 8; i++) {
           final startAngle = (i / 8.0) * 2 * math.pi;
-          _spiralSparks.add(SpiralSparkParticle(
-            center: revealPt,
-            angle: startAngle,
-            speed: (i % 2 == 0 ? 1.0 : -1.0) * (rng.nextDouble() * 0.18 + 0.12),
-            radialSpeed: rng.nextDouble() * 2.8 + 2.2,
-            maxLife: rng.nextDouble() * 0.35 + 0.40,
-            size: rng.nextDouble() * 3.5 + 2.5,
-            color: i % 2 == 0 ? const Color(0xFFFFD700) : const Color(0xFFFF8A00),
-          ));
+          _spiralSparks.add(
+            SpiralSparkParticle(
+              center: revealPt,
+              angle: startAngle,
+              speed:
+                  (i % 2 == 0 ? 1.0 : -1.0) * (rng.nextDouble() * 0.18 + 0.12),
+              radialSpeed: rng.nextDouble() * 2.8 + 2.2,
+              maxLife: rng.nextDouble() * 0.35 + 0.40,
+              size: rng.nextDouble() * 3.5 + 2.5,
+              color: i % 2 == 0
+                  ? const Color(0xFFFFD700)
+                  : widget.entry.effectPack.primaryColor,
+            ),
+          );
         }
 
-        // 1c. Instant Fragrant Incense Smoke Puff (4 expanding golden-pearl smoke clouds)
-        for (int i = 0; i < 4; i++) {
-          _smokeParticles.add(SmokeParticle(
-            x: revealPt.dx,
-            y: revealPt.dy,
-            vx: (rng.nextDouble() * 0.8) - 0.4,
-            vy: rng.nextDouble() * 0.9 + 0.8,
-            size: rng.nextDouble() * 6.0 + 9.0,
-            alpha: rng.nextDouble() * 0.35 + 0.30,
-            maxLife: rng.nextDouble() * 1.2 + 1.0,
-            growthRate: rng.nextDouble() * 0.4 + 0.3,
-          ));
-        }
-
-        // 2. Floating Sacred Chant Symbol Text
         final omTexts = ['ॐ', 'राम', 'जय', 'ॐ', 'हरि', 'नमः'];
-        _floatingOms.add(FloatingOmText(
-          position: revealPt,
-          maxLife: 0.65,
-          text: omTexts[(_count - 1) % omTexts.length],
-        ));
+        _floatingOms.add(
+          FloatingOmText(
+            position: revealPt,
+            maxLife: 0.65,
+            text: omTexts[(_count - 1) % omTexts.length],
+          ),
+        );
 
-        // 3. Concentric Glow Rings (Inner Gold + Outer Saffron Shockwave)
-        _glowRings.add(GlowRing(
-          position: revealPt,
-          maxRadius: 180.0,
-          maxLife: 1.1,
-          color: const Color(0xFFFFD700),
-        ));
-        _glowRings.add(GlowRing(
-          position: revealPt,
-          maxRadius: 220.0,
-          maxLife: 1.3,
-          color: const Color(0xFFFF6D00),
-        ));
+        _glowRings.add(
+          GlowRing(
+            position: revealPt,
+            maxRadius: 180.0,
+            maxLife: 1.1,
+            color: widget.entry.effectPack.primaryColor,
+          ),
+        );
       }
     });
 
-    // Button tactile spring rebound (0.82 -> 1.12 -> 1.0)
+  /// Spawn god-category specific particle burst using effectPack.shape (reliable enum)
+  void spawnCategoryParticles(Offset center) {
+    final rng = math.Random();
+    final pack = widget.entry.effectPack;
+    final primary = pack.primaryColor;
+    final secondary = pack.secondaryColor;
+    final accent = pack.accentColor;
+
+    switch (pack.shape) {
+      case ParticleShapeType.flame:
+        // Shiva / fire — blue-white lightning arc sparks
+        final colors = [const Color(0xFF64B5F6), const Color(0xFFB3E5FC), primary, Colors.white];
+        for (int i = 0; i < 12; i++) {
+          final angle = (i / 12.0) * 2 * math.pi;
+          _tapSparks.add(TapSparkParticle(
+            position: center,
+            vx: math.cos(angle) * (rng.nextDouble() * 6 + 4),
+            vy: math.sin(angle) * (rng.nextDouble() * 6 + 4),
+            maxLife: rng.nextDouble() * 0.4 + 0.3,
+            size: rng.nextDouble() * 5 + 2,
+            color: colors[i % colors.length],
+          ));
+        }
+        _glowRings.add(GlowRing(position: center, maxRadius: 95, maxLife: 0.65, color: primary));
+        break;
+
+      case ParticleShapeType.feather:
+        // Ganesha / Krishna — scallop: spiral peacock sparks
+        final colors = [primary, secondary, accent, const Color(0xFF81C784)];
+        for (int i = 0; i < 10; i++) {
+          final startAngle = (i / 10.0) * 2 * math.pi;
+          _spiralSparks.add(SpiralSparkParticle(
+            center: center,
+            angle: startAngle,
+            speed: (i % 2 == 0 ? 1.2 : -1.2) * (rng.nextDouble() * 0.2 + 0.1),
+            radialSpeed: rng.nextDouble() * 3.5 + 2.5,
+            maxLife: rng.nextDouble() * 0.5 + 0.35,
+            size: rng.nextDouble() * 4.5 + 2,
+            color: colors[i % colors.length],
+          ));
+        }
+        _glowRings.add(GlowRing(position: center, maxRadius: 80, maxLife: 0.7, color: primary));
+        break;
+
+      case ParticleShapeType.spark:
+        // Hanuman / Durga — fire burst — fast outward sparks
+        final colors = [primary, secondary, accent, const Color(0xFFFFFFFF)];
+        for (int i = 0; i < 16; i++) {
+          final angle = (i / 16.0) * 2 * math.pi;
+          _tapSparks.add(TapSparkParticle(
+            position: center,
+            vx: math.cos(angle) * (rng.nextDouble() * 9 + 5),
+            vy: math.sin(angle) * (rng.nextDouble() * 9 + 5),
+            maxLife: rng.nextDouble() * 0.3 + 0.2,
+            size: rng.nextDouble() * 6 + 3,
+            color: colors[i % colors.length],
+          ));
+        }
+        // Chakra spin
+        for (int i = 0; i < 6; i++) {
+          _spiralSparks.add(SpiralSparkParticle(
+            center: center,
+            angle: (i / 6.0) * 2 * math.pi,
+            speed: (i.isEven ? 1.8 : -1.8) * (rng.nextDouble() * 0.12 + 0.08),
+            radialSpeed: rng.nextDouble() * 4 + 3,
+            maxLife: rng.nextDouble() * 0.35 + 0.3,
+            size: rng.nextDouble() * 5 + 3,
+            color: i.isEven ? primary : accent,
+          ));
+        }
+        _glowRings.add(GlowRing(position: center, maxRadius: 110, maxLife: 0.55, color: primary));
+        break;
+
+      case ParticleShapeType.leaf:
+        // Vishnu / nature — blue-gold Sudarshana chakra spin
+        final colors = [primary, secondary, accent];
+        for (int i = 0; i < 8; i++) {
+          _spiralSparks.add(SpiralSparkParticle(
+            center: center,
+            angle: (i / 8.0) * 2 * math.pi,
+            speed: (i.isEven ? 1.0 : -1.0) * (rng.nextDouble() * 0.18 + 0.1),
+            radialSpeed: rng.nextDouble() * 3.5 + 2.5,
+            maxLife: rng.nextDouble() * 0.4 + 0.35,
+            size: rng.nextDouble() * 4 + 2.5,
+            color: colors[i % colors.length],
+          ));
+        }
+        _glowRings.add(GlowRing(position: center, maxRadius: 95, maxLife: 0.65, color: primary));
+        break;
+
+      case ParticleShapeType.ash:
+        // Subtle — gentle floating sparkle shower
+        final colors = [primary, secondary, accent];
+        for (int i = 0; i < 10; i++) {
+          final angle = rng.nextDouble() * 2 * math.pi;
+          _tapSparks.add(TapSparkParticle(
+            position: center + Offset((rng.nextDouble() - 0.5) * 24, (rng.nextDouble() - 0.5) * 24),
+            vx: math.cos(angle) * (rng.nextDouble() * 3 + 1),
+            vy: math.sin(angle) * (rng.nextDouble() * 3 + 1) - 2,
+            maxLife: rng.nextDouble() * 0.6 + 0.4,
+            size: rng.nextDouble() * 5 + 3,
+            color: colors[i % colors.length],
+          ));
+        }
+        _glowRings.add(GlowRing(position: center, maxRadius: 70, maxLife: 0.75, color: primary));
+        break;
+
+      case ParticleShapeType.petal:
+      case ParticleShapeType.custom:
+        // Lakshmi / default — golden lotus bloom
+        final colors = [primary, secondary, accent, Colors.white];
+        for (int i = 0; i < 10; i++) {
+          final angle = (i / 10.0) * 2 * math.pi;
+          _tapSparks.add(TapSparkParticle(
+            position: center,
+            vx: math.cos(angle) * (rng.nextDouble() * 5 + 3),
+            vy: math.sin(angle) * (rng.nextDouble() * 5 + 3) - 1,
+            maxLife: rng.nextDouble() * 0.45 + 0.3,
+            size: rng.nextDouble() * 5 + 2,
+            color: colors[i % colors.length],
+          ));
+        }
+        _glowRings.add(GlowRing(position: center, maxRadius: 80, maxLife: 0.65, color: primary));
+        break;
+    }
+
+    // Floating God-Specific Mantra Text on every tap
+    final mantras = pack.tapMantras.isNotEmpty ? pack.tapMantras : ['ॐ', 'जय', 'हरि', 'नमः'];
+    _floatingOms.add(FloatingOmText(
+      position: center,
+      maxLife: 0.85,
+      text: mantras[_count % mantras.length],
+    ));
+
+    // Spawn Divine Symbol (Trishul, Shankh, Flute, Bow, Lotus, Chakra, ॐ)
+    _divineSymbolParticles.add(DivineSymbolParticle(
+      position: center,
+      symbol: pack.divineSymbol,
+      color: pack.primaryColor,
+      maxLife: 0.95,
+      vy: -2.0,
+    ));
+
+    // 10 Random Natural Element Effects (Leaf, Water Ripple, Yajna Fire, Rose Petals, Golden Lotus, Lightning, Star Dust, Cloud Smoke, Peacock Aura, Sunbeams)
+    final naturalEffectType = rng.nextInt(10);
+    switch (naturalEffectType) {
+      case 0:
+        // 🍃 1. Leaf Drift (Tulsi / Bilva Leaves)
+        for (int i = 0; i < 6; i++) {
+          _tapPetals.add(PetalParticle(
+            x: center.dx + (rng.nextDouble() - 0.5) * 30,
+            y: center.dy + (rng.nextDouble() - 0.5) * 30,
+            vy: rng.nextDouble() * 1.5 + 0.8,
+            angle: rng.nextDouble() * 2 * math.pi,
+            rotationSpeed: (rng.nextDouble() * 0.1) - 0.05,
+            size: rng.nextDouble() * 8 + 8,
+            windFreq: rng.nextDouble() * 2 + 1,
+            windAmp: rng.nextDouble() * 3 + 1,
+            color: const Color(0xFF4CAF50), // Bilva leaf green
+            shape: ParticleShapeType.leaf,
+          ));
+        }
+        break;
+
+      case 1:
+        // 💧 2. Water Ripple & Drop
+        for (int i = 0; i < 3; i++) {
+          _glowRings.add(GlowRing(
+            position: center,
+            maxRadius: 60.0 + (i * 35.0),
+            maxLife: 0.8 + (i * 0.2),
+            color: const Color(0xFF29B6F6), // Ganga jal blue
+          ));
+        }
+        break;
+
+      case 2:
+        // 🔥 3. Yajna Fire Embers
+        for (int i = 0; i < 8; i++) {
+          final angle = (i / 8.0) * 2 * math.pi;
+          _tapSparks.add(TapSparkParticle(
+            position: center,
+            vx: math.cos(angle) * (rng.nextDouble() * 4 + 2),
+            vy: math.sin(angle) * (rng.nextDouble() * 4 + 2) - 3,
+            maxLife: rng.nextDouble() * 0.5 + 0.3,
+            size: rng.nextDouble() * 6 + 3,
+            color: i.isEven ? const Color(0xFFFF5722) : const Color(0xFFFFC107),
+          ));
+        }
+        break;
+
+      case 3:
+        // 🌸 4. Rose Petal Shower
+        for (int i = 0; i < 6; i++) {
+          _tapPetals.add(PetalParticle(
+            x: center.dx + (rng.nextDouble() - 0.5) * 30,
+            y: center.dy + (rng.nextDouble() - 0.5) * 30,
+            vy: rng.nextDouble() * 1.6 + 0.9,
+            angle: rng.nextDouble() * 2 * math.pi,
+            rotationSpeed: (rng.nextDouble() * 0.08) - 0.04,
+            size: rng.nextDouble() * 9 + 8,
+            windFreq: rng.nextDouble() * 2 + 1,
+            windAmp: rng.nextDouble() * 2 + 1,
+            color: const Color(0xFFFF1744), // Crimson rose red
+            shape: ParticleShapeType.petal,
+          ));
+        }
+        break;
+
+      case 4:
+        // 🪷 5. Golden Lotus Bloom
+        for (int i = 0; i < 8; i++) {
+          final angle = (i / 8.0) * 2 * math.pi;
+          _tapSparks.add(TapSparkParticle(
+            position: center,
+            vx: math.cos(angle) * (rng.nextDouble() * 5 + 3),
+            vy: math.sin(angle) * (rng.nextDouble() * 5 + 3),
+            maxLife: rng.nextDouble() * 0.45 + 0.3,
+            size: rng.nextDouble() * 6 + 3,
+            color: const Color(0xFFFFD700), // Gold
+          ));
+        }
+        break;
+
+      case 5:
+        // ⚡ 6. Divine Lightning Sparks
+        for (int i = 0; i < 10; i++) {
+          final angle = (i / 10.0) * 2 * math.pi;
+          _tapSparks.add(TapSparkParticle(
+            position: center,
+            vx: math.cos(angle) * (rng.nextDouble() * 8 + 4),
+            vy: math.sin(angle) * (rng.nextDouble() * 8 + 4),
+            maxLife: rng.nextDouble() * 0.3 + 0.2,
+            size: rng.nextDouble() * 5 + 2,
+            color: i.isEven ? Colors.white : const Color(0xFF80DEEA),
+          ));
+        }
+        break;
+
+      case 6:
+        // ✨ 7. Star Dust Shower
+        for (int i = 0; i < 10; i++) {
+          final angle = rng.nextDouble() * 2 * math.pi;
+          _tapSparks.add(TapSparkParticle(
+            position: center + Offset((rng.nextDouble() - 0.5) * 30, (rng.nextDouble() - 0.5) * 30),
+            vx: math.cos(angle) * (rng.nextDouble() * 3 + 1),
+            vy: math.sin(angle) * (rng.nextDouble() * 3 + 1) - 1.5,
+            maxLife: rng.nextDouble() * 0.6 + 0.4,
+            size: rng.nextDouble() * 4 + 2,
+            color: const Color(0xFFFFE082),
+          ));
+        }
+        break;
+
+      case 7:
+        // 🌼 8. Marigold Flower Petals (ગલગોટા પંખુડી)
+        for (int i = 0; i < 6; i++) {
+          _tapPetals.add(PetalParticle(
+            x: center.dx + (rng.nextDouble() - 0.5) * 30,
+            y: center.dy + (rng.nextDouble() - 0.5) * 30,
+            vy: rng.nextDouble() * 1.5 + 0.8,
+            angle: rng.nextDouble() * 2 * math.pi,
+            rotationSpeed: (rng.nextDouble() * 0.1) - 0.05,
+            size: rng.nextDouble() * 9 + 7,
+            windFreq: rng.nextDouble() * 2 + 1,
+            windAmp: rng.nextDouble() * 2.5 + 1,
+            color: i.isEven ? const Color(0xFFFF9800) : const Color(0xFFFFC107), // Marigold gold & orange
+            shape: ParticleShapeType.petal,
+          ));
+        }
+        break;
+
+      case 8:
+        // 🦚 9. Peacock Feather Swirl
+        for (int i = 0; i < 8; i++) {
+          _spiralSparks.add(SpiralSparkParticle(
+            center: center,
+            angle: (i / 8.0) * 2 * math.pi,
+            speed: (i % 2 == 0 ? 1.5 : -1.5) * (rng.nextDouble() * 0.15 + 0.1),
+            radialSpeed: rng.nextDouble() * 3.5 + 2.5,
+            maxLife: rng.nextDouble() * 0.45 + 0.35,
+            size: rng.nextDouble() * 5 + 2.5,
+            color: i.isEven ? const Color(0xFF00E676) : const Color(0xFF29B6F6),
+          ));
+        }
+        break;
+
+      case 9:
+        // ☀️ 10. Surya Sunbeam Burst
+        for (int i = 0; i < 12; i++) {
+          final angle = (i / 12.0) * 2 * math.pi;
+          _tapSparks.add(TapSparkParticle(
+            position: center,
+            vx: math.cos(angle) * (rng.nextDouble() * 7 + 4),
+            vy: math.sin(angle) * (rng.nextDouble() * 7 + 4),
+            maxLife: rng.nextDouble() * 0.4 + 0.25,
+            size: rng.nextDouble() * 5 + 3,
+            color: const Color(0xFFFFB300),
+          ));
+        }
+        _glowRings.add(GlowRing(position: center, maxRadius: 100, maxLife: 0.6, color: const Color(0xFFFF9933)));
+        break;
+    }
+  }
+
+    // 3b. Call category particles after function defined
+    spawnCategoryParticles(revealPt);
+
+    // 4. Persistence to local cache
+    JapOfflineRepository.saveProgress(
+      japId: widget.entry.id,
+      count: _count,
+      completedMalas: _completedMalas,
+    );
+
+    // 5. Milestone background cloud sync (at 27, 54, 81, 108)
+    if (_count % 27 == 0 || _count >= _target) {
+      _triggerBackgroundSync();
+    }
+
+    // 6. Tactile Button spring animation
     Future.delayed(const Duration(milliseconds: 70), () {
       if (mounted) setState(() => _buttonScale = 1.12);
     });
@@ -1074,7 +1614,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
       if (mounted) setState(() => _buttonScale = 1.0);
     });
 
-    // Run the mask erase circle expansion
+    // 7. Unmasking animation
     _revealController.forward(from: 0.0).then((_) {
       if (!mounted) return;
       setState(() {
@@ -1084,635 +1624,560 @@ class _JapDetailScreenState extends State<JapDetailScreen>
       _tryUnlockTap();
     });
 
-    // Audio Playback with Strict Lock until Completion + 5s Safety Fallback
-    if (widget.entry.audioUrl != null && widget.entry.audioUrl!.isNotEmpty) {
+    // 8. Audio playback
+    final audioUrl = widget.entry.shlokAudioUrl;
+    if (audioUrl != null && audioUrl.isNotEmpty) {
+      setState(() => _isAudioPlaying = true);
       try {
-        await _audioPlayer.stop(); // Stop before play to ensure it responds
-        if (widget.entry.audioUrl!.startsWith('http')) {
-          await _audioPlayer.play(UrlSource(widget.entry.audioUrl!));
-        } else if (widget.entry.audioUrl!.startsWith('assets/')) {
-          await _audioPlayer.play(AssetSource(widget.entry.audioUrl!.replaceFirst('assets/', '')));
+        await _audioPlayer.stop();
+        if (audioUrl.startsWith('http')) {
+          await _audioPlayer.play(UrlSource(audioUrl));
+        } else if (audioUrl.startsWith('assets/')) {
+          await _audioPlayer.play(
+            AssetSource(audioUrl.replaceFirst('assets/', '')),
+          );
         } else {
-          await _audioPlayer.play(DeviceFileSource(widget.entry.audioUrl!));
+          // Strip file:// prefix if present — DeviceFileSource needs raw path
+          final rawPath = audioUrl.startsWith('file://')
+              ? audioUrl.replaceFirst('file://', '')
+              : audioUrl;
+          await _audioPlayer.play(DeviceFileSource(rawPath));
         }
 
-        // Safety Fallback: If audio stream takes > 5s or gets interrupted, auto-unlock button
         Future.delayed(const Duration(seconds: 5), () {
           if (mounted && _isAudioPlaying) {
-            setState(() {
-              _isAudioPlaying = false;
-              _audioProgress = 0.0;
-            });
+            setState(() => _isAudioPlaying = false);
             _tryUnlockTap();
           }
         });
       } catch (e) {
-        debugPrint("Error playing audio: $e");
-        await Future.delayed(const Duration(milliseconds: 600));
+        debugPrint("[JapAudio] Error playing audio: $e");
+        await Future.delayed(const Duration(milliseconds: 500));
         if (mounted) {
-          setState(() {
-            _isAudioPlaying = false;
-            _audioProgress = 0.0;
-          });
+          setState(() => _isAudioPlaying = false);
           _tryUnlockTap();
         }
       }
     } else {
-      await Future.delayed(const Duration(milliseconds: 600));
+      await Future.delayed(const Duration(milliseconds: 500));
       if (mounted) {
-        setState(() {
-          _isAudioPlaying = false;
-          _audioProgress = 0.0;
-        });
+        setState(() => _isAudioPlaying = false);
         _tryUnlockTap();
       }
     }
 
-    // Mala complete? Final Darshan Ceremony (700ms silence pause -> 1.2s smooth dissolve -> 6s absorption pause -> Continue button reveal)
+    // 9. 108 Completion & Darshan Reveal
     if (_count >= _target) {
       await Future.delayed(const Duration(milliseconds: 700));
-      _completionController.forward(from: 0.0);
-      await Future.delayed(const Duration(milliseconds: 6000));
       if (mounted) {
-        HapticFeedback.heavyImpact();
-        setState(() {
-          _showContinueButton = true;
-        });
+        setState(() => _lifecycle = JapLifecycle.darshanReveal);
       }
+      _completionController.forward(from: 0.0);
+      if (_autoRepeat) {
+        await Future.delayed(const Duration(milliseconds: 2500));
+        if (mounted) {
+          _startNextMala();
+        }
+      } else {
+        await Future.delayed(const Duration(milliseconds: 5000));
+        if (mounted) {
+          HapticFeedback.heavyImpact();
+          setState(() {
+            _showContinueButton = true;
+            _lifecycle = JapLifecycle.darshanActive;
+          });
+        }
+      }
+    }
+  }
+
+  void _triggerBackgroundSync() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      if (token.isNotEmpty && widget.entry.id.length == 24) {
+        await ApiService.syncJapProgress(
+          token,
+          widget.entry.id,
+          _totalProgress,
+        );
+        await JapOfflineRepository.markSynced(widget.entry.id);
+      }
+    } catch (e) {
+      debugPrint('[JapDetailScreen] Background sync error: $e');
     }
   }
 
   void _startNextMala() {
     HapticFeedback.mediumImpact();
-    // Return back to the list screen, passing the fully completed mala progress
-    Navigator.pop(context, (_completedMalas + 1) * _target);
-  }
-
-  void _resetCurrentMala() {
-    HapticFeedback.mediumImpact();
     setState(() {
+      _completedMalas++;
       _count = 0;
-      _completedMalas = 0;
-      _shuffledIndices = _buildShuffled(0);
-      _jitteredPoints = _generateJitteredPoints(0);
-      _revealingTile = null;
-      _petals.clear();
-      _glowRings.clear();
-      _smokeParticles.clear();
-      _lastRevealPoint = null;
-      _smokeEmitTimer = 0.0;
-      _canTap = true;
       _showContinueButton = false;
+      _isRevealAnimating = false;
+      _canTap = true;
+      _revealingTile = null;
+      _lifecycle = JapLifecycle.started;
+      _glowRings.clear();
+      _tapSparks.clear();
+      _spiralSparks.clear();
+      _floatingOms.clear();
+      _mistParticles.clear();
+      _divineSymbolParticles.clear();
+      _petals.clear();
+      // Rebuild grid with new seed so shape positions shuffle for the new mala
+      _shuffledIndices = _buildShuffled(_completedMalas);
+      _jitteredPoints = _generateJitteredPoints(_completedMalas);
     });
-    _completionController.reset();
+    _completionController.value = 0.0;
   }
 
-  Widget _buildFallbackImage() {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF2E1705), Color(0xFF1E0E02)],
-        ),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.image_not_supported_outlined,
-                color: Color(0xFFFF9933), size: 48),
-            const SizedBox(height: 12),
-            Text(
-              'No Photo Available',
-              style: GoogleFonts.outfit(
-                color: Colors.white.withValues(alpha: 0.7),
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Build ───────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final bool isCompleted = _completedMalas > 0 || _count >= _target;
-    final int revealedCount = isCompleted ? _target : _count;
-    final int revealPct = (_count / _target * 100).toInt();
+    final pack = widget.entry.effectPack;
+    final isCompleted = _completedMalas > 0 || _count >= _target;
+    final bool isBusy = _isAudioPlaying || !_canTap;
 
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) Navigator.pop(context, _totalProgress);
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.pop(context, _totalProgress);
       },
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: const Color(0xFFFFF0E6),
         body: Stack(
           children: [
-            // ── Dark gradient bg ──────────────────
-            Positioned.fill(
-              child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0xFF0D0600), Color(0xFF1A0A00)],
+            // Background Divine Painter
+            AnimatedBuilder(
+              animation: _ambientController,
+              builder: (ctx, _) {
+                return CustomPaint(
+                  size: MediaQuery.of(context).size,
+                  painter: DivineBackgroundPainter(
+                    timeSeconds: _ambientController.value * 10.0,
+                    isCompleted: isCompleted,
+                    progressPct: _count / _target,
                   ),
-                ),
-              ),
+                );
+              },
             ),
 
-            // ── Absolute Positioned Scaled Content ────
-            Positioned.fill(
-              child: SafeArea(
-                child: Center(
-                  child: FittedBox(
-                    fit: BoxFit.contain,
-                    child: SizedBox(
-                      width: 393,
-                      height: 860,
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          // ── Divine Background Painter (Rotating Halo behind Deity Card) ──
-                          Positioned(
-                            top: 0,
-                            left: 0,
-                            width: 393,
-                            height: 1010,
-                            child: IgnorePointer(
-                              child: AnimatedBuilder(
-                                animation: _ambientController,
-                                builder: (context, _) {
-                                  return CustomPaint(
-                                    painter: DivineBackgroundPainter(
-                                      timeSeconds: _ambientController.value * 10.0,
-                                      isCompleted: isCompleted,
-                                      progressPct: (_count / _target).clamp(0.0, 1.0),
-                                    ),
-                                  );
-                                },
+            SafeArea(
+              child: Column(
+                children: [
+                  // App Bar
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context, _totalProgress),
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: const Color(0xFFC8A882),
+                                width: 1.0,
+                              ),
+                            ),
+                            child: const Center(
+                              child: Icon(
+                                Icons.arrow_back_ios_new_rounded,
+                                color: Color(0xFFC8A882),
+                                size: 16,
                               ),
                             ),
                           ),
-
-                          // ── Deity Picture + Shutter Grid ──────
-                          Positioned(
-                            top: 75,
-                            left: 20,
-                            width: 353,
-                            height: 650,
-                            child: AnimatedBuilder(
-                              animation: _ambientController,
-                              builder: (context, child) {
-                                final double pulseValue = isCompleted
-                                    ? (0.6 + 0.4 * math.sin(_ambientController.value * 2 * math.pi))
-                                    : 1.0;
-                                return Container(
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(32),
-                                    border: Border.all(
-                                      color: isCompleted
-                                          ? const Color(0xFFFFD700).withValues(alpha: 0.5 + 0.3 * pulseValue)
-                                          : const Color(0xFFFF9933).withValues(alpha: 0.3),
-                                      width: isCompleted ? 2.0 : 1.0,
-                                    ),
-                                    boxShadow: isCompleted
-                                        ? [
-                                            BoxShadow(
-                                              color: const Color(0xFFFF8F00).withValues(
-                                                  alpha: 0.2 + 0.15 * pulseValue),
-                                              blurRadius: 15 + 10 * pulseValue,
-                                              spreadRadius: 1 + 2 * pulseValue,
-                                            )
-                                          ]
-                                        : [],
-                                  ),
-                                  child: child,
-                                );
-                              },
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(32),
-                                child: Stack(
-                                  children: [
-                                    // Fallback Background
-                                    Positioned.fill(
-                                      child: Container(
-                                        color: const Color(0xFF1E1107),
-                                      ),
-                                    ),
-
-                                    // Deity image (slow breathing zoom when completed)
-                                    Positioned.fill(
-                                      child: AnimatedBuilder(
-                                        animation: _ambientController,
-                                        builder: (context, child) {
-                                          final double scale = isCompleted
-                                              ? 1.0 + (math.sin(_ambientController.value * 2 * math.pi) * 0.015)
-                                              : 1.0;
-                                          return Transform.scale(
-                                            scale: scale,
-                                            child: child,
-                                          );
-                                        },
-                                        child: RepaintBoundary(
-                                          child: widget.entry.detailImagePath != null && widget.entry.detailImagePath!.isNotEmpty
-                                              ? (widget.entry.detailImagePath!.startsWith('http')
-                                                  ? Image.network(
-                                                      widget.entry.detailImagePath!,
-                                                      fit: BoxFit.cover,
-                                                      gaplessPlayback: true,
-                                                      errorBuilder: (context, error, stackTrace) => _buildFallbackImage(),
-                                                    )
-                                                  : widget.entry.detailImagePath!.startsWith('assets/')
-                                                      ? Image.asset(
-                                                          widget.entry.detailImagePath!,
-                                                          fit: BoxFit.cover,
-                                                          gaplessPlayback: true,
-                                                          errorBuilder: (context, error, stackTrace) => _buildFallbackImage(),
-                                                        )
-                                                      : Image.file(
-                                                          File(widget.entry.detailImagePath!),
-                                                          fit: BoxFit.cover,
-                                                          gaplessPlayback: true,
-                                                          errorBuilder: (context, error, stackTrace) => _buildFallbackImage(),
-                                                        ))
-                                              : (widget.entry.imagePath.startsWith('http')
-                                                  ? Image.network(
-                                                      widget.entry.imagePath,
-                                                      fit: BoxFit.cover,
-                                                      gaplessPlayback: true,
-                                                      errorBuilder: (context, error, stackTrace) => _buildFallbackImage(),
-                                                    )
-                                                  : widget.entry.imagePath.startsWith('assets/')
-                                                      ? Image.asset(
-                                                          widget.entry.imagePath,
-                                                          fit: BoxFit.cover,
-                                                          gaplessPlayback: true,
-                                                          errorBuilder: (context, error, stackTrace) => _buildFallbackImage(),
-                                                        )
-                                                      : Image.file(
-                                                          File(widget.entry.imagePath),
-                                                          fit: BoxFit.cover,
-                                                          gaplessPlayback: true,
-                                                          errorBuilder: (context, error, stackTrace) => _buildFallbackImage(),
-                                                        )),
-                                        ),
-                                      ),
-                                    ),
-
-                                    // Particle Canvas & Organic Erase Mask Layer (DivineCardPainter)
-                                    Positioned.fill(
-                                      child: AnimatedBuilder(
-                                        animation: Listenable.merge([_ambientController, _revealController, _completionController]),
-                                        builder: (context, _) {
-                                          return CustomPaint(
-                                            painter: DivineCardPainter(
-                                              jitteredPoints: _jitteredPoints,
-                                              shuffledIndices: _shuffledIndices,
-                                              count: _count,
-                                              target: _target,
-                                              revealingTileIndex: _revealingTile,
-                                              currentRevealProgress: _revealController.value,
-                                              completionFadeProgress: _completionController.value,
-                                              smokeParticles: _smokeParticles,
-                                              glowRings: _glowRings,
-                                              timeSeconds: _ambientController.value * 10.0,
-                                              isCompleted: isCompleted,
-                                              lastRevealPoint: _currentAgarbattiPos ?? _lastRevealPoint,
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-
-                                    // Reveal percent badge
-                                    if (!isCompleted)
-                                      Positioned(
-                                        top: 10,
-                                        right: 10,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 10, vertical: 5),
-                                          decoration: BoxDecoration(
-                                            color: Colors.black.withValues(alpha: 0.55),
-                                            borderRadius: BorderRadius.circular(20),
-                                            border: Border.all(
-                                              color: const Color(0xFFFF9933).withValues(alpha: 0.6),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            '$revealPct% revealed',
-                                            style: GoogleFonts.outfit(
-                                              color: const Color(0xFFFF9933),
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-
-                           // ── Glassmorphic Blessing Card removed per user request ──
-                                  ],
-                                ),
-                              ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            widget.entry.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: const Color(0xFF2E2A36),
                             ),
                           ),
-
-                          // ── Note Container / Next Jap Button ───────────────────
-                          Positioned(
-                            top: 730,
-                            left: 20,
-                            width: 353,
-                            height: 56,
-                            child: isCompleted
-                                ? AnimatedOpacity(
-                                    opacity: _showContinueButton ? 1.0 : 0.0,
-                                    duration: const Duration(milliseconds: 800),
-                                    child: IgnorePointer(
-                                      ignoring: !_showContinueButton,
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: GestureDetector(
-                                              onTap: _resetCurrentMala,
-                                              child: Container(
-                                                height: 56,
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFFF7F2EC),
-                                                  borderRadius: BorderRadius.circular(12),
-                                                  border: Border.all(
-                                                    color: const Color(0xFFFF7700),
-                                                    width: 1.5,
-                                                  ),
-                                                ),
-                                                child: Center(
-                                                  child: Row(
-                                                    mainAxisAlignment: MainAxisAlignment.center,
-                                                    children: [
-                                                      const Icon(
-                                                        Icons.refresh_rounded,
-                                                        color: Color(0xFFFF7700),
-                                                        size: 20,
-                                                      ),
-                                                      const SizedBox(width: 6),
-                                                      Text(
-                                                        'Retry / Restart',
-                                                        style: GoogleFonts.outfit(
-                                                          color: const Color(0xFFFF7700),
-                                                          fontSize: 14,
-                                                          fontWeight: FontWeight.bold,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: GestureDetector(
-                                              onTap: _startNextMala,
-                                              child: Container(
-                                                height: 56,
-                                                decoration: BoxDecoration(
-                                                  gradient: const LinearGradient(
-                                                    colors: [Color(0xFFFF9933), Color(0xFFFF5500)],
-                                                  ),
-                                                  borderRadius: BorderRadius.circular(12),
-                                                  boxShadow: [
-                                                    BoxShadow(
-                                                      color: const Color(0xFFFF5500).withValues(alpha: 0.3),
-                                                      blurRadius: 12,
-                                                      offset: const Offset(0, 4),
-                                                    ),
-                                                  ],
-                                                ),
-                                                child: Center(
-                                                  child: Text(
-                                                    'Next Jap',
-                                                    style: GoogleFonts.outfit(
-                                                      color: Colors.white,
-                                                      fontSize: 15,
-                                                      fontWeight: FontWeight.bold,
-                                                      letterSpacing: 0.5,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  )
-                                // Standard Note Container (when in progress)
-                                : const SizedBox.shrink(),
-                          ),
-
-                          // ── Progress Bar ─────────────────────
-                          if (!isCompleted)
-                            Positioned(
-                              top: 802,
-                              left: 20,
-                              width: 353,
-                              height: 6,
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(3),
-                                child: Container(
-                                  height: 6,
-                                  color: const Color(0xFFE5DCD3),
-                                  child: FractionallySizedBox(
-                                    alignment: Alignment.centerLeft,
-                                    widthFactor: (_count / _target).clamp(0.0, 1.0),
-                                    child: Container(
-                                      decoration: const BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            Color(0xFFFF9933),
-                                            Color(0xFFFF5500),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                        ),
+                        // Top Bar: Only Reset Button
+                        GestureDetector(
+                          onTap: _resetMala,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: pack.primaryColor,
+                                width: 1.2,
                               ),
                             ),
-
-                          // ── Bottom Reveal Panel ──────────────
-                          Positioned(
-                            top: 730,
-                            left: 20,
-                            width: 353,
-                            height: 131,
-                            child: GestureDetector(
-                              onTap: _increment,
-                              behavior: HitTestBehavior.opaque,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF7F2EC),
-                                  borderRadius: const BorderRadius.only(
-                                    topLeft: Radius.circular(24),
-                                    topRight: Radius.circular(24),
-                                  ),
-                                  border: Border.all(
-                                    color: const Color(0xFFE5DCD3),
-                                    width: 1.0,
-                                  ),
-                                ),
-                                child: Stack(
-                                  children: [
-                                    Positioned(
-                                      bottom: 25,
-                                      left: 0,
-                                      right: 0,
-                                      child: Text(
-                                        isCompleted
-                                            ? 'Mala Completed! You are blessed. 🙏'
-                                            : 'Tap here and reveal a darshan.',
-                                        textAlign: TextAlign.center,
-                                        style: GoogleFonts.outfit(
-                                          color: const Color(0xFFFF7700),
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          // ── Orange Circle TAP Button ─────────
-                          Positioned(
-                            top: 678, // Adjusted slightly for ring
-                            left: 142, // Adjusted slightly for ring
-                            width: 110,
-                            height: 110,
-                            child: GestureDetector(
-                              onTap: _increment,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  if (!_canTap && _audioDuration.inMilliseconds > 0)
-                                    SizedBox(
-                                      width: 110,
-                                      height: 110,
-                                      child: CircularProgressIndicator(
-                                        value: _audioProgress,
-                                        color: const Color(0xFFFF9933),
-                                        backgroundColor: Colors.grey.shade800,
-                                        strokeWidth: 4,
-                                      ),
-                                    ),
-                                  AnimatedScale(
-                                    scale: _buttonScale,
-                                    duration: const Duration(milliseconds: 100),
-                                    curve: Curves.easeOutBack,
-                                    child: Container(
-                                  width: 100,
-                                  height: 100,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: isCompleted
-                                          ? [
-                                              const Color(0xFFFF9933),
-                                              const Color(0xFFFF5500),
-                                            ]
-                                          : [
-                                              _canTap
-                                                  ? const Color(0xFFFF9933)
-                                                  : Colors.grey.shade700,
-                                              _canTap
-                                                  ? const Color(0xFFFF5500)
-                                                  : Colors.grey.shade800,
-                                            ],
-                                    ),
-                                    boxShadow: _canTap
-                                        ? [
-                                            BoxShadow(
-                                              color: const Color(0xFFFF7700).withValues(alpha: 0.4),
-                                              blurRadius: 16,
-                                              offset: const Offset(0, 6),
-                                            ),
-                                          ]
-                                        : [],
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      revealedCount.toString().padLeft(3, '0'),
-                                      style: GoogleFonts.outfit(
-                                        color: Colors.white,
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 1,
-                                      ), // closes TextStyle
-                                    ), // closes Text
-                                  ), // closes Center
-                                ), // closes Container
-                              ), // closes Transform.scale
-                            ], // closes children
-                          ), // closes Stack
-                        ), // closes GestureDetector
-                      ), // closes Positioned
-
-                          // ── Divine Overlay Painter (Floating Embers & Petals over all UI elements) ──
-                          Positioned(
-                            top: 0,
-                            left: 0,
-                            width: 393,
-                            height: 1010,
-                            child: IgnorePointer(
-                              child: AnimatedBuilder(
-                                animation: _ambientController,
-                                builder: (context, _) {
-                                  return CustomPaint(
-                                    painter: DivineOverlayPainter(
-                                      embers: _embers,
-                                      petals: _petals,
-                                      isCompleted: isCompleted,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-
-                          // ── Top Bar (Moved to top of stack) ──────────────────────────
-                          Positioned(
-                            top: 25,
-                            left: 20,
-                            right: 20,
-                            height: 48,
                             child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                _circleBtn(
-                                  icon: Icons.arrow_back_ios_new_rounded,
-                                  onTap: () => Navigator.pop(context, _totalProgress),
+                                Icon(
+                                  Icons.refresh_rounded,
+                                  size: 15,
+                                  color: pack.primaryColor,
                                 ),
-                                _circleBtn(
-                                  icon: Icons.refresh_rounded,
-                                  onTap: _resetCurrentMala,
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Reset',
+                                  style: GoogleFonts.outfit(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                    color: pack.primaryColor,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                        ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Center Darshan Card with Unmasking Canvas
+                  Expanded(
+                    child: Center(
+                      child: Container(
+                        width: 353,
+                        height: 520,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(32),
+                          boxShadow: [
+                            BoxShadow(
+                              color: pack.primaryColor.withValues(alpha: 0.15),
+                              blurRadius: 24,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(32),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              // Unmasked Darshan Image
+                              if (_imageProvider != null)
+                                Image(
+                                  image: _imageProvider!,
+                                  fit: BoxFit.cover,
+                                ),
+
+                              // Interactive Mask & Smoke Painter
+                              AnimatedBuilder(
+                                animation: Listenable.merge([
+                                  _revealController,
+                                  _completionController,
+                                  _ambientController,
+                                ]),
+                                builder: (ctx, _) {
+                                  return CustomPaint(
+                                    painter: DivineCardPainter(
+                                      jitteredPoints: _jitteredPoints,
+                                      shuffledIndices: _shuffledIndices,
+                                      count: _count,
+                                      target: _target,
+                                      revealingTileIndex: _revealingTile,
+                                      currentRevealProgress:
+                                          _revealController.value,
+                                      completionFadeProgress:
+                                          _completionController.value,
+                                      glowRings: _glowRings,
+                                      tapSparks: _tapSparks,
+                                      spiralSparks: _spiralSparks,
+                                      floatingOms: _floatingOms,
+                                      mistParticles: _mistParticles,
+                                      smokePuffs: _smokePuffs,
+                                      tapPetals: _tapPetals,
+                                      divineSymbolParticles: _divineSymbolParticles,
+                                      timeSeconds:
+                                          _ambientController.value * 10.0,
+                                      isCompleted: isCompleted,
+                                      effectPack: widget.entry.effectPack,
+                                    ),
+                                  );
+                                },
+                              ),
+
+                              // Completion Blessing Banner Overlay
+                              if (_showContinueButton)
+                                Positioned(
+                                  bottom: 24,
+                                  left: 20,
+                                  right: 20,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 18,
+                                      vertical: 16,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.92,
+                                      ),
+                                      borderRadius: BorderRadius.circular(24),
+                                      border: Border.all(
+                                        color: pack.primaryColor,
+                                        width: 1.5,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: pack.primaryColor.withValues(
+                                            alpha: 0.25,
+                                          ),
+                                          blurRadius: 18,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          pack.blessingTitle,
+                                          textAlign: TextAlign.center,
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: pack.primaryColor,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          pack.blessingSubtitle,
+                                          textAlign: TextAlign.center,
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 12,
+                                            color: const Color(
+                                              0xFF2E2A36,
+                                            ).withValues(alpha: 0.8),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        GestureDetector(
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    DarshanRuntimeScreen(
+                                                      config: widget.entry,
+                                                      sessionController:
+                                                          JapSessionController(
+                                                            config:
+                                                                widget.entry,
+                                                            initialCount: widget
+                                                                .entry
+                                                                .targetCount,
+                                                          ),
+                                                    ),
+                                              ),
+                                            );
+                                          },
+                                          child: Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(
+                                                colors: [
+                                                  pack.primaryColor,
+                                                  pack.secondaryColor,
+                                                ],
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(30),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: pack.primaryColor
+                                                      .withValues(alpha: 0.35),
+                                                  blurRadius: 10,
+                                                  offset: const Offset(0, 3),
+                                                ),
+                                              ],
+                                            ),
+                                            child: Center(
+                                              child: Text(
+                                                'View Divine Darshan 🙏',
+                                                style: GoogleFonts.outfit(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
+
+                  // Bottom Chant Controls
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 16,
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          widget.entry.shlokText,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.notoSerifDevanagari(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF2E2A36),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Center Chant Bead Button with Count & Audio Playing Disabled State
+                        Transform.scale(
+                          scale: _buttonScale,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: _increment,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              width: 90,
+                              height: 90,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: RadialGradient(
+                                  colors: isBusy
+                                      ? [
+                                          pack.primaryColor.withValues(alpha: 0.7),
+                                          pack.accentColor.withValues(alpha: 0.85),
+                                        ]
+                                      : [
+                                          pack.secondaryColor,
+                                          pack.primaryColor,
+                                        ],
+                                  center: const Alignment(-0.2, -0.3),
+                                ),
+                                border: isBusy
+                                    ? Border.all(
+                                        color: Colors.white.withValues(alpha: 0.8),
+                                        width: 2.5,
+                                      )
+                                    : null,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: pack.primaryColor.withValues(
+                                      alpha: isBusy ? 0.65 : 0.45,
+                                    ),
+                                    blurRadius: isBusy ? 24 : 20,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (isBusy)
+                                    const Icon(
+                                      Icons.graphic_eq_rounded,
+                                      color: Colors.white,
+                                      size: 26,
+                                    )
+                                  else
+                                    SvgPicture.string(
+                                      '''<svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z" fill="white"/>
+<circle cx="12" cy="12" r="5" fill="white"/>
+</svg>''',
+                                      width: 24,
+                                      height: 24,
+                                    ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '$_count / $_target',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                      shadows: [
+                                        const Shadow(
+                                          color: Colors.black38,
+                                          blurRadius: 4,
+                                          offset: Offset(0, 1),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _increment,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              child: Text(
+                                isBusy
+                                    ? '🔊 Chanting Shlok...'
+                                    : isCompleted
+                                        ? 'Mala Complete! Tap for Next Mala'
+                                        : 'Tap to Chant Mantra',
+                                key: ValueKey<String>(
+                                  isBusy ? 'busy' : (isCompleted ? 'comp' : 'tap'),
+                                ),
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  fontWeight: isBusy ? FontWeight.bold : FontWeight.w600,
+                                  color: isBusy
+                                      ? pack.primaryColor
+                                      : const Color(0xFF2E2A36).withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Top Overlay Flower Petals / Bilva / Feathers Shower (Ignored from Pointer/Touch Events)
+            IgnorePointer(
+              child: AnimatedBuilder(
+                animation: _ambientController,
+                builder: (ctx, _) {
+                  return CustomPaint(
+                    size: MediaQuery.of(context).size,
+                    painter: DivineOverlayPainter(
+                      embers: _embers,
+                      petals: _petals,
+                      isCompleted: isCompleted,
+                    ),
+                  );
+                },
               ),
             ),
           ],
@@ -1720,375 +2185,11 @@ class _JapDetailScreenState extends State<JapDetailScreen>
       ),
     );
   }
-
-  Widget _circleBtn({required IconData icon, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
-          shape: BoxShape.circle,
-          border:
-              Border.all(color: Colors.white.withValues(alpha: 0.18)),
-        ),
-        child: Icon(icon, color: Colors.white, size: 18),
-      ),
-    );
-  }
 }
 
 // ─────────────────────────────────────────────
-// Custom Particle Systems & Divine Painters
+// Custom Painters
 // ─────────────────────────────────────────────
-
-class EmberParticle {
-  double x, y;
-  double vx, vy;
-  double size;
-  double alpha;
-  double speedMultiplier;
-  
-  EmberParticle({
-    required this.x,
-    required this.y,
-    required this.vx,
-    required this.vy,
-    required this.size,
-    required this.alpha,
-    this.speedMultiplier = 1.0,
-  });
-  
-  void update(double width, double height) {
-    y -= vy * speedMultiplier;
-    x += vx;
-    if (y < -20) {
-      y = height + 20;
-      x = math.Random().nextDouble() * width;
-    }
-    if (x < -20 || x > width + 20) {
-      vx = -vx;
-    }
-  }
-}
-
-class GlowRing {
-  final Offset position;
-  final double maxRadius;
-  final double maxLife;
-  double life;
-  final Color color;
-
-  GlowRing({
-    required this.position,
-    this.maxRadius = 55.0,
-    this.maxLife = 0.5,
-    required this.color,
-  }) : life = maxLife;
-
-  bool update() {
-    life -= 0.016;
-    return life > 0;
-  }
-}
-
-class SmokeParticle {
-  double x, y;
-  double vx, vy;
-  double size;
-  double alpha;
-  double maxLife;
-  double life;
-  double growthRate;
-  double waveFrequency;
-  double waveAmplitude;
-  double wavePhase;
-  
-  SmokeParticle({
-    required this.x,
-    required this.y,
-    required this.vx,
-    required this.vy,
-    required this.size,
-    required this.alpha,
-    required this.maxLife,
-    required this.growthRate,
-    this.waveFrequency = 2.5,
-    this.waveAmplitude = 0.6,
-  }) : life = maxLife, wavePhase = math.Random().nextDouble() * 10.0;
-  
-  bool update() {
-    life -= 0.016;
-    size += growthRate;
-    y -= vy;
-    x += vx + math.sin(life * waveFrequency + wavePhase) * waveAmplitude;
-    alpha = (life / maxLife).clamp(0.0, 1.0);
-    return life > 0;
-  }
-}
-
-class SpiralSparkParticle {
-  Offset center;
-  double angle;
-  double radius;
-  double speed;
-  double radialSpeed;
-  double life;
-  final double maxLife;
-  double size;
-  Color color;
-
-  SpiralSparkParticle({
-    required this.center,
-    required this.angle,
-    required this.speed,
-    required this.radialSpeed,
-    required this.maxLife,
-    required this.size,
-    required this.color,
-  })  : radius = 0.0,
-        life = maxLife;
-
-  bool update() {
-    life -= 0.016;
-    angle += speed;
-    radius += radialSpeed;
-    return life > 0;
-  }
-
-  Offset get currentPosition => Offset(
-        center.dx + radius * math.cos(angle),
-        center.dy + radius * math.sin(angle),
-      );
-}
-
-class TapSparkParticle {
-  Offset position;
-  double vx;
-  double vy;
-  double life;
-  final double maxLife;
-  double size;
-  Color color;
-
-  TapSparkParticle({
-    required this.position,
-    required this.vx,
-    required this.vy,
-    required this.maxLife,
-    required this.size,
-    required this.color,
-  }) : life = maxLife;
-
-  bool update() {
-    life -= 0.016;
-    position += Offset(vx, vy);
-    vx *= 0.92;
-    vy *= 0.92;
-    vy -= 0.12;
-    return life > 0;
-  }
-}
-
-class FloatingOmText {
-  Offset position;
-  double life;
-  final double maxLife;
-  final String text;
-
-  FloatingOmText({
-    required this.position,
-    required this.maxLife,
-    required this.text,
-  }) : life = maxLife;
-
-  bool update() {
-    life -= 0.016;
-    position = position - const Offset(0, 0.85);
-    return life > 0;
-  }
-}
-
-enum ParticleShape { petal, leaf, ash, feather, spark }
-
-class TempleThemeConfig {
-  final String deityName;
-  final ParticleShape particleShape;
-  final Color primaryColor;
-  final Color secondaryColor;
-  final Color accentColor;
-  final String blessingTitle;
-  final String blessingSubtitle;
-
-  const TempleThemeConfig({
-    required this.deityName,
-    required this.particleShape,
-    required this.primaryColor,
-    required this.secondaryColor,
-    required this.accentColor,
-    required this.blessingTitle,
-    required this.blessingSubtitle,
-  });
-
-  static TempleThemeConfig fromName(String name) {
-    final nameLower = name.toLowerCase();
-    if (nameLower.contains('shiva') || nameLower.contains('mahadev')) {
-      return const TempleThemeConfig(
-        deityName: 'Lord Shiva',
-        particleShape: ParticleShape.leaf,
-        primaryColor: Color(0xFF81C784),
-        secondaryColor: Color(0xFFE8F4FC),
-        accentColor: Color(0xFFC5D8E0),
-        blessingTitle: '🙏 Har Har Mahadev 🙏',
-        blessingSubtitle: 'May Lord Shiva bless you with inner peace, courage, and divine liberation.',
-      );
-    } else if (nameLower.contains('krishna') || nameLower.contains('radha')) {
-      return const TempleThemeConfig(
-        deityName: 'Lord Krishna',
-        particleShape: ParticleShape.feather,
-        primaryColor: Color(0xFF0D4F8B),
-        secondaryColor: Color(0xFF50C878),
-        accentColor: Color(0xFFFF80AB),
-        blessingTitle: '🙏 Jai Shree Krishna 🙏',
-        blessingSubtitle: 'May Lord Krishna fill your life with eternal joy, love, and divine grace.',
-      );
-    } else if (nameLower.contains('ganesh') || nameLower.contains('ganpati')) {
-      return const TempleThemeConfig(
-        deityName: 'Lord Ganesha',
-        particleShape: ParticleShape.petal,
-        primaryColor: Color(0xFFFF6B35),
-        secondaryColor: Color(0xFFFFB300),
-        accentColor: Color(0xFFFFD700),
-        blessingTitle: '🙏 Ganpati Bappa Morya 🙏',
-        blessingSubtitle: 'May Lord Ganesha remove all obstacles and bestow wisdom upon your path.',
-      );
-    } else if (nameLower.contains('hanuman')) {
-      return const TempleThemeConfig(
-        deityName: 'Lord Hanuman',
-        particleShape: ParticleShape.spark,
-        primaryColor: Color(0xFFCC2200),
-        secondaryColor: Color(0xFFFF6600),
-        accentColor: Color(0xFFFFD700),
-        blessingTitle: '🙏 Jai Bajrangbali 🙏',
-        blessingSubtitle: 'May Lord Hanuman grant you immense strength, devotion, and divine protection.',
-      );
-    } else if (nameLower.contains('durga') || nameLower.contains('kali')) {
-      return const TempleThemeConfig(
-        deityName: 'Maa Durga',
-        particleShape: ParticleShape.spark,
-        primaryColor: Color(0xFF990000),
-        secondaryColor: Color(0xFFFF1744),
-        accentColor: Color(0xFFFFD700),
-        blessingTitle: '🙏 Jai Mata Di 🙏',
-        blessingSubtitle: 'May Maa Durga empower your spirit with fearless strength and victory.',
-      );
-    } else if (nameLower.contains('lakshmi')) {
-      return const TempleThemeConfig(
-        deityName: 'Maa Lakshmi',
-        particleShape: ParticleShape.petal,
-        primaryColor: Color(0xFFFF80AB),
-        secondaryColor: Color(0xFFFFE082),
-        accentColor: Color(0xFFFFD700),
-        blessingTitle: '🙏 Shreem Mahalakshmiye Namah 🙏',
-        blessingSubtitle: 'May Maa Lakshmi shower your home with eternal wealth, peace, and grace.',
-      );
-    } else if (nameLower.contains('vishnu')) {
-      return const TempleThemeConfig(
-        deityName: 'Lord Vishnu',
-        particleShape: ParticleShape.spark,
-        primaryColor: Color(0xFF0277BD),
-        secondaryColor: Color(0xFFFFD700),
-        accentColor: Color(0xFFFF8F00),
-        blessingTitle: '🙏 Om Namo Narayanaya 🙏',
-        blessingSubtitle: 'May Lord Vishnu preserve harmony, righteousness, and peace in your life.',
-      );
-    }
-    return TempleThemeConfig(
-      deityName: name,
-      particleShape: ParticleShape.petal,
-      primaryColor: const Color(0xFFFF9933),
-      secondaryColor: const Color(0xFFFF5500),
-      accentColor: const Color(0xFFFFD700),
-      blessingTitle: '🙏 May $name Bless You 🙏',
-      blessingSubtitle: 'May peace, strength, wisdom and divine grace always guide your sacred path.',
-    );
-  }
-
-  static ParticleShape parseShape(String? shapeStr, ParticleShape defaultShape) {
-    if (shapeStr == null || shapeStr.isEmpty || shapeStr == 'auto') return defaultShape;
-    switch (shapeStr.toLowerCase()) {
-      case 'leaf':
-        return ParticleShape.leaf;
-      case 'feather':
-        return ParticleShape.feather;
-      case 'spark':
-        return ParticleShape.spark;
-      case 'ash':
-        return ParticleShape.ash;
-      case 'petal':
-        return ParticleShape.petal;
-      default:
-        return defaultShape;
-    }
-  }
-
-  static TempleThemeConfig fromEntry(JapEntry entry) {
-    final base = fromName(entry.name);
-    return TempleThemeConfig(
-      deityName: base.deityName,
-      particleShape: parseShape(entry.particleShape, base.particleShape),
-      primaryColor: base.primaryColor,
-      secondaryColor: base.secondaryColor,
-      accentColor: base.accentColor,
-      blessingTitle: (entry.blessingTitle != null && entry.blessingTitle!.trim().isNotEmpty)
-          ? entry.blessingTitle!
-          : base.blessingTitle,
-      blessingSubtitle: (entry.blessingSubtitle != null && entry.blessingSubtitle!.trim().isNotEmpty)
-          ? entry.blessingSubtitle!
-          : base.blessingSubtitle,
-    );
-  }
-}
-
-class PetalParticle {
-  double x, y;
-  double vy;
-  double angle;
-  double rotationSpeed;
-  double size;
-  double windFreq;
-  double windAmp;
-  double time;
-  Color color;
-  ParticleShape shape;
-  
-  PetalParticle({
-    required this.x,
-    required this.y,
-    required this.vy,
-    required this.angle,
-    required this.rotationSpeed,
-    required this.size,
-    required this.windFreq,
-    required this.windAmp,
-    required this.color,
-    this.shape = ParticleShape.petal,
-  }) : time = math.Random().nextDouble() * 100;
-  
-  void update(double width, double height) {
-    time += 0.016;
-    y += vy;
-    x += math.sin(time * windFreq) * windAmp;
-    angle += rotationSpeed;
-    
-    if (y > height + 20) {
-      y = -20;
-      x = math.Random().nextDouble() * width;
-    }
-  }
-}
-
 class DivineBackgroundPainter extends CustomPainter {
   final double timeSeconds;
   final bool isCompleted;
@@ -2105,81 +2206,100 @@ class DivineBackgroundPainter extends CustomPainter {
     final double effectiveProgress = isCompleted ? 1.0 : progressPct;
     if (effectiveProgress <= 0.02) return;
 
-    final center = Offset(197.0, 400.0); // Center of card body
+    final center = Offset(size.width / 2, size.height * 0.4);
 
-    // 1. Soft glowing aura backing (scales with progress)
-    final double pulse = (0.08 + 0.14 * effectiveProgress) + (math.sin(timeSeconds * 2.5) * 0.04);
+    final double pulse =
+        (0.08 + 0.14 * effectiveProgress) +
+        (math.sin(timeSeconds * 2.5) * 0.04);
     final auraPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          const Color(0xFFFF9900).withValues(alpha: pulse.clamp(0.0, 0.35)),
-          const Color(0xFFFF5500).withValues(alpha: 0.0),
-        ],
-      ).createShader(Rect.fromCircle(center: center, radius: 350 * (0.6 + 0.4 * effectiveProgress)));
+      ..shader =
+          RadialGradient(
+            colors: [
+              const Color(0xFFFF9900).withValues(alpha: pulse.clamp(0.0, 0.35)),
+              const Color(0xFFFF5500).withValues(alpha: 0.0),
+            ],
+          ).createShader(
+            Rect.fromCircle(
+              center: center,
+              radius: 350 * (0.6 + 0.4 * effectiveProgress),
+            ),
+          );
     canvas.drawCircle(center, 350 * (0.6 + 0.4 * effectiveProgress), auraPaint);
-
-    // 2. Swirling golden/orange energy particles orbiting around the card (starts at 25% progress)
-    if (effectiveProgress >= 0.25) {
-      final double baseAngle = timeSeconds * (0.3 + 0.2 * effectiveProgress);
-      final orbitPaint = Paint()
-        ..style = PaintingStyle.fill
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.5);
-      
-      final int particleCount = (20 * effectiveProgress).round();
-      for (int i = 0; i < particleCount; i++) {
-        final double angle = baseAngle + (i * 2 * math.pi / math.max(1, particleCount));
-        
-        final double x = center.dx + math.cos(angle) * 195.0;
-        final double y = center.dy + math.sin(angle) * 345.0;
-        
-        final double opacity = (0.3 + 0.3 * math.sin(timeSeconds * 3.0 + i)) * effectiveProgress;
-        orbitPaint.color = (i % 2 == 0 ? const Color(0xFFFFD700) : const Color(0xFFFF5500))
-            .withValues(alpha: opacity.clamp(0.0, 0.8));
-        
-        final double sizeVal = (2.5 + 1.5 * math.sin(timeSeconds * 4.0 + i)) * (0.7 + 0.3 * effectiveProgress);
-        canvas.drawCircle(Offset(x, y), sizeVal, orbitPaint);
-      }
-    }
-
-    // 3. Concentric rotating rings peeking out from behind (starts at 50% progress)
-    if (effectiveProgress >= 0.50) {
-      final ringPaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
-
-      final sweepShader = SweepGradient(
-        colors: [
-          const Color(0xFFFFD700).withValues(alpha: 0.7 * effectiveProgress),
-          const Color(0xFFFFD700).withValues(alpha: 0.05),
-          const Color(0xFFFF8800).withValues(alpha: 0.7 * effectiveProgress),
-          const Color(0xFFFFD700).withValues(alpha: 0.05),
-          const Color(0xFFFFD700).withValues(alpha: 0.7 * effectiveProgress),
-        ],
-        stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
-      ).createShader(Rect.fromCircle(center: Offset.zero, radius: 250));
-
-      ringPaint.shader = sweepShader;
-
-      void drawRing(double radius, double strokeWidth, double angle) {
-        canvas.save();
-        canvas.translate(center.dx, center.dy);
-        canvas.rotate(angle);
-        ringPaint.strokeWidth = strokeWidth;
-        
-        final rect = Rect.fromCenter(center: Offset.zero, width: radius * 2, height: radius * 3.2);
-        canvas.drawOval(rect, ringPaint);
-        canvas.restore();
-      }
-
-      drawRing(130.0, 2.5, timeSeconds * 0.3);
-      if (effectiveProgress > 0.75) drawRing(180.0, 1.8, -timeSeconds * 0.2);
-      if (effectiveProgress >= 0.90) drawRing(230.0, 1.2, timeSeconds * 0.12);
-    }
   }
 
   @override
   bool shouldRepaint(covariant DivineBackgroundPainter oldDelegate) =>
-      oldDelegate.timeSeconds != timeSeconds || oldDelegate.isCompleted != isCompleted || oldDelegate.progressPct != progressPct;
+      oldDelegate.timeSeconds != timeSeconds ||
+      oldDelegate.isCompleted != isCompleted ||
+      oldDelegate.progressPct != progressPct;
+}
+
+
+class MistParticle {
+  double x, y;
+  double vx, vy;
+  double size;
+  double alpha;
+  double maxAlpha;
+  double life;
+  double maxLife;
+  Color color;
+
+  MistParticle({
+    required this.x,
+    required this.y,
+    required this.vx,
+    required this.vy,
+    required this.size,
+    required this.maxAlpha,
+    required this.maxLife,
+    required this.color,
+  })  : alpha = 0.0,
+        life = maxLife;
+
+  bool update() {
+    life -= 0.016;
+    if (life <= 0) return false;
+    x += vx;
+    y += vy;
+    final progress = 1.0 - (life / maxLife);
+    if (progress < 0.3) {
+      alpha = maxAlpha * (progress / 0.3);
+    } else {
+      alpha = maxAlpha * (1.0 - ((progress - 0.3) / 0.7));
+    }
+    return true;
+  }
+}
+
+class DivineSymbolParticle {
+  Offset position;
+  double vy;
+  double alpha;
+  double life;
+  double maxLife;
+  DivineSymbolType symbol;
+  Color color;
+  double rotation;
+
+  DivineSymbolParticle({
+    required this.position,
+    required this.symbol,
+    required this.color,
+    this.maxLife = 1.0,
+    this.vy = -1.5,
+  })  : alpha = 1.0,
+        life = maxLife,
+        rotation = 0.0;
+
+  bool update() {
+    life -= 0.016;
+    if (life <= 0) return false;
+    position = position + Offset(0, vy);
+    alpha = (life / maxLife).clamp(0.0, 1.0);
+    rotation += 0.02;
+    return true;
+  }
 }
 
 class DivineCardPainter extends CustomPainter {
@@ -2190,14 +2310,17 @@ class DivineCardPainter extends CustomPainter {
   final int? revealingTileIndex;
   final double currentRevealProgress;
   final double completionFadeProgress;
-  final List<SmokeParticle> smokeParticles;
   final List<GlowRing> glowRings;
   final List<TapSparkParticle> tapSparks;
   final List<SpiralSparkParticle> spiralSparks;
   final List<FloatingOmText> floatingOms;
+  final List<MistParticle> mistParticles;
+  final List<DivineSymbolParticle> divineSymbolParticles;
+  final List<SmokeParticle> smokePuffs;
+  final List<PetalParticle> tapPetals;
   final double timeSeconds;
   final bool isCompleted;
-  final Offset? lastRevealPoint;
+  final EffectPack effectPack;
 
   DivineCardPainter({
     required this.jitteredPoints,
@@ -2206,571 +2329,304 @@ class DivineCardPainter extends CustomPainter {
     required this.target,
     required this.revealingTileIndex,
     required this.currentRevealProgress,
-    this.completionFadeProgress = 0.0,
-    required this.smokeParticles,
+    required this.completionFadeProgress,
     required this.glowRings,
-    this.tapSparks = const [],
-    this.spiralSparks = const [],
-    this.floatingOms = const [],
+    required this.tapSparks,
+    required this.spiralSparks,
+    required this.floatingOms,
+    required this.mistParticles,
+    required this.divineSymbolParticles,
+    required this.smokePuffs,
+    required this.tapPetals,
     required this.timeSeconds,
     required this.isCompleted,
-    this.lastRevealPoint,
+    required this.effectPack,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final double progressPct = isCompleted ? 1.0 : (count / math.max(1, target)).clamp(0.0, 1.0);
+    final rect = Offset.zero & size;
+    final cardRRect = RRect.fromRectAndRadius(rect, const Radius.circular(20));
+    final double defaultEraseRadius = 26.0;
 
-    // 0. Draw a subtle, pulsing Golden Divine Border around the whole card to make it look amazing from the start
-    final borderPulse = 0.3 + (math.sin(timeSeconds * 1.5) * 0.15);
-    final borderPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          const Color(0xFFFFD700).withValues(alpha: borderPulse),
-          const Color(0xFFFF8800).withValues(alpha: borderPulse * 0.5),
-          const Color(0xFFFFD700).withValues(alpha: borderPulse),
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
-      ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 4.0);
-    
-    final borderRRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.width, size.height), 
-      const Radius.circular(16)
-    );
-    canvas.drawRRect(borderRRect, borderPaint);
+    // Clip everything to the card's rounded corners so reveals don't leak outside
+    canvas.clipRRect(cardRRect);
 
-    // 1. Divine Aura Halo & Sunbeams (Light Rays) radiating from upper center
-    // Starts subtly at 0% and becomes intensely bright as progress reaches 100%
-    final double rayIntensity = 0.2 + (progressPct * 0.8);
-    final center = Offset(size.width / 2, size.height * 0.35);
+    // 1. Draw Divine Veil Overlay using SaveLayer & BlendMode.dstOut
+    final veilPaint = Paint()
+      ..color = const Color(0xFF1A1025).withValues(
+        alpha: ((1.0 - completionFadeProgress) * 0.92).clamp(0.0, 0.92),
+      );
 
-    // A. Draw concentric glowing aura behind/around the deity's face
-    final double haloPulse = (0.2 + (math.sin(timeSeconds * 2.0) * 0.05)) * rayIntensity;
-    final haloPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          const Color(0xFFFFD700).withValues(alpha: haloPulse.clamp(0.0, 0.4)),
-          const Color(0xFFFF8800).withValues(alpha: 0.0),
-        ],
-      ).createShader(Rect.fromCircle(center: center, radius: 180));
-    canvas.drawCircle(center, 180, haloPaint);
+    if (completionFadeProgress < 1.0) {
+      canvas.saveLayer(rect, Paint());
+      canvas.drawRect(rect, veilPaint);
 
-      // B. Draw rotating sunbeams (light rays)
-      final rayPaint = Paint()..style = PaintingStyle.fill;
-      final double rayAngleStep = 2 * math.pi / 12; // 12 rays
-      final double rotationAngle = timeSeconds * (0.06 + 0.04 * rayIntensity); // speeds up with devotion
-
-      for (int i = 0; i < 12; i++) {
-        final double startAngle = i * rayAngleStep + rotationAngle;
-        final double sweepAngle = rayAngleStep * 0.35; // width of rays
-
-        final path = Path();
-        path.moveTo(center.dx, center.dy);
-
-        final double r = size.height; // radius to cover the entire card
-        path.lineTo(
-          center.dx + r * math.cos(startAngle),
-          center.dy + r * math.sin(startAngle),
-        );
-        path.lineTo(
-          center.dx + r * math.cos(startAngle + sweepAngle),
-          center.dy + r * math.sin(startAngle + sweepAngle),
-        );
-        path.close();
-
-        // Rays are semi-transparent and shimmer gently
-        final double rayOpacity = (0.04 + 0.03 * math.sin(timeSeconds * 1.5 + i)) * rayIntensity;
-        rayPaint.shader = RadialGradient(
-          colors: [
-            const Color(0xFFFFE066).withValues(alpha: rayOpacity.clamp(0.0, 0.12)),
-            const Color(0xFFFF9900).withValues(alpha: 0.0),
-          ],
-        ).createShader(Rect.fromCircle(center: center, radius: r));
-
-        canvas.drawPath(path, rayPaint);
-      }
-
-    // 2. Shimmering Gold Ambient Sparks (always visible, intensity scales)
-    final double sparkMultiplier = 0.3 + (progressPct * 0.7);
-      final sparkPaint = Paint()
-        ..style = PaintingStyle.fill
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
-
-      final rng = math.Random(1088); // fixed seed for card particles
-      for (int i = 0; i < 25; i++) {
-        final double seedX = rng.nextDouble();
-        final double seedY = rng.nextDouble();
-        final double seedSpeed = rng.nextDouble() * 0.35 + 0.25;
-        final double seedSize = rng.nextDouble() * 2.5 + 1.2;
-
-        // vertical progress loop: goes bottom to top
-        double y = (size.height + 40) - (((timeSeconds * 35 * seedSpeed) + seedY * size.height) % (size.height + 80));
-        // horizontal sway
-        double x = (seedX * size.width) + math.sin(timeSeconds * 1.2 + i) * 12.0;
-
-        // Fade in from bottom, fade out at top
-        double opacity = 0.4 * sparkMultiplier;
-        if (y < 80) {
-          opacity = ((y / 80) * 0.4 * sparkMultiplier).clamp(0.0, 0.4);
-        } else if (y > size.height - 80) {
-          opacity = (((size.height - y) / 80) * 0.4 * sparkMultiplier).clamp(0.0, 0.4);
-        }
-
-        final double currentSize = seedSize * (0.85 + 0.25 * math.sin(timeSeconds * 2.5 + i));
-        sparkPaint.color = const Color(0xFFFFD700).withValues(
-            alpha: (opacity * (0.6 + 0.4 * math.sin(timeSeconds * 1.8 + i))).clamp(0.0, 0.8));
-
-        canvas.drawCircle(Offset(x, y), currentSize, sparkPaint);
-      }
-
-    // 3. Diagonal Golden Light Sweep / Shimmer overlay (starts at 50% progress)
-    if (progressPct >= 0.50) {
-      final double sweepProgress = (timeSeconds * 0.15) % 2.0;
-      if (sweepProgress < 1.2) {
-        final double sweepAlpha = (0.12 * progressPct).clamp(0.0, 0.15);
-        final sweepPaint = Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFFFFD700).withValues(alpha: 0.0),
-              const Color(0xFFFFEFA0).withValues(alpha: sweepAlpha),
-              const Color(0xFFFFD700).withValues(alpha: 0.0),
-            ],
-            stops: [
-              (sweepProgress - 0.25).clamp(0.0, 1.0),
-              sweepProgress.clamp(0.0, 1.0),
-              (sweepProgress + 0.25).clamp(0.0, 1.0),
-            ],
-          ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
-          ..blendMode = BlendMode.screen;
-
-        canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), sweepPaint);
-      }
-    }
-
-    final double mistOpacity = isCompleted
-        ? (1.0 - completionFadeProgress).clamp(0.0, 1.0)
-        : 1.0;
-
-    // 1. Draw Mist Cover Layer & Organic Erase mask
-    if (mistOpacity > 0.0) {
-      canvas.saveLayer(Offset.zero & size, Paint()..color = Colors.white.withValues(alpha: mistOpacity));
-
-      // Warm cream mist canvas
-      final paintMist = Paint()
-        ..color = const Color(0xFFF7F2EC).withValues(alpha: mistOpacity)
-        ..style = PaintingStyle.fill;
-      canvas.drawRect(Offset.zero & size, paintMist);
-
-      // Cloudy mist background texture
-      final paintMistTexture = Paint()
-        ..shader = RadialGradient(
-          colors: [
-            const Color(0xFFEADBCE).withValues(alpha: 0.85 * mistOpacity),
-            const Color(0xFFF7F2EC).withValues(alpha: 0.0),
-          ],
-        ).createShader(Rect.fromCircle(center: Offset(size.width / 2, size.height / 2), radius: 300));
-      canvas.drawRect(Offset.zero & size, paintMistTexture);
-
-      final paintErase = Paint()
+      final erasePaint = Paint()
         ..blendMode = BlendMode.dstOut
-        ..style = PaintingStyle.fill;
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8.0);
 
-      // Calculate dynamic reveal radius based on target count so N taps reveal the full image proportionally
-      final double cardArea = size.width * size.height;
-      final double areaPerPoint = cardArea / math.max(1, target);
-      final double baseRevealRadius = math.max(28.0, math.sqrt(areaPerPoint / math.pi) * 1.35);
+      for (int i = 0; i < count && i < target; i++) {
+        final tileIdx = shuffledIndices[i];
+        final pt = jitteredPoints[tileIdx];
 
-      // Draw all previously revealed organic cloud points
-      final completedLimit = revealingTileIndex != null ? count - 1 : count;
-      for (int i = 0; i < completedLimit; i++) {
-        final idx = shuffledIndices[i];
-        final pt = jitteredPoints[idx];
-
-        final eraseShader = RadialGradient(
-          colors: [
-            Colors.black.withValues(alpha: 1.0),
-            Colors.black.withValues(alpha: 0.0),
-          ],
-        ).createShader(Rect.fromCircle(center: pt, radius: baseRevealRadius));
-
-        paintErase.shader = eraseShader;
-        canvas.drawCircle(pt, baseRevealRadius, paintErase);
-
-        // Overlapping organic blobs for irregular edges (scaled down proportionally)
-        final rng = math.Random(idx);
-        for (int j = 0; j < 3; j++) {
-          final angle = rng.nextDouble() * 2 * math.pi;
-          final dist = rng.nextDouble() * 12.0 + 6.0;
-          final r = rng.nextDouble() * 12.0 + 18.0;
-          final offsetPt = pt + Offset(math.cos(angle) * dist, math.sin(angle) * dist);
-
-          final subEraseShader = RadialGradient(
-            colors: [
-              Colors.black.withValues(alpha: 1.0),
-              Colors.black.withValues(alpha: 0.0),
-            ],
-          ).createShader(Rect.fromCircle(center: offsetPt, radius: r));
-
-          paintErase.shader = subEraseShader;
-          canvas.drawCircle(offsetPt, r, paintErase);
+        double scale = 1.0;
+        if (tileIdx == revealingTileIndex) {
+          scale = Curves.easeOutBack.transform(
+            currentRevealProgress.clamp(0.0, 1.0),
+          );
         }
-      }
-
-      // Draw current tap reveal expanding mask (Sacred Lotus & Radiant Edge Flare)
-      if (revealingTileIndex != null) {
-        final pt = jitteredPoints[revealingTileIndex!];
-        final currentRadius = baseRevealRadius * currentRevealProgress;
-
-        if (currentRadius > 0) {
-          // 1. Organic 8-Petal Lotus Blossom Geometry Erase Path
-          final lotusPath = Path();
-          const int numPetals = 8;
-          for (int k = 0; k <= 360; k += 6) {
-            final rad = k * math.pi / 180;
-            final petalMod = 1.0 + 0.22 * math.sin(numPetals * rad);
-            final r = currentRadius * petalMod;
-            final x = pt.dx + r * math.cos(rad);
-            final y = pt.dy + r * math.sin(rad);
-            if (k == 0) {
-              lotusPath.moveTo(x, y);
-            } else {
-              lotusPath.lineTo(x, y);
-            }
-          }
-          lotusPath.close();
-
-          final eraseShader = RadialGradient(
-            colors: [
-              Colors.black.withValues(alpha: 1.0),
-              Colors.black.withValues(alpha: 0.0),
-            ],
-          ).createShader(Rect.fromCircle(center: pt, radius: currentRadius * 1.3));
-
-          paintErase.shader = eraseShader;
-          canvas.drawPath(lotusPath, paintErase);
-
-          final rng = math.Random(revealingTileIndex!);
-          for (int j = 0; j < 4; j++) {
-            final angle = rng.nextDouble() * 2 * math.pi;
-            final dist = (rng.nextDouble() * 14.0 + 6.0) * currentRevealProgress;
-            final r = (rng.nextDouble() * 12.0 + 16.0) * currentRevealProgress;
-            final offsetPt = pt + Offset(math.cos(angle) * dist, math.sin(angle) * dist);
-
-            if (r > 0) {
-              final subEraseShader = RadialGradient(
-                colors: [
-                  Colors.black.withValues(alpha: 1.0),
-                  Colors.black.withValues(alpha: 0.0),
-                ],
-              ).createShader(Rect.fromCircle(center: offsetPt, radius: r));
-
-              paintErase.shader = subEraseShader;
-              canvas.drawCircle(offsetPt, r, paintErase);
-            }
-          }
-        }
+        final r = defaultEraseRadius * scale;
+        _drawRevealShape(canvas, pt, r, erasePaint, i);
       }
 
       canvas.restore();
-
-      // 1b. Radiant Golden Edge Flare Halo around newly revealed deity tile
-      if (revealingTileIndex != null) {
-        final pt = jitteredPoints[revealingTileIndex!];
-        final flareRadius = (baseRevealRadius * 1.35) * currentRevealProgress;
-        final flareAlpha = (1.0 - currentRevealProgress).clamp(0.0, 1.0);
-
-        final flarePaint = Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 4.5 * (1.0 - currentRevealProgress)
-          ..color = const Color(0xFFFFD700).withValues(alpha: flareAlpha * 0.95)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.0);
-        canvas.drawCircle(pt, flareRadius, flarePaint);
-
-        final coreFlarePaint = Paint()
-          ..style = PaintingStyle.fill
-          ..shader = RadialGradient(
-            colors: [
-              const Color(0xFFFFFAEB).withValues(alpha: flareAlpha * 0.65),
-              const Color(0xFFFF9900).withValues(alpha: 0.0),
-            ],
-          ).createShader(Rect.fromCircle(center: pt, radius: flareRadius * 1.25));
-        canvas.drawCircle(pt, flareRadius * 1.25, coreFlarePaint);
-      }
     }
 
-    // 2. Draw Incense Smoke rising from the last reveal point
-    // Draw an intense glowing Agarbatti ember tip and stick at lastRevealPoint
-    if (lastRevealPoint != null && smokeParticles.isNotEmpty) {
+    // 2. Draw Incense Smoke Puffs
+    for (final smoke in smokePuffs) {
+      final alpha = (smoke.life / smoke.maxLife).clamp(0.0, 1.0) * smoke.alpha;
+      final smokePaint = Paint()
+        ..color = effectPack.secondaryColor.withValues(alpha: alpha)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10.0);
+      canvas.drawCircle(Offset(smoke.x, smoke.y), smoke.size, smokePaint);
+    }
+
+    // 3. Draw Fluttering Tap Flower Petals
+    for (final petal in tapPetals) {
       canvas.save();
-      // Animate the stick swaying gently and floating elegantly (Medium Speed)
-      final double swayAngle = math.sin(timeSeconds * 2.0) * 0.15; // medium sway
-      final double bounceY = math.cos(timeSeconds * 4.5) * 1.0; // medium float
-      canvas.translate(lastRevealPoint!.dx, lastRevealPoint!.dy + bounceY);
-      canvas.rotate(swayAngle);
-
-      // Calculate how much of the stick is left (1.0 = full, 0.0 = completely burned)
-      final double stickRemaining = 1.0 - (count / math.max(1, target)).clamp(0.0, 1.0);
-      final double pasteLength = 26.0 * stickRemaining;
-      
-      final double pasteStartY = 2.0;
-      final double pasteEndY = pasteStartY + pasteLength;
-      
-      // Bamboo is attached to the bottom of the paste, overlapping by 2 units to prevent gaps.
-      final double bambooStartY = math.max(pasteStartY, pasteEndY - 2.0);
-      final double bambooEndY = bambooStartY + 15.0; // The bare bamboo tail is always 15 units long
-
-      // X offsets to simulate the 0.088 slant angle (x=0 to x=4 over 45 units)
-      final double pasteEndX = pasteEndY * 0.088;
-      final double bambooStartX = bambooStartY * 0.088;
-      final double bambooEndX = bambooEndY * 0.088;
-
-      // Draw the bamboo base stick (extending downwards)
-      final bambooPaint = Paint()
-        ..color = const Color(0xFFC19A6B) // Light brown bamboo
-        ..strokeWidth = 1.8
-        ..strokeCap = StrokeCap.round;
-      canvas.drawLine(Offset(bambooStartX, bambooStartY), Offset(bambooEndX, bambooEndY), bambooPaint);
-
-      // Draw the incense paste body (dark grey/charcoal, thicker)
-      if (pasteLength > 0.5) {
-        final pastePaint = Paint()
-          ..color = const Color(0xFF2A2A2A) // Dark charcoal paste
-          ..strokeWidth = 3.5
-          ..strokeCap = StrokeCap.round
-          ..maskFilter = const MaskFilter.blur(BlurStyle.solid, 0.5);
-        canvas.drawLine(const Offset(0, 2), Offset(pasteEndX, pasteEndY), pastePaint);
-      }
-
-      // Add a thin ash tip layer right below the ember
-      final ashPaint = Paint()
-        ..color = const Color(0xFF888888)
-        ..strokeWidth = 3.0
-        ..strokeCap = StrokeCap.round;
-      canvas.drawLine(const Offset(0, 1), const Offset(0.5, 6), ashPaint);
-
-      // Minimalist pulsing ember glow (gentle breathe instead of frantic crackle)
-      final pulseRadius = 1.2 + math.sin(timeSeconds * 4.0) * 0.4; // tiny gentle pulse
-      final glowEmberPaint = Paint()
-        ..color = const Color(0xFFFF1100).withValues(alpha: 0.85)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0);
-      canvas.drawCircle(Offset.zero, pulseRadius + 1.5, glowEmberPaint); // minimal outer glow
-      
-      // Core burning ember (tiny dot)
-      final coreEmberPaint = Paint()
-        ..color = const Color(0xFFFFaa00)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.solid, 1.0);
-      canvas.drawCircle(Offset.zero, pulseRadius, coreEmberPaint);
-
-      // White hot oxygenated center (tiny static dot)
-      canvas.drawCircle(Offset.zero, 0.5, Paint()..color = Colors.white);
-      
-      // Removed the large blazing fire flame to make it look like a real agarbatti
-
+      canvas.translate(petal.x, petal.y);
+      canvas.rotate(petal.angle);
+      final petalPaint = Paint()
+        ..color = petal.color.withValues(alpha: 0.85)
+        ..style = PaintingStyle.fill;
+      final pPath = Path();
+      pPath.moveTo(0, -petal.size);
+      pPath.quadraticBezierTo(petal.size * 0.5, -petal.size * 0.2, 0, petal.size * 0.6);
+      pPath.quadraticBezierTo(-petal.size * 0.5, -petal.size * 0.2, 0, -petal.size);
+      canvas.drawPath(pPath, petalPaint);
       canvas.restore();
-
-      // Draw highly realistic, wispy, swirling, overlapping smoke tendrils
-      final int numTendrils = 2; // reduced from 4 for subtler smoke
-      final int segments = 25; // reduced segments
-      
-      for (int tIdx = 0; tIdx < numTendrils; tIdx++) {
-        final smokePath = Path();
-        smokePath.moveTo(lastRevealPoint!.dx, lastRevealPoint!.dy);
-        
-        final double speedOffset = tIdx * 1.5;
-        final double phaseOffset = tIdx * 2.14;
-        final double spreadFactor = 1.0 + (tIdx * 0.4);
-        
-        for (int i = 1; i <= segments; i++) {
-          final t = i / segments;
-          final height = lastRevealPoint!.dy - t * 250.0; // shorter smoke column
-          
-          // Realistic laminar-to-turbulent transition
-          final turbulence = (t < 0.1) ? (t * 5.0) : (t * t * 50.0 * spreadFactor); // reduced turbulence
-          
-          final phase1 = timeSeconds * (1.5 + speedOffset * 0.15) - t * 6.0 + phaseOffset; 
-          final phase2 = timeSeconds * (1.2 + speedOffset * 0.25) + t * 10.0; 
-          
-          final waveX = lastRevealPoint!.dx + 
-                        (math.sin(phase1) * turbulence) + 
-                        (math.sin(phase2) * (turbulence * 0.35));
-                        
-          smokePath.lineTo(waveX, height);
-        }
-        
-        final double strokeW = 1.5 + tIdx * 2.0;
-        final double maxAlpha = 0.25 - (tIdx * 0.1); // significantly reduced alpha
-        
-        final tendrilPaint = Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = strokeW
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..shader = LinearGradient(
-            begin: Alignment.bottomCenter,
-            end: Alignment.topCenter,
-            colors: [
-              const Color(0xFFFFFFFF).withValues(alpha: maxAlpha),
-              const Color(0xFFE2E9F0).withValues(alpha: maxAlpha * 0.7),
-              const Color(0xFFFFFFFF).withValues(alpha: 0.0),
-            ],
-          ).createShader(Rect.fromLTWH(lastRevealPoint!.dx - 100, lastRevealPoint!.dy - 300, 200, 300));
-          
-        canvas.drawPath(smokePath, tendrilPaint);
-      }
-    }
-    if (smokeParticles.isNotEmpty) {
-      final blurPaint = Paint()
-        ..style = PaintingStyle.fill
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0); // reduced from 6.0
-        
-      for (final smoke in smokeParticles) {
-        final smokeShader = RadialGradient(
-          colors: [
-            const Color(0xFFFFFFFF).withValues(alpha: smoke.alpha * 0.5),
-            const Color(0xFFFFE5B4).withValues(alpha: smoke.alpha * 0.2),
-            const Color(0x00FFFFFF),
-          ],
-          stops: const [0.0, 0.4, 1.0],
-        ).createShader(Rect.fromCircle(center: Offset(smoke.x, smoke.y), radius: smoke.size * 0.8)); // reduced radius
-        
-        blurPaint.shader = smokeShader;
-        canvas.drawCircle(Offset(smoke.x, smoke.y), smoke.size * 0.8, blurPaint);
-      }
     }
 
-    // 3. Draw Unique Blooming Lotus Mandala on Tap
+    // 4. Draw Lotus Mandala Bloom Glow Rings
     for (final ring in glowRings) {
       final progress = 1.0 - (ring.life / ring.maxLife);
-      // Easing function for natural blooming scale
-      final scale = Curves.easeOutBack.transform(progress.clamp(0.0, 1.0));
       final opacity = (1.0 - progress).clamp(0.0, 1.0);
-      
-      final petalPaint = Paint()
-        ..color = ring.color.withValues(alpha: opacity * 0.4)
-        ..style = PaintingStyle.fill
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0);
-        
-      final borderPaint = Paint()
-        ..color = Colors.white.withValues(alpha: opacity * 0.8)
+      final ringPaint = Paint()
+        ..color = ring.color.withValues(alpha: opacity * 0.5)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2
-        ..maskFilter = const MaskFilter.blur(BlurStyle.solid, 1.0);
-
-      canvas.save();
-      canvas.translate(ring.position.dx, ring.position.dy);
-      // Base scale of lotus based on ring's maxRadius
-      canvas.scale(scale * (ring.maxRadius / 60.0)); 
-      
-      // Draw 8 overlapping lotus petals
-      for (int i = 0; i < 8; i++) {
-        canvas.save();
-        // Rotate petals and add a slight spin while blooming
-        canvas.rotate(i * math.pi / 4.0 + (progress * math.pi / 12.0)); 
-        
-        // Exquisite petal curve
-        final petalPath = Path()
-          ..moveTo(0, 0)
-          ..quadraticBezierTo(20, -30, 0, -60)
-          ..quadraticBezierTo(-20, -30, 0, 0)
-          ..close();
-          
-        canvas.drawPath(petalPath, petalPaint);
-        canvas.drawPath(petalPath, borderPaint);
-        canvas.restore();
-      }
-      
-      // Center glowing core of the lotus
-      canvas.drawCircle(Offset.zero, 8.0, Paint()..color = Colors.white.withValues(alpha: opacity));
-      canvas.restore();
+        ..strokeWidth = 2.0;
+      canvas.drawCircle(ring.position, ring.maxRadius * progress, ringPaint);
     }
 
-    // 3b. Draw Explosive Radial Tap Sparks (Comet Trails)
+    // 5. Draw Tap Sparks
     for (final spark in tapSparks) {
-      final progress = 1.0 - (spark.life / spark.maxLife);
       final alpha = (spark.life / spark.maxLife).clamp(0.0, 1.0);
-      final currentSize = spark.size * (1.0 - progress * 0.4);
-
-      final sparkPaint = Paint()
-        ..color = spark.color.withValues(alpha: alpha)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0);
-      
-      final angle = math.atan2(spark.vy, spark.vx);
-      final tailLength = currentSize * 5.0; // dynamic comet tail
-      
-      canvas.save();
-      canvas.translate(spark.position.dx, spark.position.dy);
-      canvas.rotate(angle);
-      
-      final sparkPath = Path()
-        ..moveTo(currentSize, 0)
-        ..quadraticBezierTo(0, currentSize * 0.8, -tailLength, 0)
-        ..quadraticBezierTo(0, -currentSize * 0.8, currentSize, 0)
-        ..close();
-        
-      canvas.drawPath(sparkPath, sparkPaint);
-      
-      final corePaint = Paint()..color = Colors.white.withValues(alpha: alpha);
-      canvas.drawCircle(Offset(currentSize * 0.3, 0), currentSize * 0.4, corePaint);
-      
-      canvas.restore();
+      final sparkPaint = Paint()..color = spark.color.withValues(alpha: alpha);
+      canvas.drawCircle(spark.position, spark.size, sparkPaint);
     }
 
-    // 3bb. Draw Double-Helix Spiral Swirl Sparks
-    for (final spark in spiralSparks) {
-      final alpha = (spark.life / spark.maxLife).clamp(0.0, 1.0);
-      final pos = spark.currentPosition;
-      final spiralPaint = Paint()
-        ..color = spark.color.withValues(alpha: alpha)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0);
-      canvas.drawCircle(pos, spark.size, spiralPaint);
-      final corePaint = Paint()..color = Colors.white.withValues(alpha: alpha * 0.8);
-      canvas.drawCircle(pos, spark.size * 0.5, corePaint);
-    }
-
-    // 3c. Draw Floating Sacred Om & Chant Text ("ॐ", "राम", "जय")
+    // 6. Draw Floating Om Glyphs & Mantras
     for (final om in floatingOms) {
-      final progress = 1.0 - (om.life / om.maxLife);
       final alpha = (om.life / om.maxLife).clamp(0.0, 1.0);
-      final scale = 1.0 + (progress * 0.5);
-
-      final textSpan = TextSpan(
-        text: om.text,
-        style: GoogleFonts.outfit(
-          fontSize: 16.0 * scale,
-          fontWeight: FontWeight.bold,
-          color: const Color(0xFFFFD700).withValues(alpha: alpha),
-          shadows: [
-            Shadow(
-              color: const Color(0xFFFF6D00).withValues(alpha: alpha * 0.8),
-              blurRadius: 8,
-            ),
-          ],
-        ),
+      final tp = _getOmPainter(om.text);
+      final paint = tp.text!.style!.copyWith(
+        color: effectPack.primaryColor.withValues(alpha: alpha),
       );
-      final textPainter = TextPainter(
-        text: textSpan,
+      final blended = TextPainter(
+        text: TextSpan(text: om.text, style: paint),
         textDirection: TextDirection.ltr,
-      );
-      textPainter.layout();
-      textPainter.paint(
+      )..layout();
+      blended.paint(
         canvas,
-        om.position - Offset(textPainter.width / 2, textPainter.height / 2),
+        om.position - Offset(blended.width / 2, blended.height / 2),
       );
     }
 
-    // 4. Removed the soft breathing target ring around nextPt
+    // 7. Draw Atmospheric Mist Particles
+    for (final mist in mistParticles) {
+      final mistPaint = Paint()
+        ..color = mist.color.withValues(alpha: mist.alpha)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12.0);
+      canvas.drawCircle(Offset(mist.x, mist.y), mist.size, mistPaint);
+    }
 
-    // 5. Paint Inner Shadow/Glow (vignette) when completed inside the card
+    // 8. Draw Divine Symbols (Trishul, Shankh, Flute, Bow, Lotus, Chakra, ॐ)
+    for (final sym in divineSymbolParticles) {
+      _drawDivineSymbol(canvas, sym);
+    }
   }
 
+  /// Cache of baseline TextPainters (opaque) for each Om glyph string.
+  static final Map<String, TextPainter> _omPainterCache = {};
+
+  static TextPainter _getOmPainter(String text) {
+    return _omPainterCache.putIfAbsent(text, () {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: GoogleFonts.outfit(
+            fontSize: 16.0,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFFFFD700),
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      return tp;
+    });
+  }
+
+
+  void _drawDivineSymbol(Canvas canvas, DivineSymbolParticle particle) {
+    canvas.save();
+    canvas.translate(particle.position.dx, particle.position.dy);
+    canvas.scale(0.8 + (1.0 - particle.life / particle.maxLife) * 0.4);
+
+    final paint = Paint()
+      ..color = particle.color.withValues(alpha: particle.alpha)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
+
+    final fillPaint = Paint()
+      ..color = particle.color.withValues(alpha: particle.alpha * 0.4)
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+
+    switch (particle.symbol) {
+      case DivineSymbolType.trishul:
+        // Trishul: center rod + outer curved prongs
+        path.moveTo(0, 15);
+        path.lineTo(0, -20); // Center spear
+        path.moveTo(-12, 0);
+        path.quadraticBezierTo(-12, -18, -12, -18);
+        path.moveTo(12, 0);
+        path.quadraticBezierTo(12, -18, 12, -18);
+        path.moveTo(-15, 0);
+        path.quadraticBezierTo(0, 10, 15, 0);
+        canvas.drawPath(path, paint);
+        break;
+
+      case DivineSymbolType.shankh:
+        // Shankh: Spiral conch shell outline
+        final rect = Rect.fromCenter(center: Offset.zero, width: 22, height: 30);
+        canvas.drawOval(rect, paint);
+        path.moveTo(0, -15);
+        path.quadraticBezierTo(8, 0, 0, 15);
+        canvas.drawPath(path, paint);
+        break;
+
+      case DivineSymbolType.flute:
+        // Flute: Diagonal flute with peacock feather dot
+        canvas.rotate(0.3);
+        final rrect = RRect.fromRectAndRadius(
+          Rect.fromCenter(center: Offset.zero, width: 36, height: 8),
+          const Radius.circular(4),
+        );
+        canvas.drawRRect(rrect, fillPaint);
+        canvas.drawRRect(rrect, paint);
+        for (int i = -10; i <= 10; i += 6) {
+          canvas.drawCircle(Offset(i.toDouble(), 0), 1.2, Paint()..color = Colors.white.withValues(alpha: particle.alpha));
+        }
+        break;
+
+      case DivineSymbolType.bowArrow:
+        // Bow & Arrow: Arc + Arrow line
+        path.addArc(Rect.fromCenter(center: Offset.zero, width: 26, height: 32), -1.5, 3.0);
+        path.moveTo(-12, 0);
+        path.lineTo(16, 0); // Arrow shaft
+        path.moveTo(10, -5);
+        path.lineTo(16, 0);
+        path.lineTo(10, 5); // Arrowhead
+        canvas.drawPath(path, paint);
+        break;
+
+      case DivineSymbolType.lotus:
+        // Lotus: 3 overlapping petals
+        for (int i = -1; i <= 1; i++) {
+          final p = Path();
+          p.moveTo(0, 10);
+          p.quadraticBezierTo(i * 15.0 + 8, -5, 0, -16);
+          p.quadraticBezierTo(i * 15.0 - 8, -5, 0, 10);
+          canvas.drawPath(p, fillPaint);
+          canvas.drawPath(p, paint);
+        }
+        break;
+
+      case DivineSymbolType.chakra:
+        // Sudarshana Chakra: Spinning circle with spokes
+        canvas.rotate(particle.rotation);
+        canvas.drawCircle(Offset.zero, 14, paint);
+        for (int i = 0; i < 8; i++) {
+          final ang = (i / 8.0) * 2 * math.pi;
+          canvas.drawLine(Offset.zero, Offset(math.cos(ang) * 14, math.sin(ang) * 14), paint);
+        }
+        break;
+
+      case DivineSymbolType.om:
+      case DivineSymbolType.none:
+        final tp = _getOmPainter('ॐ');
+        tp.paint(canvas, const Offset(-10, -10));
+        break;
+    }
+
+    canvas.restore();
+  }
+
+  /// Draw reveal hole using smooth organic round blobs (no sharp eye shapes)
+  void _drawRevealShape(
+    Canvas canvas,
+    Offset center,
+    double radius,
+    Paint erasePaint,
+    int index,
+  ) {
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+
+    final path = Path();
+    _buildOrganicRoundPath(path, radius, index);
+
+    canvas.drawPath(path, erasePaint);
+    canvas.restore();
+  }
+
+  /// Smooth organic rounded blob with subtle random radius jitter per tile
+  void _buildOrganicRoundPath(Path path, double r, int index) {
+    final rng = math.Random(index * 7919);
+    const int points = 6;
+    final List<Offset> pts = [];
+    for (int k = 0; k < points; k++) {
+      final angle = (k * 2 * math.pi / points);
+      final jitterR = r * (0.92 + (rng.nextDouble() * 0.18));
+      pts.add(Offset(jitterR * math.cos(angle), jitterR * math.sin(angle)));
+    }
+    path.moveTo((pts[0].dx + pts[points - 1].dx) / 2, (pts[0].dy + pts[points - 1].dy) / 2);
+    for (int k = 0; k < points; k++) {
+      final p1 = pts[k];
+      final p2 = pts[(k + 1) % points];
+      final mid = Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
+      path.quadraticBezierTo(p1.dx, p1.dy, mid.dx, mid.dy);
+    }
+    path.close();
+  }
+
+
+
+
   @override
-  bool shouldRepaint(covariant DivineCardPainter oldDelegate) => true;
+  bool shouldRepaint(covariant DivineCardPainter oldDelegate) {
+    return oldDelegate.count != count ||
+        oldDelegate.isCompleted != isCompleted ||
+        oldDelegate.currentRevealProgress != currentRevealProgress ||
+        oldDelegate.completionFadeProgress != completionFadeProgress ||
+        oldDelegate.tapSparks.length != tapSparks.length ||
+        oldDelegate.floatingOms.length != floatingOms.length ||
+        oldDelegate.glowRings.length != glowRings.length ||
+        (oldDelegate.timeSeconds - timeSeconds).abs() > 0.008;
+  }
 }
 
 class DivineOverlayPainter extends CustomPainter {
@@ -2786,55 +2642,69 @@ class DivineOverlayPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 1. Draw Floating Embers (only when completed)
     if (isCompleted) {
       final emberPaint = Paint()..style = PaintingStyle.fill;
       for (final ember in embers) {
-        emberPaint.color = const Color(0xFFFFB300).withValues(alpha: ember.alpha);
+        emberPaint.color = const Color(
+          0xFFFFB300,
+        ).withValues(alpha: ember.alpha);
         canvas.drawCircle(Offset(ember.x, ember.y), ember.size, emberPaint);
       }
-    }
 
-    // 2. Draw Falling Petals / Leaves / Feathers / Sparks (only when completed)
-    if (isCompleted && petals.isNotEmpty) {
       for (final particle in petals) {
-        _drawParticle(canvas, Offset(particle.x, particle.y), particle.size, particle.angle, particle.color, particle.shape);
+        _drawParticle(
+          canvas,
+          Offset(particle.x, particle.y),
+          particle.size,
+          particle.angle,
+          particle.color,
+          particle.shape,
+        );
       }
     }
   }
 
-  void _drawParticle(Canvas canvas, Offset center, double size, double angle, Color color, ParticleShape shape) {
+  void _drawParticle(
+    Canvas canvas,
+    Offset center,
+    double size,
+    double angle,
+    Color color,
+    ParticleShapeType shape,
+  ) {
     canvas.save();
     canvas.translate(center.dx, center.dy);
     canvas.rotate(angle);
-    
+
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.fill;
-      
     final path = Path();
 
     switch (shape) {
-      case ParticleShape.leaf: // Bilva leaf shape for Shiva
+      case ParticleShapeType.leaf:
         path.moveTo(0, -size);
         path.quadraticBezierTo(size * 0.6, -size * 0.3, 0, size * 0.5);
         path.quadraticBezierTo(-size * 0.6, -size * 0.3, 0, -size);
-        path.moveTo(0, 0);
-        path.lineTo(0, size * 0.8);
-        paint.style = PaintingStyle.stroke;
-        paint.strokeWidth = 1.2;
         canvas.drawPath(path, paint);
-        paint.style = PaintingStyle.fill;
         break;
 
-      case ParticleShape.feather: // Peacock feather shape for Krishna
-        final rect = Rect.fromCenter(center: Offset.zero, width: size * 0.8, height: size * 1.5);
+      case ParticleShapeType.feather:
+        final rect = Rect.fromCenter(
+          center: Offset.zero,
+          width: size * 0.8,
+          height: size * 1.5,
+        );
         canvas.drawOval(rect, paint);
-        final innerPaint = Paint()..color = const Color(0xFFFFD700);
-        canvas.drawCircle(Offset.zero, size * 0.25, innerPaint);
+        canvas.drawCircle(
+          Offset.zero,
+          size * 0.25,
+          Paint()..color = const Color(0xFFFFD700),
+        );
         break;
 
-      case ParticleShape.spark: // Glowing embers / Sindoor for Hanuman/Durga
+      case ParticleShapeType.spark:
+      case ParticleShapeType.flame:
         final glowPaint = Paint()
           ..color = color.withValues(alpha: 0.8)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0);
@@ -2842,8 +2712,9 @@ class DivineOverlayPainter extends CustomPainter {
         canvas.drawCircle(Offset.zero, size * 0.3, paint);
         break;
 
-      case ParticleShape.petal:
-      case ParticleShape.ash:
+      case ParticleShapeType.petal:
+      case ParticleShapeType.ash:
+      case ParticleShapeType.custom:
         path.moveTo(0, -size / 2);
         path.quadraticBezierTo(size / 2.5, -size / 4, 0, size / 2);
         path.quadraticBezierTo(-size / 2.5, -size / 4, 0, -size / 2);
@@ -2851,12 +2722,14 @@ class DivineOverlayPainter extends CustomPainter {
         canvas.drawPath(path, paint);
         break;
     }
-    
+
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(covariant DivineOverlayPainter oldDelegate) => true;
+  bool shouldRepaint(covariant DivineOverlayPainter oldDelegate) {
+    // Repaint only when completion state or petal count changes
+    return oldDelegate.isCompleted != isCompleted ||
+        oldDelegate.petals.length != petals.length;
+  }
 }
-
-

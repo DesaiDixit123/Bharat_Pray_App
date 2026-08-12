@@ -29,8 +29,40 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   @override
   void initState() {
     super.initState();
-    _verses = widget.chapter['verses'] as List<Map<String, String>>;
     _flipController = FlipPageController(initialPage: 0);
+
+    final rawVerses = widget.chapter['verses'] ?? widget.chapter['shlokas'] ?? widget.chapter['content'];
+    List<Map<String, String>> parsedVerses = [];
+
+    if (rawVerses is List) {
+      for (final item in rawVerses) {
+        if (item is Map) {
+          parsedVerses.add(
+            item.map((key, value) => MapEntry(key.toString(), (value ?? '').toString())),
+          );
+        } else if (item != null) {
+          parsedVerses.add({
+            'sanskrit': item.toString(),
+            'transliteration': '',
+            'english': '',
+          });
+        }
+      }
+    }
+
+    if (parsedVerses.isEmpty) {
+      final bodyText = (widget.chapter['translation'] ?? widget.chapter['content'] ?? widget.chapter['description'] ?? 'Sacred verses and translation available in library.').toString();
+      final sanskritText = (widget.chapter['sanskrit'] ?? widget.chapter['shloka'] ?? widget.chapter['title'] ?? widget.chapter['name'] ?? 'Chapter').toString();
+      parsedVerses = [
+        {
+          'sanskrit': sanskritText,
+          'transliteration': (widget.chapter['transliteration'] ?? '').toString(),
+          'english': bodyText,
+        }
+      ];
+    }
+
+    _verses = parsedVerses;
   }
 
   @override
@@ -121,6 +153,9 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     final backgroundTop = _sepiaMode ? const Color(0xFF4A2B13) : const Color(0xFF191919);
     final backgroundBottom = _sepiaMode ? const Color(0xFF26160B) : const Color(0xFF0B0B0B);
 
+    final granthTitle = (widget.granth['name'] ?? widget.granth['title'] ?? 'Granth').toString();
+    final chapterTitle = (widget.chapter['title'] ?? widget.chapter['name'] ?? 'Chapter').toString();
+
     return Scaffold(
       backgroundColor: backgroundBottom,
       appBar: AppBar(
@@ -132,7 +167,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          '${widget.granth['title']} - ${widget.chapter['title']}',
+          '$granthTitle - $chapterTitle',
           style: GoogleFonts.outfit(
             color: Colors.white,
             fontWeight: FontWeight.w700,

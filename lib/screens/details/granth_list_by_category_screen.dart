@@ -35,15 +35,42 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
     });
 
     try {
-      final categoryId = widget.category['id']?.toString() ?? '';
-      if (categoryId.isEmpty) {
-        throw Exception('Category ID is missing.');
+      final categoryId = (widget.category['_id'] ?? widget.category['id'] ?? '').toString();
+      final categoryTitle = (widget.category['title'] ?? widget.category['name'] ?? '').toString();
+
+      List<dynamic> list = [];
+
+      if (categoryId.isNotEmpty) {
+        try {
+          final data = await ApiService.getGranthsByCategory(categoryId, limit: 50);
+          list = data['docs'] ?? [];
+        } catch (_) {}
       }
-      final data = await ApiService.getGranthsByCategory(categoryId, limit: 50);
+
+      // Fallback 1: Search granth library by category title
+      if (list.isEmpty && categoryTitle.isNotEmpty) {
+        try {
+          final libData = await ApiService.getGranthLibraryData(
+            limit: 50,
+            search: categoryTitle,
+          );
+          list = libData['docs'] ?? [];
+        } catch (_) {}
+      }
+
+      // Fallback 2: Fetch all available granths in library
+      if (list.isEmpty) {
+        try {
+          final allData = await ApiService.getGranthLibraryData(limit: 50);
+          list = allData['docs'] ?? [];
+        } catch (_) {}
+      }
+
       if (!mounted) return;
       setState(() {
-        _granths = data['docs'] ?? [];
+        _granths = list;
         _isLoading = false;
+        _error = list.isEmpty ? 'No granths available in this category.' : '';
       });
     } catch (e) {
       if (!mounted) return;
@@ -70,7 +97,7 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          widget.category['title'] as String,
+          (widget.category['title'] ?? widget.category['name'] ?? 'Granth').toString(),
           style: GoogleFonts.outfit(
             color: const Color(0xFF2E2A36),
             fontWeight: FontWeight.bold,
@@ -100,9 +127,15 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
             Text(_error, style: GoogleFonts.outfit(color: Colors.red.shade700)),
             const SizedBox(height: 10),
             ElevatedButton(
-              onPressed: _loadGranths,
+              onPressed: _isLoading ? null : _loadGranths,
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF7700)),
-              child: Text('Retry', style: GoogleFonts.outfit(color: Colors.white)),
+              child: _isLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : Text('Retry', style: GoogleFonts.outfit(color: Colors.white)),
             )
           ],
         ),
@@ -146,21 +179,15 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
                 bottom: 0,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(20),
-                  child: ApiService.resolveImageUrl(widget.category['image'] as String? ?? '').startsWith('http')
+                  child: ApiService.resolveImageUrl((widget.category['image'] ?? '').toString()).startsWith('http')
                       ? Image.network(
-                          ApiService.resolveImageUrl(widget.category['image'] as String? ?? ''),
+                          ApiService.resolveImageUrl((widget.category['image'] ?? '').toString()),
                           width: 134,
                           height: 150,
                           fit: BoxFit.cover,
                           errorBuilder: (_, _, _) => _placeholderImage(),
                         )
-                      : Image.asset(
-                          widget.category['image'] as String,
-                          width: 134,
-                          height: 150,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => _placeholderImage(),
-                        ),
+                      : _placeholderImage(),
                 ),
               ),
               Positioned(
@@ -173,7 +200,7 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.category['name'] as String,
+                      (widget.category['name'] ?? widget.category['title'] ?? 'Granth Category').toString(),
                       style: GoogleFonts.outfit(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
@@ -182,10 +209,10 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      widget.category['description'] as String,
+                      (widget.category['description'] ?? 'Explore sacred scriptures and timeless teachings.').toString(),
                       style: GoogleFonts.outfit(
                         fontSize: 13,
-                        fontWeight: FontWeight.w500, // Corrected from withValues to withOpacity
+                        fontWeight: FontWeight.w500,
                         height: 1.45,
                         color: Colors.white.withOpacity(0.92),
                       ),
@@ -205,13 +232,13 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
   Widget _placeholderImage() {
     return Container(
       width: 134,
-      height: 150, // Corrected from withValues to withOpacity
+      height: 150,
       alignment: Alignment.center,
       color: Colors.white.withOpacity(0.12),
       child: const Icon(
-                          Icons.menu_book_rounded,
-                          color: Colors.white,
-                          size: 40,
+        Icons.menu_book_rounded,
+        color: Colors.white,
+        size: 40,
       ),
     );
   }
@@ -224,7 +251,7 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: const Color(0xFFF3E4D6)),
         boxShadow: [
-          BoxShadow( // Corrected from withValues to withOpacity
+          BoxShadow(
             color: const Color(0xFFFF7700).withOpacity(0.06),
             blurRadius: 18,
             offset: const Offset(0, 8),
@@ -257,16 +284,16 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
                     color: const Color(0xFFFFF1E5),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: ApiService.resolveImageUrl(granth['coverImage'] as String? ?? '').startsWith('http')
+                  child: ApiService.resolveImageUrl((granth['coverImage'] ?? granth['image'] ?? '').toString()).startsWith('http')
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(12),
                           child: Image.network(
-                            ApiService.resolveImageUrl(granth['coverImage'] as String? ?? ''),
+                            ApiService.resolveImageUrl((granth['coverImage'] ?? granth['image'] ?? '').toString()),
                             fit: BoxFit.cover,
                             errorBuilder: (_, _, _) => const Icon(
-                          Icons.menu_book_rounded,
-                          color: Color(0xFFB56E28),
-                          size: 24,
+                              Icons.menu_book_rounded,
+                              color: Color(0xFFB56E28),
+                              size: 24,
                             ),
                           ),
                         )
@@ -279,7 +306,7 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        granth['title'] as String,
+                        (granth['name'] ?? granth['title'] ?? 'Sacred Granth').toString(),
                         style: GoogleFonts.outfit(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,

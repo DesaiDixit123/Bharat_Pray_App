@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:ui';
 import 'dart:io';
+
+// Top-level constant — avoids static-inside-State issues
+const _audioPickerChannel = MethodChannel('com.bharatpray/audio_picker');
 
 class UploadGodPhotoScreen extends StatefulWidget {
   const UploadGodPhotoScreen({super.key});
@@ -14,682 +15,600 @@ class UploadGodPhotoScreen extends StatefulWidget {
 }
 
 class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
-  File? _selectedImage;
+  // Images
+  File? _coverImage;
+  File? _godImage;
+
+  // Text controllers
+  final _nameController = TextEditingController();
+  final _chantCountController = TextEditingController(text: '108');
+
+  // Audio file
+  String? _audioFileName;
+  String? _audioFilePath;
+
+  // Dropdowns
+  String? _selectedCategory;
+  String? _selectedParticleEffect;
+
   final ImagePicker _picker = ImagePicker();
 
-  Future<void> _pickImage(ImageSource source) async {
+  // Guard flag — prevents setState after widget is disposed
+  bool _isActive = true;
+
+  // God categories (from backend — mocked here for UI)
+  final List<Map<String, String>> _categories = [
+    {'id': '1', 'name': '🕉️ Lord Shiva'},
+    {'id': '2', 'name': '🦚 Lord Krishna'},
+    {'id': '3', 'name': '🐘 Lord Ganesha'},
+    {'id': '4', 'name': '🐒 Lord Hanuman'},
+    {'id': '5', 'name': '🔱 Maa Durga'},
+    {'id': '6', 'name': '🌸 Maa Lakshmi'},
+    {'id': '7', 'name': '🌊 Lord Vishnu'},
+    {'id': '8', 'name': '☀️ Lord Ram'},
+  ];
+
+  // Particle effect options
+  final List<Map<String, String>> _particleEffects = [
+    {'value': 'auto',    'label': '✨ Auto (Deity Default)'},
+    {'value': 'petal',   'label': '🌸 Flower Petals'},
+    {'value': 'leaf',    'label': '🍃 Bilva Leaves (Shiva)'},
+    {'value': 'feather', 'label': '🪶 Peacock Feathers (Krishna)'},
+    {'value': 'spark',   'label': '🔥 Sindoor & Fire Sparks (Hanuman/Durga)'},
+    {'value': 'ash',     'label': '✨ Sacred Ash (Mahadev)'},
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _retrieveLostData();
+  }
+
+  Future<void> _retrieveLostData() async {
     try {
-      final XFile? image = await _picker.pickImage(
-        source: source,
-        maxWidth: 1200,
-        maxHeight: 1200,
-        imageQuality: 85,
-      );
-      if (!mounted) return;
-      if (image != null) {
-        setState(() {
-          _selectedImage = File(image.path);
-        });
+      final LostDataResponse response = await _picker.retrieveLostData();
+      if (response.isEmpty || response.file == null || !mounted || !_isActive) {
+        return;
       }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFFFF5500),
-          content: Text(
-            'Error selecting image: $e',
-            style: GoogleFonts.outfit(color: Colors.white),
-          ),
+      setState(() {
+        if (_coverImage == null) {
+          _coverImage = File(response.file!.path);
+        } else if (_godImage == null) {
+          _godImage = File(response.file!.path);
+        }
+      });
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _isActive = false;
+    _nameController.dispose();
+    _chantCountController.dispose();
+    super.dispose();
+  }
+
+  // ─── Pick image with source choice popup ─────────────────────────────────
+  Future<void> _showImagePickerPopup({required bool isCover}) async {
+    final ImageSource? source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isDismissible: true,   // swipe down → only sheet closes, not screen
+      enableDrag: true,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF0E6),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: const Color(0xFFEFE6DB)),
         ),
-      );
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            // Handle bar
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFC8A882).withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              isCover ? 'Upload Cover Image' : 'Upload God Image',
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: const Color(0xFF2E2A36),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'JPG, PNG — Max 10MB',
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                color: const Color(0xFF2E2A36).withValues(alpha: 0.45),
+              ),
+            ),
+            const SizedBox(height: 20),
+            // Camera button
+            _popupOptionTile(
+              icon: Icons.camera_alt_rounded,
+              label: 'Take Photo with Camera',
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Divider(color: Color(0xFFEFE6DB), height: 1),
+            ),
+            // Gallery button
+            _popupOptionTile(
+              icon: Icons.image_outlined,
+              label: 'Choose from Gallery',
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+
+    if (source != null && mounted && _isActive) {
+      await _pickImage(source, isCover: isCover);
     }
   }
 
-  void _showDetailsDialog() {
-    final nameController = TextEditingController();
-    final mantraController = TextEditingController();
-    final targetController = TextEditingController(text: '108');
-    final mainContext = context;
-
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFFFFF0E6),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-            side: const BorderSide(color: Color(0xFFC8A882), width: 1.5),
-          ),
-          title: Text(
-            'Enter Jap Details',
-            style: GoogleFonts.outfit(
-              color: const Color(0xFF2E2A36),
-              fontWeight: FontWeight.bold,
-              fontSize: 20,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  style: GoogleFonts.outfit(color: const Color(0xFF2E2A36)),
-                  decoration: InputDecoration(
-                    labelText: 'Deity Name',
-                    labelStyle: GoogleFonts.outfit(color: const Color(0xFFC8A882)),
-                    enabledBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: const Color(0xFFC8A882).withValues(alpha: 0.5)),
-                    ),
-                    focusedBorder: const UnderlineInputBorder(
-                      borderSide: BorderSide(color: Color(0xFFFF7700)),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: mantraController,
-                  style: GoogleFonts.outfit(color: const Color(0xFF2E2A36)),
-                  decoration: InputDecoration(
-                    labelText: 'Mantra Text',
-                    labelStyle: GoogleFonts.outfit(color: const Color(0xFFC8A882)),
-                    enabledBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: const Color(0xFFC8A882).withValues(alpha: 0.5)),
-                    ),
-                    focusedBorder: const UnderlineInputBorder(
-                      borderSide: BorderSide(color: Color(0xFFFF7700)),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: targetController,
-                  keyboardType: TextInputType.number,
-                  style: GoogleFonts.outfit(color: const Color(0xFF2E2A36)),
-                  decoration: InputDecoration(
-                    labelText: 'Target Count',
-                    labelStyle: GoogleFonts.outfit(color: const Color(0xFFC8A882)),
-                    enabledBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: const Color(0xFFC8A882).withValues(alpha: 0.5)),
-                    ),
-                    focusedBorder: const UnderlineInputBorder(
-                      borderSide: BorderSide(color: Color(0xFFFF7700)),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actionsAlignment: MainAxisAlignment.center,
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Cancel',
-                style: GoogleFonts.outfit(
-                  color: const Color(0xFF2E2A36).withValues(alpha: 0.5),
-                  fontWeight: FontWeight.w600,
-                ),
+  Widget _popupOptionTile({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF9933).withValues(alpha: 0.12),
+                shape: BoxShape.circle,
               ),
+              child: Icon(icon, color: const Color(0xFFFF7700), size: 20),
             ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: () {
-                final name = nameController.text.trim();
-                final mantra = mantraController.text.trim();
-                final targetStr = targetController.text.trim();
-
-                if (name.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter Deity Name')),
-                  );
-                  return;
-                }
-                if (mantra.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter Mantra Text')),
-                  );
-                  return;
-                }
-
-                final target = int.tryParse(targetStr) ?? 108;
-
-                Navigator.pop(context);
-
-                Navigator.pop(
-                  mainContext,
-                  CustomJapDetails(
-                    imagePath: _selectedImage!.path,
-                    name: name,
-                    mantra: mantra,
-                    target: target,
-                  ),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFFF9933), Color(0xFFFF6600)],
-                  ),
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                child: Text(
-                  'Add to Japs',
-                  style: GoogleFonts.outfit(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+            const SizedBox(width: 16),
+            Text(
+              label,
+              style: GoogleFonts.outfit(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF2E2A36),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source, {required bool isCover}) async {
+    if (!_isActive || !mounted) return;
+
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 80,
+        requestFullMetadata: false,
+      );
+      // User pressed back without picking — silently return
+      if (!_isActive || !mounted || image == null) return;
+      setState(() {
+        if (isCover) {
+          _coverImage = File(image.path);
+        } else {
+          _godImage = File(image.path);
+        }
+      });
+    } on PlatformException catch (e) {
+      if (!_isActive || !mounted) return;
+      // Ignore permission/cancel codes silently
+      if (e.code != 'camera_access_denied' &&
+          e.code != 'photo_access_denied' &&
+          e.code != 'already_active') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFFFF5500),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+            content: Text(
+              'Could not open camera. Please try gallery.',
+              style: GoogleFonts.outfit(color: Colors.white),
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      // Back gesture / any other cancel — silently ignore, no crash
+    }
+  }
+
+  // ─── Audio file picker — opens Android native document picker ─────────────
+  Future<void> _pickAudioFile() async {
+    if (!_isActive || !mounted) return;
+    try {
+      final result =
+          await _audioPickerChannel.invokeMethod<Map>('pickAudioFile');
+      // User pressed back — result is null, do nothing
+      if (!_isActive || !mounted || result == null) return;
+      setState(() {
+        _audioFileName = result['name'] as String? ?? 'audio_file';
+        _audioFilePath = result['path'] as String? ?? '';
+      });
+    } on PlatformException catch (e) {
+      if (!_isActive || !mounted) return;
+      if (e.code != 'CANCELLED') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFFFF5500),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+            content: Text(
+              'Could not open file picker.',
+              style: GoogleFonts.outfit(color: Colors.white),
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      // Cancelled or back gesture — silently ignore
+    }
+  }
+
+  // ─── Dropdown sheet ───────────────────────────────────────────────────────
+  void _showDropdown({
+    required String title,
+    required List<Map<String, String>> options,
+    required String? selectedValue,
+    required void Function(String value, String label) onSelected,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) {
+        return Container(
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.55,
+          ),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF0E6),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: const Color(0xFFEFE6DB)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFC8A882).withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: const Color(0xFF2E2A36),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: Divider(color: Color(0xFFEFE6DB), height: 1),
+              ),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: options.length,
+                  separatorBuilder: (_, __) => const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    child: Divider(color: Color(0xFFEFE6DB), height: 1),
+                  ),
+                  itemBuilder: (context, i) {
+                    final opt = options[i];
+                    final isSelected = selectedValue == opt['value'];
+                    return InkWell(
+                      onTap: () {
+                        Navigator.pop(context);
+                        onSelected(opt['value']!, opt['label'] ?? opt['name'] ?? '');
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                opt['label'] ?? opt['name'] ?? '',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 14,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                  color: isSelected
+                                      ? const Color(0xFFFF7700)
+                                      : const Color(0xFF2E2A36),
+                                ),
+                              ),
+                            ),
+                            if (isSelected)
+                              const Icon(Icons.check_circle_rounded,
+                                  color: Color(0xFFFF7700), size: 20),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
   }
 
+  // ─── Save / Submit ────────────────────────────────────────────────────────
+  void _onSave() {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      _showError('Please enter Jap name');
+      return;
+    }
+    if (_coverImage == null) {
+      _showError('Please upload Cover Image');
+      return;
+    }
+    if (_godImage == null) {
+      _showError('Please upload God Image');
+      return;
+    }
+    if (_selectedCategory == null) {
+      _showError('Please select God Category');
+      return;
+    }
+
+    Navigator.pop(
+      context,
+      CustomJapDetails(
+        coverImagePath: _coverImage!.path,
+        godImagePath: _godImage!.path,
+        name: name,
+        audioFileName: _audioFileName ?? '',
+        audioFilePath: _audioFilePath ?? '',
+        chantCount: int.tryParse(_chantCountController.text.trim()) ?? 108,
+        category: _selectedCategory!,
+        particleEffect: _selectedParticleEffect ?? 'auto',
+      ),
+    );
+  }
+
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: const Color(0xFFFF5500),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        content: Text(msg, style: GoogleFonts.outfit(color: Colors.white)),
+      ),
+    );
+  }
+
+  // ─── Build ────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    // Custom SVGs from Figma specs
-    const String backArrowSvg = '''
-<svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M2.87301 8.24994L8.56917 13.9461L7.49996 14.9999L0 7.49996L7.49996 0L8.56917 1.05382L2.87301 6.74998H14.9999V8.24994H2.87301Z" fill="#C8A882"/>
-</svg>
-''';
-
-    const String cameraBigSvg = '''
-<svg width="40" height="36" viewBox="0 0 40 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M20 29C22.5 29 24.625 28.125 26.375 26.375C28.125 24.625 29 22.5 29 20C29 17.5 28.125 15.375 26.375 13.625C24.625 11.875 22.5 11 20 11C17.5 11 15.375 11.875 13.625 13.625C11.875 15.375 11 17.5 11 20C11 22.5 11.875 24.625 13.625 26.375C15.375 28.125 17.5 29 20 29ZM20 25C18.6 25 17.4167 24.5167 16.45 23.55C15.4833 22.5833 15 21.4 15 20C15 18.6 15.4833 17.4167 16.45 16.45C17.4167 15.4833 18.6 15 20 15C21.4 15 22.5833 15.4833 23.55 16.45C24.5167 17.4167 25 18.6 25 20C25 21.4 24.5167 22.5833 23.55 23.55C22.5833 24.5167 21.4 25 20 25ZM4 36C2.9 36 1.95833 35.6083 1.175 34.825C0.391667 34.0417 0 33.1 0 32V8C0 6.9 0.391667 5.95833 1.175 5.175C1.95833 4.39167 2.9 4 4 4H10.3L14 0H26L29.7 4H36C37.1 4 38.0417 4.39167 38.825 5.175C39.6083 5.95833 40 6.9 40 8V32C40 33.1 39.6083 34.0417 38.825 34.825C38.0417 35.6083 37.1 36 36 36H4Z" fill="#C8A882"/>
-</svg>
-''';
-
-    const String cameraSmallSvg = '''
-<svg width="20" height="18" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M10 14.5C11.25 14.5 12.3125 14.0625 13.1875 13.1875C14.0625 12.3125 14.5 11.25 14.5 10C14.5 8.75 14.0625 7.6875 13.1875 6.8125C12.3125 5.9375 11.25 5.5 10 5.5C8.75 5.5 7.6875 5.9375 6.8125 6.8125C5.9375 7.6875 5.5 8.75 5.5 10C5.5 11.25 5.9375 12.3125 6.8125 13.1875C7.6875 14.0625 8.75 14.5 10 14.5ZM10 12.5C9.3 12.5 8.70833 12.2583 8.225 11.775C7.74167 11.2917 7.5 10.7 7.5 10C7.5 9.3 7.74167 8.70833 8.225 8.225C8.70833 7.74167 9.3 7.5 10 7.5C10.7 7.5 11.2917 7.74167 11.775 8.225C12.2583 8.70833 12.5 9.3 12.5 10C12.5 10.7 12.2583 11.2917 11.775 11.775C11.2917 12.2583 10.7 12.5 10 12.5ZM2 18C1.45 18 0.979167 17.8042 0.5875 17.4125C0.195833 17.0208 0 16.55 0 16V4C0 3.45 0.195833 2.97917 0.5875 2.5875C0.979167 2.19583 1.45 2 2 2H5.15L7 0H13L14.85 2H18C18.55 2 19.0208 2.19583 19.4125 2.5875C19.8042 2.97917 20 3.45 20 4V16C20 16.55 19.8042 17.0208 19.4125 17.4125C19.0208 17.8042 18.55 18 18 18H2Z" fill="#C8A882"/>
-</svg>
-''';
-
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarColor: Color(0xFFFFF0E6),
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: Scaffold(
         backgroundColor: const Color(0xFFFFF0E6),
         body: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // 1. Profile / Header section
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                  child: Row(
+          child: Column(
+            children: [
+              // ── Header ──────────────────────────────────────────────────
+              _buildHeader(),
+
+              // ── Scrollable Form Body ─────────────────────────────────────
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const CircleAvatar(
-                        radius: 22,
-                        backgroundImage: AssetImage('assets/images/image_3.png'),
+                      // 1. Cover Image — full width
+                      _buildImageCard(
+                        label: 'Cover Image',
+                        image: _coverImage,
+                        onTap: () => _showImagePickerPopup(isCover: true),
+                        onClear: () => setState(() => _coverImage = null),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Jai Shree Ram 🙏',
-                              style: GoogleFonts.outfit(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
-                                color: const Color(0xFF2E2A36),
-                              ),
-                            ),
-                            Text(
-                              'Good Morning, Shiv 🌟',
-                              style: GoogleFonts.outfit(
-                                fontSize: 12,
-                                color: const Color(0xFF2E2A36).withValues(alpha: 0.5),
-                              ),
-                            ),
-                          ],
+                      const SizedBox(height: 16),
+
+                      // 2. God Image — full width
+                      _buildImageCard(
+                        label: 'God Image',
+                        image: _godImage,
+                        onTap: () => _showImagePickerPopup(isCover: false),
+                        onClear: () => setState(() => _godImage = null),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 3. Jap Name
+                      _sectionLabel('Jap Name'),
+                      const SizedBox(height: 8),
+                      _buildTextField(
+                        controller: _nameController,
+                        hint: 'e.g. Om Namah Shivaya',
+                        icon: Icons.auto_awesome_outlined,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 4. Audio File — full width box
+                      _sectionLabel('Audio File'),
+                      const SizedBox(height: 8),
+                      _buildAudioBox(),
+                      const SizedBox(height: 16),
+
+                      // 4. Chant Count
+                      _sectionLabel('Chant Count'),
+                      const SizedBox(height: 8),
+                      _buildTextField(
+                        controller: _chantCountController,
+                        hint: '108',
+                        icon: Icons.repeat_rounded,
+                        keyboardType: TextInputType.number,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 5. God Category dropdown
+                      _sectionLabel('God Category'),
+                      const SizedBox(height: 8),
+                      _buildDropdownTile(
+                        hint: 'Select God Category',
+                        value: _selectedCategory != null
+                            ? _categories.firstWhere(
+                                (c) => c['id'] == _selectedCategory,
+                                orElse: () => {'name': ''},
+                              )['name']
+                            : null,
+                        icon: Icons.account_balance_outlined,
+                        onTap: () => _showDropdown(
+                          title: 'Select God Category',
+                          options: _categories
+                              .map((c) => {'value': c['id']!, 'label': c['name']!})
+                              .toList(),
+                          selectedValue: _selectedCategory,
+                          onSelected: (val, _) =>
+                              setState(() => _selectedCategory = val),
                         ),
                       ),
-                      _iconHeaderBtn(Icons.mail_outline_rounded),
-                      const SizedBox(width: 8),
-                      _iconHeaderBtn(Icons.notifications_none_rounded, hasDot: true),
+                      const SizedBox(height: 16),
+
+                      // 6. Particle Effect Style dropdown
+                      _sectionLabel('Particle Effect Style'),
+                      const SizedBox(height: 8),
+                      _buildDropdownTile(
+                        hint: '✨ Auto (Deity Default)',
+                        value: _selectedParticleEffect != null
+                            ? _particleEffects.firstWhere(
+                                (e) => e['value'] == _selectedParticleEffect,
+                                orElse: () => {'label': ''},
+                              )['label']
+                            : null,
+                        icon: Icons.auto_fix_high_rounded,
+                        onTap: () => _showDropdown(
+                          title: 'Particle Effect Style',
+                          options: _particleEffects,
+                          selectedValue: _selectedParticleEffect,
+                          onSelected: (val, _) =>
+                              setState(() => _selectedParticleEffect = val),
+                        ),
+                      ),
+
+                      const SizedBox(height: 32),
+
+                      // 7. Save button
+                      _buildSaveButton(),
                     ],
                   ),
                 ),
-
-                const SizedBox(height: 16),
-
-                // 2. Action/Title Row: Go Back + Title
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: const Color(0xFFC8A882), width: 1.0),
-                          ),
-                          child: Center(
-                            child: SvgPicture.string(
-                              backArrowSvg,
-                              width: 15,
-                              height: 15,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Text(
-                        'Upload God Image',
-                        style: GoogleFonts.outfit(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF2E2A36),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // 3. Upload photo white box
-                // width: 353; height: 260; border-radius: 24px; padding: 16px;
-                Center(
-                  child: Container(
-                    width: 353,
-                    height: 260,
-                    margin: const EdgeInsets.symmetric(horizontal: 20),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.03),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Container(
-                      width: 321,
-                      height: 228,
-                      decoration: const BoxDecoration(
-                        color: Colors.transparent,
-                      ),
-                      child: CustomPaint(
-                        painter: DashedBorderPainter(
-                          color: const Color(0xFFC8A882).withValues(alpha: 0.6),
-                          borderRadius: 24,
-                          strokeWidth: 2.0,
-                          dashWidth: 6.0,
-                          dashGap: 4.0,
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(24),
-                          child: _selectedImage != null
-                              ? Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    Image.file(
-                                      _selectedImage!,
-                                      fit: BoxFit.cover,
-                                    ),
-                                    // Remove/Change photo button overlay
-                                    Positioned(
-                                      top: 8,
-                                      right: 8,
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            _selectedImage = null;
-                                          });
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.all(6),
-                                          decoration: BoxDecoration(
-                                            color: Colors.black.withValues(alpha: 0.6),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(
-                                            Icons.close_rounded,
-                                            color: Colors.white,
-                                            size: 16,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : Padding(
-                                  padding: const EdgeInsets.all(24),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                    children: [
-                                      // SVG logo inside white box
-                                      Container(
-                                        width: 60,
-                                        height: 60,
-                                        decoration: const BoxDecoration(
-                                          color: Color(0xFFFFF0E6),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Center(
-                                          child: SvgPicture.string(
-                                            cameraBigSvg,
-                                            width: 40,
-                                            height: 36,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 10),
-                                      Text(
-                                        'Upload God Photo',
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          color: const Color(0xFF2E2A36),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        'JPG, PNG — Max 10MB',
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 12,
-                                          color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      // Browse Gallery button
-                                      GestureDetector(
-                                        onTap: () => _pickImage(ImageSource.gallery),
-                                        child: Container(
-                                          width: 141,
-                                          height: 34,
-                                          decoration: BoxDecoration(
-                                            gradient: const LinearGradient(
-                                              colors: [Color(0xFFFF9933), Color(0xFFFF6600)],
-                                            ),
-                                            borderRadius: BorderRadius.circular(9999),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: const Color(0xFFFF6600).withValues(alpha: 0.3),
-                                                blurRadius: 8,
-                                                offset: const Offset(0, 3),
-                                              ),
-                                            ],
-                                          ),
-                                          child: Center(
-                                            child: Padding(
-                                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 24),
-                                              child: Text(
-                                                'Browse Gallery',
-                                                style: GoogleFonts.outfit(
-                                                  color: Colors.white,
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // 4. "OR" Divider section
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Divider(
-                          color: const Color(0xFF2E2A36).withValues(alpha: 0.15),
-                          thickness: 1,
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          'OR',
-                          style: GoogleFonts.outfit(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Divider(
-                          color: const Color(0xFF2E2A36).withValues(alpha: 0.15),
-                          thickness: 1,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // 5. Take Photo with Camera Button
-                // width: 353; height: 54; border-radius: 12px; border-width: 1px;
-                Center(
-                  child: GestureDetector(
-                    onTap: () => _pickImage(ImageSource.camera),
-                    child: Container(
-                      width: 353,
-                      height: 54,
-                      margin: const EdgeInsets.symmetric(horizontal: 20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFEFE6DB), width: 1.0),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SvgPicture.string(
-                            cameraSmallSvg,
-                            width: 20,
-                            height: 18,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            'Take Photo with Camera',
-                            style: GoogleFonts.outfit(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF2E2A36),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
-                // 6. Choose from Gallery Button
-                Center(
-                  child: GestureDetector(
-                    onTap: () => _pickImage(ImageSource.gallery),
-                    child: Container(
-                      width: 353,
-                      height: 54,
-                      margin: const EdgeInsets.symmetric(horizontal: 20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFEFE6DB), width: 1.0),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.image_outlined,
-                            color: Color(0xFFC8A882),
-                            size: 20,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            'Choose from Gallery',
-                            style: GoogleFonts.outfit(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF2E2A36),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                // 7. Photo Guidelines Box
-                // width: 350; height: 159; border-radius: 20px; gap: 12px; border-width: 1px; padding: 27, 20, 28, 20
-                Center(
-                  child: Container(
-                    width: 350,
-                    height: 159,
-                    margin: const EdgeInsets.symmetric(horizontal: 20),
-                    padding: const EdgeInsets.fromLTRB(20, 27, 20, 28),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFF6EE),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFFEFE6DB), width: 1.0),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Photo Guidelines',
-                          style: GoogleFonts.outfit(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF2E2A36),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              _guidelineItem('Clear front-facing image'),
-                              _guidelineItem('Good lighting'),
-                              _guidelineItem('No offensive content'),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // 8. Continue Button (at the bottom)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: GestureDetector(
-                    onTap: () {
-                      if (_selectedImage == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            backgroundColor: const Color(0xFFFF5500),
-                            content: Text(
-                              'Please select or take a photo first!',
-                              style: GoogleFonts.outfit(color: Colors.white),
-                            ),
-                          ),
-                        );
-                        return;
-                      }
-                      _showDetailsDialog();
-                    },
-                    child: Container(
-                      height: 50,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFFF9933), Color(0xFFFF6600)],
-                        ),
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFFFF6600).withValues(alpha: 0.3),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: Text(
-                          'Continue',
-                          style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _guidelineItem(String text) {
-    return Row(
-      children: [
-        const Icon(Icons.check_rounded, color: Color(0xFFC8A882), size: 14),
-        const SizedBox(width: 8),
-        Text(
-          text,
-          style: GoogleFonts.outfit(
-            fontSize: 12,
-            color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
+  // ─── Header ───────────────────────────────────────────────────────────────
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+      child: Row(
+        children: [
+          // Back button
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFEFE6DB)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                size: 16,
+                color: Color(0xFF2E2A36),
+              ),
+            ),
           ),
-        ),
-      ],
+          const SizedBox(width: 12),
+          // Title
+          Expanded(
+            child: Text(
+              'Create Jap',
+              style: GoogleFonts.outfit(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF2E2A36),
+              ),
+            ),
+          ),
+          // Mail icon
+          _headerIconBtn(
+            icon: Icons.mail_outline_rounded,
+            hasDot: false,
+          ),
+          const SizedBox(width: 8),
+          // Notification icon
+          _headerIconBtn(
+            icon: Icons.notifications_none_rounded,
+            hasDot: true,
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _iconHeaderBtn(IconData icon, {bool hasDot = false}) {
+  Widget _headerIconBtn({required IconData icon, bool hasDot = false}) {
     return Stack(
+      clipBehavior: Clip.none,
       children: [
         Container(
           width: 38,
@@ -698,16 +617,23 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
             color: Colors.white,
             shape: BoxShape.circle,
             border: Border.all(color: const Color(0xFFEFE6DB)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-          child: Icon(icon, size: 20, color: const Color(0xFF2E2A36)),
+          child: Icon(icon, size: 18, color: const Color(0xFF2E2A36)),
         ),
         if (hasDot)
           Positioned(
-            top: 4,
-            right: 4,
+            top: 5,
+            right: 5,
             child: Container(
-              width: 8,
-              height: 8,
+              width: 7,
+              height: 7,
               decoration: const BoxDecoration(
                 color: Color(0xFFFF3B42),
                 shape: BoxShape.circle,
@@ -717,74 +643,439 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
       ],
     );
   }
-}
 
-// Dashed border custom painter
-class DashedBorderPainter extends CustomPainter {
-  final Color color;
-  final double strokeWidth;
-  final double borderRadius;
-  final double dashWidth;
-  final double dashGap;
-
-  DashedBorderPainter({
-    required this.color,
-    this.strokeWidth = 1.0,
-    this.borderRadius = 24.0,
-    this.dashWidth = 6.0,
-    this.dashGap = 4.0,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = strokeWidth
-      ..style = PaintingStyle.stroke;
-
-    final RRect rrect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      Radius.circular(borderRadius),
+  // ─── Image upload card ────────────────────────────────────────────────────
+  Widget _buildImageCard({
+    required String label,
+    required File? image,
+    required VoidCallback onTap,
+    required VoidCallback onClear,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel(label),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            height: 220,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: image != null
+                    ? const Color(0xFFFF9933).withValues(alpha: 0.5)
+                    : const Color(0xFFEFE6DB),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: image != null
+                ? Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: Image.file(image, fit: BoxFit.cover),
+                      ),
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: GestureDetector(
+                          onTap: onClear,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.55),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.close_rounded,
+                                color: Colors.white, size: 14),
+                          ),
+                        ),
+                      ),
+                      // Edit overlay at bottom
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.4),
+                            borderRadius: const BorderRadius.vertical(
+                                bottom: Radius.circular(18)),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Change',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF9933).withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.upload_rounded,
+                          color: Color(0xFFFF9933),
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Upload Image',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF2E2A36),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Tap to choose',
+                        style: GoogleFonts.outfit(
+                          fontSize: 10,
+                          color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ],
     );
-
-    final Path path = Path()..addRRect(rrect);
-    final Path dashedPath = Path();
-
-    double distance = 0.0;
-    for (final PathMetric metric in path.computeMetrics()) {
-      while (distance < metric.length) {
-        dashedPath.addPath(
-          metric.extractPath(distance, (distance + dashWidth).clamp(0.0, metric.length)),
-          Offset.zero,
-        );
-        distance += dashWidth + dashGap;
-      }
-      distance = 0.0;
-    }
-
-    canvas.drawPath(dashedPath, paint);
   }
 
-  @override
-  bool shouldRepaint(covariant DashedBorderPainter oldDelegate) {
-    return oldDelegate.color != color ||
-        oldDelegate.strokeWidth != strokeWidth ||
-        oldDelegate.borderRadius != borderRadius ||
-        oldDelegate.dashWidth != dashWidth ||
-        oldDelegate.dashGap != dashGap;
+  // ─── Section label ─────────────────────────────────────────────────────────
+  Widget _sectionLabel(String text) {
+    return Text(
+      text,
+      style: GoogleFonts.outfit(
+        fontSize: 12,
+        fontWeight: FontWeight.bold,
+        color: const Color(0xFF2E2A36).withValues(alpha: 0.55),
+        letterSpacing: 0.4,
+      ),
+    );
+  }
+
+  // ─── Text field ───────────────────────────────────────────────────────────
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    return Container(
+      height: 52,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFEFE6DB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 14),
+          Icon(icon, size: 18, color: const Color(0xFFC8A882)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              keyboardType: keyboardType,
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                color: const Color(0xFF2E2A36),
+                fontWeight: FontWeight.w500,
+              ),
+              decoration: InputDecoration(
+                hintText: hint,
+                hintStyle: GoogleFonts.outfit(
+                  fontSize: 14,
+                  color: const Color(0xFF2E2A36).withValues(alpha: 0.35),
+                ),
+                border: InputBorder.none,
+                isDense: true,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+        ],
+      ),
+    );
+  }
+
+  // ─── Audio box (full width, like image card) ───────────────────────────
+  Widget _buildAudioBox() {
+    return GestureDetector(
+      onTap: _pickAudioFile,
+      child: Container(
+        height: 140,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: _audioFileName != null
+                ? const Color(0xFFFF9933).withValues(alpha: 0.5)
+                : const Color(0xFFEFE6DB),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: _audioFileName != null
+            ? Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Filled state
+                  Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF9933).withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.audio_file_rounded,
+                            color: Color(0xFFFF7700),
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          _audioFileName!,
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF2E2A36),
+                          ),
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Tap to change',
+                          style: GoogleFonts.outfit(
+                            fontSize: 11,
+                            color: const Color(0xFFFF7700),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Clear button
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: GestureDetector(
+                      onTap: () => setState(() { _audioFileName = null; _audioFilePath = null; }),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.close_rounded,
+                            color: Color(0xFF2E2A36), size: 14),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            // Empty state
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF9933).withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.music_note_rounded,
+                      color: Color(0xFFFF9933),
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Upload Audio File',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF2E2A36),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'MP3, M4A — Max 10MB',
+                    style: GoogleFonts.outfit(
+                      fontSize: 11,
+                      color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  // ─── Dropdown tile ────────────────────────────────────────────────────────
+  Widget _buildDropdownTile({
+    required String hint,
+    required String? value,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 52,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: value != null
+                ? const Color(0xFFFF9933).withValues(alpha: 0.5)
+                : const Color(0xFFEFE6DB),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: value != null
+                  ? const Color(0xFFFF7700)
+                  : const Color(0xFFC8A882),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                value ?? hint,
+                style: GoogleFonts.outfit(
+                  fontSize: 14,
+                  fontWeight:
+                      value != null ? FontWeight.w600 : FontWeight.normal,
+                  color: value != null
+                      ? const Color(0xFF2E2A36)
+                      : const Color(0xFF2E2A36).withValues(alpha: 0.35),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: const Color(0xFFC8A882),
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Save button ──────────────────────────────────────────────────────────
+  Widget _buildSaveButton() {
+    return GestureDetector(
+      onTap: _onSave,
+      child: Container(
+        height: 52,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFF9933), Color(0xFFFF6600)],
+          ),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFF6600).withValues(alpha: 0.35),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Text(
+            'Add to My Japs',
+            style: GoogleFonts.outfit(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
+// ─── Data model returned to caller ───────────────────────────────────────────
 class CustomJapDetails {
-  final String imagePath;
+  final String coverImagePath;
+  final String godImagePath;
   final String name;
-  final String mantra;
-  final int target;
+  final String audioFileName;
+  final String audioFilePath;
+  final int chantCount;
+  final String category;
+  final String particleEffect;
 
   CustomJapDetails({
-    required this.imagePath,
+    required this.coverImagePath,
+    required this.godImagePath,
     required this.name,
-    required this.mantra,
-    required this.target,
+    required this.audioFileName,
+    required this.audioFilePath,
+    required this.chantCount,
+    required this.category,
+    required this.particleEffect,
   });
 }

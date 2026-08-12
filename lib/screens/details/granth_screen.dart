@@ -3,10 +3,17 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'granth_list_by_category_screen.dart';
 
-class GranthScreen extends StatelessWidget {
+import '../../services/api_service.dart';
+
+class GranthScreen extends StatefulWidget {
   const GranthScreen({super.key});
 
-  static const List<Map<String, dynamic>> _granthCategories = [
+  @override
+  State<GranthScreen> createState() => _GranthScreenState();
+}
+
+class _GranthScreenState extends State<GranthScreen> {
+  List<Map<String, dynamic>> _categories = [
     {
       'title': 'Veda',
       'count': 4,
@@ -58,6 +65,37 @@ class GranthScreen extends StatelessWidget {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _fetchCategories();
+  }
+
+  Future<void> _fetchCategories() async {
+    try {
+      final remoteCats = await ApiService.getGranthCategories();
+      if (remoteCats.isNotEmpty && mounted) {
+        setState(() {
+          final List<Map<String, dynamic>> merged = [];
+          for (final cat in remoteCats) {
+            final catMap = Map<String, dynamic>.from(cat as Map);
+            final title = catMap['name'] ?? catMap['title'] ?? 'Granth';
+            merged.add({
+              '_id': catMap['_id'] ?? catMap['id'],
+              'title': title,
+              'count': catMap['granthCount'] ?? 10,
+              'image': catMap['image'] ?? 'assets/images/granth_card.png',
+              'description': catMap['description'] ?? 'Explore sacred texts of $title',
+            });
+          }
+          if (merged.isNotEmpty) {
+            _categories = merged;
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFFF6EE),
@@ -104,7 +142,7 @@ class GranthScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            ..._granthCategories.map((category) {
+            ..._categories.map((category) {
               return _CategoryCard(
                 category: category,
                 onTap: () {
