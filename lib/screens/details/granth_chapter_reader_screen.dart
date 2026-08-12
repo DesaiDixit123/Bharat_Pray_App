@@ -5,6 +5,8 @@ import 'package:flip_page/flip_page.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../services/api_service.dart';
+
 class GranthChapterReaderScreen extends StatefulWidget {
   const GranthChapterReaderScreen({
     super.key,
@@ -26,33 +28,75 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   final double _readerFontSize = 16.0;
   bool _sepiaMode = true;
 
+  bool _isLoadingPages = true;
+
   @override
   void initState() {
     super.initState();
     _flipController = FlipPageController(initialPage: 0);
+    _loadChapterPagesAndVerses();
+  }
 
-    final rawVerses = widget.chapter['verses'] ?? widget.chapter['shlokas'] ?? widget.chapter['content'];
+  Future<void> _loadChapterPagesAndVerses() async {
+    final chapterId = (widget.chapter['_id'] ?? widget.chapter['id'] ?? '').toString();
     List<Map<String, String>> parsedVerses = [];
 
-    if (rawVerses is List) {
-      for (final item in rawVerses) {
-        if (item is Map) {
-          parsedVerses.add(
-            item.map((key, value) => MapEntry(key.toString(), (value ?? '').toString())),
-          );
-        } else if (item != null) {
-          parsedVerses.add({
-            'sanskrit': item.toString(),
-            'transliteration': '',
-            'english': '',
-          });
+    if (chapterId.isNotEmpty) {
+      try {
+        final pages = await ApiService.getPagesByChapter(chapterId);
+        if (pages.isNotEmpty) {
+          for (final page in pages) {
+            final pageMap = Map<String, dynamic>.from(page as Map);
+            final pageContent = (pageMap['content'] ?? pageMap['description'] ?? '').toString().trim();
+            final pageTitle = (pageMap['title'] ?? 'Page ${pageMap['pageNumber'] ?? 1}').toString();
+            final sanskrit = (pageMap['sanskrit'] ?? widget.chapter['sanskritName'] ?? widget.chapter['name'] ?? pageTitle).toString();
+            final transliteration = (pageMap['transliteration'] ?? '').toString();
+            final english = pageContent.isNotEmpty
+                ? pageContent
+                : 'Sacred text and translation for $pageTitle will be updated soon.';
+
+            parsedVerses.add({
+              'sanskrit': sanskrit,
+              'transliteration': transliteration,
+              'english': english,
+            });
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (parsedVerses.isEmpty) {
+      final rawVerses = widget.chapter['verses'] ?? widget.chapter['shlokas'] ?? widget.chapter['content'];
+
+      if (rawVerses is List) {
+        for (final item in rawVerses) {
+          if (item is Map) {
+            parsedVerses.add(
+              item.map((key, value) => MapEntry(key.toString(), (value ?? '').toString())),
+            );
+          } else if (item != null && item.toString().trim().isNotEmpty) {
+            parsedVerses.add({
+              'sanskrit': item.toString(),
+              'transliteration': '',
+              'english': '',
+            });
+          }
         }
       }
     }
 
     if (parsedVerses.isEmpty) {
-      final bodyText = (widget.chapter['translation'] ?? widget.chapter['content'] ?? widget.chapter['description'] ?? 'Sacred verses and translation available in library.').toString();
-      final sanskritText = (widget.chapter['sanskrit'] ?? widget.chapter['shloka'] ?? widget.chapter['title'] ?? widget.chapter['name'] ?? 'Chapter').toString();
+      final desc = (widget.chapter['description'] ?? '').toString().trim();
+      final trans = (widget.chapter['translation'] ?? '').toString().trim();
+      final content = (widget.chapter['content'] ?? '').toString().trim();
+      
+      String bodyText = '';
+      if (desc.isNotEmpty) bodyText = desc;
+      else if (trans.isNotEmpty) bodyText = trans;
+      else if (content.isNotEmpty) bodyText = content;
+      else bodyText = 'Sacred text and translation for this chapter will be updated soon.';
+
+      final sanskritText = (widget.chapter['sanskritName'] ?? widget.chapter['sanskrit'] ?? widget.chapter['name'] ?? widget.chapter['title'] ?? 'Chapter').toString();
       parsedVerses = [
         {
           'sanskrit': sanskritText,
@@ -62,7 +106,12 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       ];
     }
 
-    _verses = parsedVerses;
+    if (mounted) {
+      setState(() {
+        _verses = parsedVerses;
+        _isLoadingPages = false;
+      });
+    }
   }
 
   @override
@@ -203,20 +252,24 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
               end: Alignment.bottomCenter,
             ),
           ),
-          child: Column(
-            children: [
-              const SizedBox(height: 14),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                child: _buildBookView(context),
-              ),
-              const SizedBox(height: 14),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                child: _buildPlaybackControls(),
-              ),
-            ],
-          ),
+          child: _isLoadingPages
+              ? const Center(
+                  child: CircularProgressIndicator(color: Color(0xFFFF8C1A)),
+                )
+              : Column(
+                  children: [
+                    const SizedBox(height: 14),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 18),
+                      child: _buildBookView(context),
+                    ),
+                    const SizedBox(height: 14),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 18),
+                      child: _buildPlaybackControls(),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
