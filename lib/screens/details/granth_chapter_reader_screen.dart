@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:page_flip/page_flip.dart';
 
 import '../../services/api_service.dart';
 
@@ -21,7 +21,7 @@ class GranthChapterReaderScreen extends StatefulWidget {
 }
 
 class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
-  late final PageController _pageController;
+  final GlobalKey<PageFlipWidgetState> _pageFlipKey = GlobalKey<PageFlipWidgetState>();
   List<Map<String, String>> _verses = [];
   int _currentPageIndex = 0;
   final double _readerFontSize = 16.0;
@@ -31,7 +31,6 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: 0);
     _loadChapterPagesAndVerses();
   }
 
@@ -114,25 +113,25 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
 
   @override
   void dispose() {
-    _pageController.dispose();
     super.dispose();
   }
 
-  int get _totalBookPages => _verses.length + 2; // Front Cover + Content Pages + Back Cover
+  int get _totalBookPages => _verses.length + 2;
 
   void _goToPage(int pageIndex) {
     if (pageIndex < 0 || pageIndex >= _totalBookPages) return;
-    _pageController.animateToPage(
-      pageIndex,
-      duration: const Duration(milliseconds: 450),
-      curve: Curves.easeInOutCubic,
-    );
+    try {
+      _pageFlipKey.currentState?.goToPage(pageIndex);
+    } catch (_) {}
+    setState(() {
+      _currentPageIndex = pageIndex;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final backgroundTop = _sepiaMode ? const Color(0xFF381F0E) : const Color(0xFF191919);
-    final backgroundBottom = _sepiaMode ? const Color(0xFF1E1007) : const Color(0xFF0B0B0B);
+    final backgroundTop = _sepiaMode ? const Color(0xFF2C180C) : const Color(0xFF141414);
+    final backgroundBottom = _sepiaMode ? const Color(0xFF140A04) : const Color(0xFF090909);
 
     final granthTitle = (widget.granth['name'] ?? widget.granth['title'] ?? 'Granth').toString();
     final chapterTitle = (widget.chapter['title'] ?? widget.chapter['name'] ?? 'Chapter').toString();
@@ -203,86 +202,144 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   }
 
   Widget _buildBookContainer(BuildContext context) {
+    final int maxIndex = _totalBookPages - 1;
+    double leftStackWidth = 0.0;
+    double rightStackWidth = 0.0;
+
+    if (_currentPageIndex == 0) {
+      // Front Cover Page: ZERO left stack thickness, FULL right stack thickness
+      leftStackWidth = 0.0;
+      rightStackWidth = 14.0;
+    } else if (_currentPageIndex == maxIndex) {
+      // Back Cover Page: FULL left stack thickness, ZERO right stack thickness
+      leftStackWidth = 14.0;
+      rightStackWidth = 0.0;
+    } else {
+      // Inner Verses: Dynamic paper transfer from right to left
+      final double innerProgress = maxIndex > 2
+          ? ((_currentPageIndex - 1) / (maxIndex - 2)).clamp(0.0, 1.0)
+          : 0.5;
+      leftStackWidth = (3.5 + (9.5 * innerProgress)).clamp(3.5, 13.0);
+      rightStackWidth = (13.0 - (9.5 * innerProgress)).clamp(3.5, 13.0);
+    }
+
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF231207), // Deep Hardcover Mahogany Leather
+        color: const Color(0xFF1B0E06), // Deep Mahogany Leather Frame
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.6), width: 1.5),
+        border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.8), width: 2.0),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.5),
-            blurRadius: 28,
-            spreadRadius: 2,
-            offset: const Offset(0, 14),
+            color: Colors.black.withValues(alpha: 0.8),
+            blurRadius: 38,
+            spreadRadius: 4,
+            offset: const Offset(0, 18),
           ),
           BoxShadow(
-            color: const Color(0xFFD4AF37).withValues(alpha: 0.15),
-            blurRadius: 14,
-            spreadRadius: 1,
+            color: const Color(0xFFFF8C1A).withValues(alpha: 0.15),
+            blurRadius: 24,
+            spreadRadius: 2,
           ),
         ],
       ),
       child: Stack(
         children: [
-          // Stacked Paper Edges (Real Physical Paper Stack on Right)
-          Positioned(
-            right: 0,
-            top: 12,
-            bottom: 12,
-            width: 10,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.horizontal(right: Radius.circular(8)),
-                gradient: LinearGradient(
-                  colors: [
-                    const Color(0xFFD2C1A8),
-                    const Color(0xFFEFE4D2),
-                    const Color(0xFFC7B398),
-                    const Color(0xFFF5EBDC),
-                    const Color(0xFFBBA78B),
-                    const Color(0xFFECE1CE),
-                  ],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
-              ),
+          // Top Paper Block Edge (3D Top Book Thickness)
+          if (_currentPageIndex > 0 && _currentPageIndex < maxIndex)
+            Positioned(
+              top: 0,
+              left: leftStackWidth + 4,
+              right: rightStackWidth + 4,
+              height: 7,
+              child: _buildTopBottomPaperEdge(isTop: true),
             ),
-          ),
 
-          // Main 3D Book Page View
+          // Bottom Paper Block Edge (3D Bottom Book Thickness)
+          if (_currentPageIndex > 0 && _currentPageIndex < maxIndex)
+            Positioned(
+              bottom: 0,
+              left: leftStackWidth + 4,
+              right: rightStackWidth + 4,
+              height: 7,
+              child: _buildTopBottomPaperEdge(isTop: false),
+            ),
+
+          // Dynamic Stacked Paper Edges on Left Side (Grows as pages are flipped, 0 on Front Cover)
+          if (leftStackWidth > 0)
+            Positioned(
+              left: 0,
+              top: 8,
+              bottom: 8,
+              width: leftStackWidth,
+              child: _buildStackedPaperEdges(isRightSide: false, width: leftStackWidth),
+            ),
+
+          // Dynamic Stacked Paper Edges on Right Side (Shrinks as remaining pages decrease, 0 on Back Cover)
+          if (rightStackWidth > 0)
+            Positioned(
+              right: 0,
+              top: 8,
+              bottom: 8,
+              width: rightStackWidth,
+              child: _buildStackedPaperEdges(isRightSide: true, width: rightStackWidth),
+            ),
+
+          // Main Stacked Interactive PageFlip Canvas
           Positioned.fill(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
+              padding: EdgeInsets.fromLTRB(
+                leftStackWidth > 0 ? leftStackWidth + 2 : 6,
+                7,
+                rightStackWidth > 0 ? rightStackWidth + 2 : 6,
+                7,
+              ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
                 child: Stack(
                   children: [
-                    // Spine Crease Shadow (Left Binding Fold)
-                    Positioned(
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: 24,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.black.withValues(alpha: 0.42),
-                              Colors.black.withValues(alpha: 0.20),
-                              Colors.black.withValues(alpha: 0.05),
-                              Colors.transparent,
-                            ],
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
+                    PageFlipWidget(
+                      key: _pageFlipKey,
+                      backgroundColor: const Color(0xFF1E0F07),
+                      duration: const Duration(milliseconds: 950), // Significantly slower, calm forward flip
+                      cutoffForward: 0.55, // Slower, controlled forward drag trigger
+                      cutoffPrevious: 0.45,
+                      initialIndex: 0,
+                      onPageFlipped: (pageIndex) {
+                        setState(() {
+                          _currentPageIndex = pageIndex;
+                        });
+                      },
+                      lastPage: _buildBookBackCover(),
+                      children: [
+                        _buildBookFrontCover(),
+                        ...List.generate(_verses.length, (index) => _buildVersePage(_verses[index], index)),
+                      ],
+                    ),
+
+                    // Left Spine Binding Crease Shadow for Open Book
+                    if (_currentPageIndex > 0)
+                      Positioned(
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: 22,
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.black.withValues(alpha: 0.45),
+                                  Colors.black.withValues(alpha: 0.18),
+                                  Colors.black.withValues(alpha: 0.04),
+                                  Colors.transparent,
+                                ],
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-
-                    // Realistic 3D Smooth Page Flip Widget
-                    Positioned.fill(
-                      child: _buildSmooth3DFlipPageView(),
-                    ),
                   ],
                 ),
               ),
@@ -293,169 +350,165 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     );
   }
 
-  Widget _buildSmooth3DFlipPageView() {
-    return PageView.builder(
-      controller: _pageController,
-      itemCount: _totalBookPages,
-      onPageChanged: (index) {
-        setState(() {
-          _currentPageIndex = index;
-        });
-      },
-      physics: const BouncingScrollPhysics(),
-      itemBuilder: (context, index) {
-        return AnimatedBuilder(
-          animation: _pageController,
-          builder: (context, child) {
-            double pageOffset = 0.0;
-            if (_pageController.position.haveDimensions) {
-              pageOffset = (_pageController.page ?? _pageController.initialPage.toDouble()) - index;
-            } else {
-              pageOffset = (_pageController.initialPage - index).toDouble();
-            }
-
-            // Realistic 3D Perspective Rotation around Left Spine Fold
-            final rotationAngle = (pageOffset * math.pi / 2.2).clamp(-math.pi / 2.2, math.pi / 2.2);
-            final opacity = (1.0 - pageOffset.abs() * 0.35).clamp(0.0, 1.0);
-
-            final matrix = Matrix4.identity()
-              ..setEntry(3, 2, 0.0014) // Perspective depth
-              ..rotateY(-rotationAngle * 0.85);
-
-            return Transform(
-              transform: matrix,
-              alignment: pageOffset >= 0 ? Alignment.centerLeft : Alignment.centerRight,
-              child: Opacity(
-                opacity: opacity,
-                child: child,
-              ),
-            );
-          },
-          child: _buildPageForIndex(index),
-        );
-      },
+  Widget _buildTopBottomPaperEdge({required bool isTop}) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFFC7B398).withValues(alpha: 0.6),
+            const Color(0xFFF3E7D3).withValues(alpha: 0.9),
+            const Color(0xFFEFE4D2).withValues(alpha: 0.9),
+            const Color(0xFFC7B398).withValues(alpha: 0.6),
+          ],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+      ),
     );
   }
 
-  Widget _buildPageForIndex(int index) {
-    if (index == 0) {
-      return _buildBookFrontCover();
-    } else if (index == _totalBookPages - 1) {
-      return _buildBookBackCover();
-    } else {
-      final verseIndex = index - 1;
-      return _buildVersePage(_verses[verseIndex], verseIndex);
-    }
-  }
-
-  // Page 0: Hardcover Front Book Cover Page
-  Widget _buildBookFrontCover() {
-    final granthName = (widget.granth['name'] ?? widget.granth['title'] ?? 'Sacred Granth').toString();
-    final authorName = (widget.granth['author'] ?? 'Maharishi Ved Vyas').toString();
-    final chapterName = (widget.chapter['name'] ?? widget.chapter['title'] ?? 'Chapter 1').toString();
-    final coverImage = (widget.granth['coverImage'] ?? widget.granth['image'] ?? '').toString();
-    final resolvedUrl = ApiService.resolveImageUrl(coverImage);
+  Widget _buildStackedPaperEdges({required bool isRightSide, required double width}) {
+    if (width <= 0) return const SizedBox.shrink();
 
     return Container(
-      color: const Color(0xFF26150B),
-      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.horizontal(
+          left: isRightSide ? Radius.zero : const Radius.circular(5),
+          right: isRightSide ? const Radius.circular(5) : Radius.zero,
+        ),
+        gradient: LinearGradient(
+          colors: isRightSide
+              ? [
+                  const Color(0xFF7C6A57), // Spine seam shadow
+                  const Color(0xFFF3E7D3), // Cream page 1
+                  const Color(0xFFCCA78B), // Aged shadow line
+                  const Color(0xFFFBF4E8), // Cream page 2
+                  const Color(0xFFC5B296), // Aged shadow line
+                  const Color(0xFFEFE4D2), // Cream page 3
+                  const Color(0xFF98856C), // Outer deckle shadow
+                ]
+              : [
+                  const Color(0xFF98856C), // Outer deckle shadow
+                  const Color(0xFFEFE4D2), // Cream page 3
+                  const Color(0xFFC5B296), // Aged shadow line
+                  const Color(0xFFFBF4E8), // Cream page 2
+                  const Color(0xFFCCA78B), // Aged shadow line
+                  const Color(0xFFF3E7D3), // Cream page 1
+                  const Color(0xFF7C6A57), // Spine seam shadow
+                ],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.6),
+            blurRadius: 5,
+            spreadRadius: 1,
+            offset: isRightSide ? const Offset(2, 0) : const Offset(-2, 0),
+          ),
+        ],
+        border: Border.all(
+          color: const Color(0xFFBBA78B).withValues(alpha: 0.85),
+          width: 0.8,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBookFrontCover() {
+    final rawCover = (widget.granth['coverImage'] ?? widget.granth['image'] ?? widget.granth['cover'] ?? '').toString();
+    final resolvedUrl = ApiService.resolveImageUrl(rawCover);
+
+    Widget coverContent;
+    if (resolvedUrl.startsWith('http')) {
+      coverContent = Image.network(
+        resolvedUrl,
+        width: double.infinity,
+        height: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _fallbackCoverImage(),
+      );
+    } else if (rawCover.startsWith('assets/')) {
+      coverContent = Image.asset(
+        rawCover,
+        width: double.infinity,
+        height: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _fallbackCoverImage(),
+      );
+    } else {
+      coverContent = _fallbackCoverImage();
+    }
+
+    return Container(
+      color: const Color(0xFF1E0F07),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: coverContent,
+      ),
+    );
+  }
+
+  Widget _fallbackCoverImage() {
+    return Image.asset(
+      'assets/images/bhagavad_gita.png',
+      width: double.infinity,
+      height: double.infinity,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => _pureFullPageCoverArtwork(),
+    );
+  }
+
+  Widget _pureFullPageCoverArtwork() {
+    final granthName = (widget.granth['name'] ?? widget.granth['title'] ?? 'Sacred Granth').toString();
+
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF3B1E0B), Color(0xFF190C05)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      padding: const EdgeInsets.all(24),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFD4AF37), width: 1.8),
-          gradient: const LinearGradient(
-            colors: [Color(0xFF381F0E), Color(0xFF201007)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          border: Border.all(color: const Color(0xFFD4AF37), width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 16,
+            ),
+          ],
         ),
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text('❖ ──────── ॐ ──────── ❖', style: GoogleFonts.outfit(color: const Color(0xFFD4AF37), fontSize: 13)),
-            const SizedBox(height: 16),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: resolvedUrl.startsWith('http')
-                  ? Image.network(
-                      resolvedUrl,
-                      width: 110,
-                      height: 140,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => _coverPlaceholderIcon(),
-                    )
-                  : _coverPlaceholderIcon(),
-            ),
+            const Icon(Icons.auto_stories_rounded, color: Color(0xFFFFD700), size: 64),
             const SizedBox(height: 18),
             Text(
               granthName,
               textAlign: TextAlign.center,
               style: GoogleFonts.notoSerifDevanagari(
-                fontSize: 22,
+                fontSize: 26,
                 fontWeight: FontWeight.bold,
                 color: const Color(0xFFFFD700),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'by $authorName',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(
-                fontSize: 13,
-                fontStyle: FontStyle.italic,
-                color: Colors.white.withValues(alpha: 0.85),
+                height: 1.3,
               ),
             ),
             const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFD4AF37).withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.5)),
-              ),
-              child: Text(
-                chapterName,
-                style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFFFFE082),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: () => _goToPage(1),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF8C1A),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
-              ),
-              icon: const Icon(Icons.menu_book_rounded, color: Colors.white, size: 18),
-              label: Text(
-                'પ્રારંભ કરો • Open Book',
-                style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-            ),
+            Text('❖ ──────── ॐ ──────── ❖', style: GoogleFonts.outfit(color: const Color(0xFFD4AF37), fontSize: 13)),
           ],
         ),
       ),
     );
   }
 
-  Widget _coverPlaceholderIcon() {
-    return Container(
-      width: 110,
-      height: 140,
-      color: const Color(0xFF4A2B13),
-      alignment: Alignment.center,
-      child: const Icon(Icons.auto_stories_rounded, color: Color(0xFFFFD700), size: 48),
-    );
-  }
-
-  // Content Verse Page
+  // Inner Content Verse Page
   Widget _buildVersePage(Map<String, String> verse, int verseIndex) {
     final bodyColor = _sepiaMode ? const Color(0xFF332014) : const Color(0xFF261910);
     final paperBg = _sepiaMode ? const Color(0xFFF9F4E8) : const Color(0xFFF3EFE6);
@@ -464,7 +517,22 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     final englishText = verse['english'] ?? '';
 
     return Container(
-      color: paperBg,
+      decoration: BoxDecoration(
+        color: paperBg,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 10,
+            spreadRadius: 1,
+            offset: const Offset(-4, 0),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.22),
+            blurRadius: 6,
+            offset: const Offset(4, 0),
+          ),
+        ],
+      ),
       padding: const EdgeInsets.all(10),
       child: Container(
         decoration: BoxDecoration(
@@ -564,14 +632,14 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   // Page N+1: Rear End Cover Page
   Widget _buildBookBackCover() {
     return Container(
-      color: const Color(0xFF26150B),
+      color: const Color(0xFF1E0F07),
       padding: const EdgeInsets.all(16),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: const Color(0xFFD4AF37), width: 1.8),
           gradient: const LinearGradient(
-            colors: [Color(0xFF201007), Color(0xFF381F0E)],
+            colors: [Color(0xFF190C05), Color(0xFF381F0E)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),

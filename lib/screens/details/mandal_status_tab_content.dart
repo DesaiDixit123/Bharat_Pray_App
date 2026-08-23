@@ -272,7 +272,7 @@ class _MandalStatusTabContentState extends State<MandalStatusTabContent> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const MandalProfileScreen(),
+                    builder: (context) => const MandalProfileScreen(isOwnProfile: true),
                   ),
                 );
               },

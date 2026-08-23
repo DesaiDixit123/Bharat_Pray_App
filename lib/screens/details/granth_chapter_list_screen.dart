@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../services/api_service.dart';
 
+import '../../services/api_service.dart';
+import '../../services/saved_items_service.dart';
+import '../../widgets/top_toast_notification.dart';
 import 'granth_chapter_reader_screen.dart';
 
 class GranthChapterListScreen extends StatefulWidget {
@@ -38,6 +40,9 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
     });
 
     try {
+      final savedList = await SavedItemsService.getSavedChapters();
+      final savedIds = savedList.map((c) => (c['_id'] ?? c['id'] ?? c['title'] ?? '').toString()).toSet();
+
       final granthId = widget.granth['_id']?.toString() ?? '';
       if (granthId.isEmpty) {
         throw Exception('Granth ID is missing.');
@@ -45,6 +50,8 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
       final data = await ApiService.getChaptersByGranth(granthId);
       if (!mounted) return;
       setState(() {
+        _savedChapterIds.clear();
+        _savedChapterIds.addAll(savedIds);
         _chapters = data;
         _isLoading = false;
       });
@@ -56,35 +63,36 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
       });
     }
   }
+
   String _chapterId(Map<String, dynamic> chapter) {
-    final number = chapter['number']?.toString() ?? '';
-    final title = chapter['title']?.toString() ?? '';
-    return '$number-$title';
+    return (chapter['_id'] ?? chapter['id'] ?? chapter['title'] ?? '').toString();
   }
 
-  void _toggleChapterSave(Map<String, dynamic> chapter) {
+  Future<void> _toggleChapterSave(Map<String, dynamic> chapter) async {
+    final isNowSaved = await SavedItemsService.toggleSaveChapter(chapter, widget.granth);
     final id = _chapterId(chapter);
     final chapterTitle = (chapter['title'] ?? chapter['name'] ?? 'Chapter').toString();
-    final isSaved = _savedChapterIds.contains(id);
 
     setState(() {
-      if (isSaved) {
-        _savedChapterIds.remove(id);
-      } else {
+      if (isNowSaved) {
         _savedChapterIds.add(id);
+      } else {
+        _savedChapterIds.remove(id);
       }
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          isSaved ? '$chapterTitle removed from saved chapters' : '$chapterTitle saved',
-          style: GoogleFonts.outfit(),
-        ),
-        duration: const Duration(seconds: 1),
-        backgroundColor: const Color(0xFF2E2A36),
-      ),
-    );
+    if (mounted) {
+      final granthName = (widget.granth['name'] ?? widget.granth['title'] ?? '').toString();
+      final displayTitle = granthName.isNotEmpty
+          ? '$chapterTitle  ·  $granthName'
+          : chapterTitle;
+      TopToastNotification.showSavedNotification(
+        context: context,
+        title: displayTitle,
+        isSaved: isNowSaved,
+        savedTabIndex: 1,
+      );
+    }
   }
 
   @override
@@ -109,24 +117,36 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(
-              Icons.bookmark_border_rounded,
-              color: Color(0xFF2E2A36),
-            ),
-          ),
-        ],
       ),
       body: SafeArea(
         top: false,
         child: RefreshIndicator(
           onRefresh: _loadChapters,
+          color: const Color(0xFFFF7700),
           child: _buildBody(),
         ),
       ),
     );
+  }
+
+  Widget _buildHeaderBannerImage() {
+    final rawImg = (widget.granth['coverImage'] ?? widget.granth['image'] ?? widget.category['image'] ?? '').toString();
+    final resolvedUrl = ApiService.resolveImageUrl(rawImg);
+
+    if (resolvedUrl.startsWith('http')) {
+      return Image.network(
+        resolvedUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Image.asset('assets/images/bhagavad_gita.png', fit: BoxFit.cover),
+      );
+    } else if (rawImg.startsWith('assets/')) {
+      return Image.asset(
+        rawImg,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Image.asset('assets/images/bhagavad_gita.png', fit: BoxFit.cover),
+      );
+    }
+    return Image.asset('assets/images/bhagavad_gita.png', fit: BoxFit.cover);
   }
 
   Widget _buildBody() {
@@ -151,12 +171,16 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
       );
     }
 
+    final realChapterCount = _chapters.isNotEmpty
+        ? _chapters.length
+        : (widget.granth['totalChapters'] ?? widget.granth['totalPages'] ?? 1);
+
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
         Container(
-          height: 178,
+          height: 180,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
@@ -172,20 +196,13 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-              ApiService.resolveImageUrl((widget.category['image'] ?? '').toString())
-                      .startsWith('http')
-                  ? Image.network(
-                        ApiService.resolveImageUrl((widget.category['image'] ?? '').toString()),
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => Container(color: const Color(0xFF8A4A18)),
-                      )
-                  : Image.asset((widget.category['image'] ?? 'assets/images/granth_card.png').toString(), fit: BoxFit.cover, errorBuilder: (_, _, _) => Container(color: const Color(0xFF8A4A18))),
+                _buildHeaderBannerImage(),
                 Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        Colors.black.withOpacity(0.42),
-                        const Color(0xFF7A3A0F).withOpacity(0.62),
+                        Colors.black.withValues(alpha: 0.55),
+                        const Color(0xFF5A2A0B).withValues(alpha: 0.72),
                       ],
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
@@ -208,11 +225,11 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        '${widget.granth['totalChapters'] ?? widget.granth['totalPages'] ?? _chapters.length} Chapters',
+                        '$realChapterCount Chapters',
                         style: GoogleFonts.outfit(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: Colors.white.withOpacity(0.92),
+                          color: Colors.white.withValues(alpha: 0.92),
                         ),
                       ),
                     ],
@@ -235,9 +252,14 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
         if (_chapters.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 40),
-            child: Center(child: Text('No chapters found for this Granth.',
+            child: Center(
+              child: Text(
+                'No chapters found for this Granth.',
                 style: GoogleFonts.outfit(
-                    color: const Color(0xFF2E2A36).withOpacity(0.6)))),
+                  color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
+                ),
+              ),
+            ),
           )
         else
           ..._chapters.map((c) => _buildChapterCard(c as Map<String, dynamic>)),
@@ -256,7 +278,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
         border: Border.all(color: const Color(0xFFF3E4D6)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFF7700).withOpacity(0.06),
+            color: const Color(0xFFFF7700).withValues(alpha: 0.06),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -278,7 +300,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
                 width: 44,
@@ -313,28 +335,35 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
                       style: GoogleFonts.outfit(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: const Color(0xFF2E2A36).withOpacity(0.54),
+                        color: const Color(0xFF2E2A36).withValues(alpha: 0.54),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              IconButton(
-                onPressed: () => _toggleChapterSave(chapter),
-                icon: Icon(
-                  isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                  color: isSaved ? const Color(0xFFFF8C1A) : const Color(0xFFBFA58B),
-                  size: 22,
-                ),
-                tooltip: isSaved ? 'Unsave chapter' : 'Save chapter',
-              ),
-              const Center(
-                child: Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  color: Color(0xFFFF9B38),
-                  size: 18,
-                ),
+              const SizedBox(width: 10),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    onTap: () => _toggleChapterSave(chapter),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Icon(
+                        isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                        color: isSaved ? const Color(0xFFFF8C1A) : const Color(0xFFBFA58B),
+                        size: 22,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: Color(0xFFFF9B38),
+                    size: 16,
+                  ),
+                ],
               ),
             ],
           ),

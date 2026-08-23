@@ -161,7 +161,7 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
       return null;
     }
 
-    final categoryValue = bhajanMap['categoryId'];
+    final categoryValue = bhajanMap['godCategoryId'] ?? bhajanMap['categoryId'];
     String categoryId = '';
     if (categoryValue is Map<String, dynamic>) {
       categoryId = (categoryValue['_id'] ?? categoryValue['id'] ?? '').toString();

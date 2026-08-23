@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../login_screen.dart';
-import '../profile/edit_profile_screen.dart';
-import '../profile/change_password_screen.dart';
-import '../profile/terms_conditions_screen.dart';
-import '../profile/privacy_policy_screen.dart';
-import '../profile/help_support_screen.dart';
+
 import '../../services/api_service.dart';
+import '../login_screen.dart';
+import '../profile/change_password_screen.dart';
+import '../profile/edit_profile_screen.dart';
+import '../profile/help_support_screen.dart';
+import '../profile/privacy_policy_screen.dart';
+import '../profile/saved_items_screen.dart';
+import '../profile/terms_conditions_screen.dart';
+import 'mandal_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final bool isTab;
@@ -246,7 +249,113 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
 
-              const SizedBox(height: 28),
+              // MANDAL PROFILE HIGHLIGHT CARD (Instagram Style Creator Profile)
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const MandalProfileScreen(isOwnProfile: true)),
+                  );
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF2E2A36), Color(0xFF423B4E)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF2E2A36).withValues(alpha: 0.2),
+                        blurRadius: 15,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF7700).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Text("🛕", style: TextStyle(fontSize: 26)),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      "Mandal Profile",
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 17,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF2E7D32),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.check_circle_rounded, color: Colors.white, size: 12),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            "Approved ✅",
+                                            style: GoogleFonts.outfit(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  "Shree Ram Yuvak Mandal 🚩",
+                                  style: GoogleFonts.outfit(
+                                    color: const Color(0xFFFF7700),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white70, size: 18),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      const Divider(color: Colors.white24, height: 1),
+                      const SizedBox(height: 12),
+
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _buildMandalChip(Icons.add_photo_alternate_rounded, "Add Posts"),
+                          _buildMandalChip(Icons.video_library_rounded, "Add Reels"),
+                          _buildMandalChip(Icons.sensors_rounded, "Go Live 🔴"),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 24),
 
               // 1. Account Settings
               _buildSectionHeader("Account Settings"),
@@ -255,6 +364,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 decoration: _cardBoxDecoration(),
                 child: Column(
                   children: [
+                    _buildNavTile(
+                      icon: Icons.church_outlined,
+                      title: "Mandal Profile",
+                      subtitle: "Manage Posts, Reels, Live Broadcasts & Reg Info",
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const MandalProfileScreen(isOwnProfile: true)),
+                        );
+                      },
+                    ),
+                    const Divider(color: Color(0xFFEFE6DB), height: 1),
                     _buildNavTile(
                       icon: Icons.person_outline_rounded,
                       title: "Edit Profile",
@@ -265,6 +386,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           MaterialPageRoute(builder: (context) => const EditProfileScreen()),
                         );
                         if (updated == true) _loadProfileData();
+                      },
+                    ),
+                    const Divider(color: Color(0xFFEFE6DB), height: 1),
+                    _buildNavTile(
+                      icon: Icons.bookmark_outline_rounded,
+                      title: "Saved Library & Items",
+                      subtitle: "View bookmarked Granths & Chapters",
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const SavedItemsScreen()),
+                        );
                       },
                     ),
                     const Divider(color: Color(0xFFEFE6DB), height: 1),
@@ -450,6 +583,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
           fontWeight: FontWeight.bold,
           color: const Color(0xFF2E2A36),
         ),
+      ),
+    );
+  }
+
+  Widget _buildMandalChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: const Color(0xFFFF7700), size: 14),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: GoogleFonts.outfit(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+          ),
+        ],
       ),
     );
   }

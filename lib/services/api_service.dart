@@ -99,13 +99,27 @@ class ApiService {
   static Future<http.Response> _safeGet(Uri uri, {Map<String, String>? headers}) async {
     try {
       _logApiCall('GET', uri, headers: headers);
-      final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 30));
+      final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 15));
       _logApiResponse('GET', uri, response);
       return response;
-    } on TimeoutException catch (e) {
-      print('[API TIMEOUT] GET $uri | $e');
-      rethrow;
     } catch (e) {
+      if (!isLive && uri.host == '127.0.0.1') {
+        try {
+          final wifiUri = uri.replace(host: '192.168.29.163');
+          _logApiCall('GET (Wi-Fi Fallback)', wifiUri, headers: headers);
+          final res = await http.get(wifiUri, headers: headers).timeout(const Duration(seconds: 15));
+          _logApiResponse('GET (Wi-Fi Fallback)', wifiUri, res);
+          return res;
+        } catch (_) {}
+
+        try {
+          final emuUri = uri.replace(host: '10.0.2.2');
+          _logApiCall('GET (Emulator Fallback)', emuUri, headers: headers);
+          final res = await http.get(emuUri, headers: headers).timeout(const Duration(seconds: 15));
+          _logApiResponse('GET (Emulator Fallback)', emuUri, res);
+          return res;
+        } catch (_) {}
+      }
       print('[API ERROR] GET $uri | $e');
       rethrow;
     }
@@ -114,13 +128,27 @@ class ApiService {
   static Future<http.Response> _safePost(Uri uri, {Map<String, String>? headers, Object? body}) async {
     try {
       _logApiCall('POST', uri, headers: headers);
-      final response = await http.post(uri, headers: headers, body: body).timeout(const Duration(seconds: 30));
+      final response = await http.post(uri, headers: headers, body: body).timeout(const Duration(seconds: 15));
       _logApiResponse('POST', uri, response);
       return response;
-    } on TimeoutException catch (e) {
-      print('[API TIMEOUT] POST $uri | $e');
-      rethrow;
     } catch (e) {
+      if (!isLive && uri.host == '127.0.0.1') {
+        try {
+          final wifiUri = uri.replace(host: '192.168.29.163');
+          _logApiCall('POST (Wi-Fi Fallback)', wifiUri, headers: headers);
+          final res = await http.post(wifiUri, headers: headers, body: body).timeout(const Duration(seconds: 15));
+          _logApiResponse('POST (Wi-Fi Fallback)', wifiUri, res);
+          return res;
+        } catch (_) {}
+
+        try {
+          final emuUri = uri.replace(host: '10.0.2.2');
+          _logApiCall('POST (Emulator Fallback)', emuUri, headers: headers);
+          final res = await http.post(emuUri, headers: headers, body: body).timeout(const Duration(seconds: 15));
+          _logApiResponse('POST (Emulator Fallback)', emuUri, res);
+          return res;
+        } catch (_) {}
+      }
       print('[API ERROR] POST $uri | $e');
       rethrow;
     }
@@ -129,13 +157,27 @@ class ApiService {
   static Future<http.Response> _safePut(Uri uri, {Map<String, String>? headers, Object? body}) async {
     try {
       _logApiCall('PUT', uri, headers: headers);
-      final response = await http.put(uri, headers: headers, body: body).timeout(const Duration(seconds: 30));
+      final response = await http.put(uri, headers: headers, body: body).timeout(const Duration(seconds: 15));
       _logApiResponse('PUT', uri, response);
       return response;
-    } on TimeoutException catch (e) {
-      print('[API TIMEOUT] PUT $uri | $e');
-      rethrow;
     } catch (e) {
+      if (!isLive && uri.host == '127.0.0.1') {
+        try {
+          final wifiUri = uri.replace(host: '192.168.29.163');
+          _logApiCall('PUT (Wi-Fi Fallback)', wifiUri, headers: headers);
+          final res = await http.put(wifiUri, headers: headers, body: body).timeout(const Duration(seconds: 15));
+          _logApiResponse('PUT (Wi-Fi Fallback)', wifiUri, res);
+          return res;
+        } catch (_) {}
+
+        try {
+          final emuUri = uri.replace(host: '10.0.2.2');
+          _logApiCall('PUT (Emulator Fallback)', emuUri, headers: headers);
+          final res = await http.put(emuUri, headers: headers, body: body).timeout(const Duration(seconds: 15));
+          _logApiResponse('PUT (Emulator Fallback)', emuUri, res);
+          return res;
+        } catch (_) {}
+      }
       print('[API ERROR] PUT $uri | $e');
       rethrow;
     }

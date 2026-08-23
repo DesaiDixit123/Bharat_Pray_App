@@ -19,12 +19,12 @@ class MandalRegistrationScreen extends StatefulWidget {
 class _MandalRegistrationScreenState extends State<MandalRegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  final TextEditingController _mandalNameController = TextEditingController(text: "Shree Ganesh Yuva Mandal");
-  final TextEditingController _leaderNameController = TextEditingController(text: "Rohit Sharma");
-  final TextEditingController _mobileController = TextEditingController(text: "+91 98765 43210");
-  final TextEditingController _addressController = TextEditingController(text: "123, Swaminarayan Nagar, Nikol, Ahmedabad");
+  final TextEditingController _mandalNameController = TextEditingController();
+  final TextEditingController _leaderNameController = TextEditingController();
+  final TextEditingController _mobileController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
 
-  String? _selectedCategory = "Ganesh";
+  String? _selectedCategory;
   String? _selectedFestival;
 
   final List<String> _categories = ["Ganesh", "Devi", "Krishna", "Shiv", "Hanuman"];
@@ -125,7 +125,6 @@ class _MandalRegistrationScreenState extends State<MandalRegistrationScreen> {
                       // 1. Mandal Logo Upload Section
                       _buildUploadSection(
                         label: "Mandal Logo",
-                        imageAsset: "assets/images/new_year_card.png",
                         buttonText: "Upload Logo",
                       ),
                       const SizedBox(height: 16),
@@ -133,7 +132,6 @@ class _MandalRegistrationScreenState extends State<MandalRegistrationScreen> {
                       // 2. Cover Image Upload Section
                       _buildUploadSection(
                         label: "Cover Image",
-                        imageAsset: "assets/images/diwali_card.png",
                         buttonText: "Upload Cover",
                       ),
                       const SizedBox(height: 16),
@@ -221,7 +219,6 @@ class _MandalRegistrationScreenState extends State<MandalRegistrationScreen> {
 
   Widget _buildUploadSection({
     required String label,
-    required String imageAsset,
     required String buttonText,
   }) {
     return Column(
@@ -230,25 +227,16 @@ class _MandalRegistrationScreenState extends State<MandalRegistrationScreen> {
         _buildLabel(label),
         Row(
           children: [
-            // Thumbnail container
+            // Thumbnail container — empty placeholder
             Container(
               width: 60,
               height: 60,
               decoration: BoxDecoration(
+                color: const Color(0xFFFFF1E5),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFC8A882), width: 1.0),
+                border: Border.all(color: const Color(0xFFC8A882), width: 1.2),
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(11),
-                child: Image.asset(
-                  imageAsset,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => Container(
-                    color: const Color(0xFFFFF1E5),
-                    child: const Icon(Icons.image_rounded, color: Color(0xFFB56E28)),
-                  ),
-                ),
-              ),
+              child: const Icon(Icons.add_photo_alternate_rounded, color: Color(0xFFC8A882), size: 26),
             ),
             const SizedBox(width: 14),
 

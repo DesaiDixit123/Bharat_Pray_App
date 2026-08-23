@@ -158,7 +158,6 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
       if (mounted) setState(() => _position = p);
     });
 
-    _initAudio();
     _loadTokenAndSaveHistory();
   }
 
@@ -170,7 +169,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
   }
 
   Future<void> _initAudio() async {
-    if (_token.isEmpty || widget.currentTrack.id.isEmpty) return;
+    if (widget.currentTrack.id.isEmpty) return;
     try {
       final streamUrl = await ApiService.fetchBhajanStreamUrl(_token, widget.currentTrack.id);
 
@@ -189,11 +188,10 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('auth_token') ?? '';
 
-    if (_token.isNotEmpty && widget.currentTrack.id.isNotEmpty) {
-      _loadBhajanDetails();
-    }
+    await _initAudio();
 
     if (_token.isNotEmpty && widget.currentTrack.id.isNotEmpty) {
+      _loadBhajanDetails();
       try {
         await ApiService.saveBhajanHistory(_token, widget.currentTrack.id, _position.inSeconds);
       } catch (_) {
@@ -286,8 +284,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
     // The API call can happen in the background without blocking the UI.
     if (_token.isNotEmpty) {
       ApiService.shareBhajan(_token, widget.currentTrack.id).catchError((_) {
-        // Silently fail if the backend share recording fails.
-        // The user's primary action is sharing, which should not be blocked.
+        return <String, dynamic>{};
       });
     }
 
@@ -327,11 +324,11 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
               child: _buildHeader(),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 14),
+              padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
               child: _buildViewToggle(),
             ),
             Expanded(
@@ -422,7 +419,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final coverSize = (width * 0.76).clamp(250.0, 360.0);
+        final coverSize = (width * 0.72).clamp(230.0, 310.0); // Reduced size by 10%
         final horizontalPadding = width < 360 ? 16.0 : 24.0;
         final bottomSafePadding = MediaQuery.of(context).padding.bottom;
 
@@ -439,33 +436,34 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
             physics: const BouncingScrollPhysics(),
             padding: EdgeInsets.fromLTRB(horizontalPadding, 0, horizontalPadding, 30 + bottomSafePadding),
             children: [
-            const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.center,
-              child: RotationTransition(
-              turns: _rotationController,
+            const SizedBox(height: 12),
+            Center(
               child: Container(
                 width: coverSize,
                 height: coverSize,
                 decoration: BoxDecoration(
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: const Color(0xFFF1D9C1),
+                    width: 1.6,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFFF7700).withValues(alpha: 0.09),
-                      blurRadius: 14,
+                      color: const Color(0xFFFF7700).withValues(alpha: 0.10),
+                      blurRadius: 18,
                       offset: const Offset(0, 6),
                     ),
                   ],
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(22),
                   child: _buildTrackImage(
                     widget.currentTrack.imagePath,
-                    fallbackIconSize: 56,
-                    fallbackColor: const Color(0xFFE2BC8B),
+                    fallbackIconSize: 52,
+                    fallbackColor: Colors.white,
                   ),
                 ),
-              ),
               ),
             ),
             const SizedBox(height: 24),
@@ -599,7 +597,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
                 const Icon(Icons.repeat_rounded, size: 30, color: Color(0xFF2E2A36)),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 54), // Moved autoplay toggle further down below the initial fold
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -872,13 +870,17 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
         border: Border.all(color: const Color(0xFFF3E4D6)),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
         leading: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           child: SizedBox(
-            width: 46,
-            height: 46,
-            child: _buildTrackImage(track.imagePath),
+            width: 44,
+            height: 44,
+            child: _buildTrackImage(
+              track.imagePath,
+              fallbackIconSize: 22,
+              fallbackColor: const Color(0xFFFFF1E5),
+            ),
           ),
         ),
         title: Text(
@@ -886,19 +888,21 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: GoogleFonts.outfit(
-            fontSize: 16,
+            fontSize: 15,
             fontWeight: FontWeight.w600,
             color: const Color(0xFF2E2A36),
           ),
         ),
         subtitle: Text(
           track.singer,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: GoogleFonts.outfit(
-            fontSize: 13,
+            fontSize: 12.5,
             color: const Color(0xFF2E2A36).withValues(alpha: 0.56),
           ),
         ),
-        trailing: const Icon(Icons.queue_music_rounded, color: Color(0xFFAF957C)),
+        trailing: const Icon(Icons.queue_music_rounded, color: Color(0xFFAF957C), size: 22),
         onTap: () => _openTrack(track),
       ),
     );
@@ -906,8 +910,8 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
 
   Widget _buildTrackImage(
     String imagePath, {
-    double fallbackIconSize = 24,
-    Color fallbackColor = const Color(0xFFFFF1E5),
+    double fallbackIconSize = 64,
+    Color fallbackColor = Colors.white,
   }) {
     if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
       return Image.network(
@@ -917,7 +921,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
       );
     }
 
-    if (imagePath.startsWith('assets/')) {
+    if (imagePath == 'assets/images/bhagavad_gita.png') {
       return Image.asset(
         imagePath,
         fit: BoxFit.cover,
@@ -932,10 +936,27 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
     return Container(
       color: bgColor,
       alignment: Alignment.center,
-      child: Icon(
-        Icons.music_note_rounded,
-        color: const Color(0xFFB56E28),
-        size: iconSize,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.music_note_rounded,
+            color: const Color(0xFFFF7B0F),
+            size: iconSize,
+          ),
+          if (iconSize > 40) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Bhajan',
+              style: GoogleFonts.outfit(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFFF7B0F),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

@@ -13,56 +13,9 @@ class GranthScreen extends StatefulWidget {
 }
 
 class _GranthScreenState extends State<GranthScreen> {
-  List<Map<String, dynamic>> _categories = [
-    {
-      'title': 'Veda',
-      'count': 4,
-      'image': 'assets/images/bhagavad_gita.png',
-      'description': 'The Vedas are the oldest sacred texts of Sanatan Dharma.',
-    },
-    {
-      'title': 'Puran',
-      'count': 18,
-      'image': 'assets/images/granth_card.png',
-      'description': 'Sacred stories, legends, and timeless divine teachings.',
-    },
-    {
-      'title': 'Itihas',
-      'count': 6,
-      'image': 'assets/images/image_2.png',
-      'description': 'Epic narratives that shape dharma, duty, and devotion.',
-    },
-    {
-      'title': 'Darshan',
-      'count': 8,
-      'image': 'assets/images/image_3.png',
-      'description': 'Philosophical schools exploring truth, self, and reality.',
-    },
-    {
-      'title': 'Stotra',
-      'count': 12,
-      'image': 'assets/images/image_4.png',
-      'description': 'Devotional hymns for prayer, praise, and reflection.',
-    },
-    {
-      'title': 'Aarti',
-      'count': 8,
-      'image': 'assets/images/image_4_1.png',
-      'description': 'Ceremonial songs offered in reverence with light and bhakti.',
-    },
-    {
-      'title': 'Mantra',
-      'count': 15,
-      'image': 'assets/images/krishna.png',
-      'description': 'Sacred chants for focus, healing, strength, and devotion.',
-    },
-    {
-      'title': 'Other Granths',
-      'count': 10,
-      'image': 'assets/images/download_1.png',
-      'description': 'Additional spiritual texts and treasured compilations.',
-    },
-  ];
+  List<Map<String, dynamic>> _categories = [];
+  bool _isLoading = true;
+  String _error = '';
 
   @override
   void initState() {
@@ -71,28 +24,61 @@ class _GranthScreenState extends State<GranthScreen> {
   }
 
   Future<void> _fetchCategories() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _error = '';
+    });
+
     try {
       final remoteCats = await ApiService.getGranthCategories();
-      if (remoteCats.isNotEmpty && mounted) {
-        setState(() {
-          final List<Map<String, dynamic>> merged = [];
-          for (final cat in remoteCats) {
-            final catMap = Map<String, dynamic>.from(cat as Map);
-            final title = catMap['name'] ?? catMap['title'] ?? 'Granth';
-            merged.add({
-              '_id': catMap['_id'] ?? catMap['id'],
-              'title': title,
-              'count': catMap['granthCount'] ?? 10,
-              'image': catMap['image'] ?? 'assets/images/granth_card.png',
-              'description': catMap['description'] ?? 'Explore sacred texts of $title',
-            });
-          }
-          if (merged.isNotEmpty) {
-            _categories = merged;
-          }
+      if (!mounted) return;
+      
+      final List<Map<String, dynamic>> fetched = [];
+      for (final cat in remoteCats) {
+        final catMap = Map<String, dynamic>.from(cat as Map);
+        final title = (catMap['name'] ?? catMap['title'] ?? 'Granth').toString();
+        final catId = (catMap['_id'] ?? catMap['id'] ?? '').toString();
+        final rawImg = (catMap['image'] ?? catMap['coverImage'] ?? '').toString();
+
+        String resolvedImg = 'assets/images/bhagavad_gita.png';
+        if (rawImg.isNotEmpty) {
+          resolvedImg = ApiService.resolveImageUrl(rawImg);
+        } else if (title.toLowerCase().contains('veda') || title.toLowerCase().contains('puran')) {
+          resolvedImg = 'assets/images/bhagavad_gita.png';
+        } else if (title.toLowerCase().contains('itihas')) {
+          resolvedImg = 'assets/images/image_2.png';
+        } else if (title.toLowerCase().contains('darshan')) {
+          resolvedImg = 'assets/images/image_3.png';
+        } else if (title.toLowerCase().contains('stotra')) {
+          resolvedImg = 'assets/images/image_4.png';
+        } else if (title.toLowerCase().contains('aarti')) {
+          resolvedImg = 'assets/images/image_4_1.png';
+        }
+
+        fetched.add({
+          '_id': catId,
+          'title': title,
+          'count': catMap['granthCount'] ?? catMap['count'] ?? 1,
+          'image': resolvedImg,
+          'description': (catMap['description'] ?? '').toString().isNotEmpty
+              ? catMap['description'].toString()
+              : 'Explore sacred texts of $title',
         });
       }
-    } catch (_) {}
+
+      setState(() {
+        _categories = fetched;
+        _isLoading = false;
+        _error = fetched.isEmpty ? 'No granth categories found.' : '';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _error = 'Failed to load granth categories.';
+      });
+    }
   }
 
   @override
@@ -120,42 +106,63 @@ class _GranthScreenState extends State<GranthScreen> {
       ),
       body: SafeArea(
         top: false,
-        child: ListView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-          children: [
-            Text(
-              'Select Granth Category',
-              style: GoogleFonts.outfit(
-                    fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF2E2A36),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Choose a category to explore sacred texts',
-              style: GoogleFonts.outfit(
-                    fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: const Color(0xFF2E2A36).withOpacity(0.58),
-              ),
-            ),
-            const SizedBox(height: 20),
-            ..._categories.map((category) {
-              return _CategoryCard(
-                category: category,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => GranthListByCategoryScreen(category: category),
+        child: RefreshIndicator(
+          onRefresh: _fetchCategories,
+          color: const Color(0xFFFF7700),
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF7700)))
+              : _error.isNotEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(_error, style: GoogleFonts.outfit(fontSize: 16, color: const Color(0xFF2E2A36))),
+                          const SizedBox(height: 12),
+                          ElevatedButton(
+                            onPressed: _fetchCategories,
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF7700)),
+                            child: Text('Retry', style: GoogleFonts.outfit(color: Colors.white)),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView(
+                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                      children: [
+                        Text(
+                          'Select Granth Category',
+                          style: GoogleFonts.outfit(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF2E2A36),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Choose a category to explore sacred texts',
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF2E2A36).withValues(alpha: 0.58),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        ..._categories.map((category) {
+                          return _CategoryCard(
+                            category: category,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => GranthListByCategoryScreen(category: category),
+                                ),
+                              );
+                            },
+                          );
+                        }),
+                      ],
                     ),
-                  );
-                },
-              );
-            }),
-          ],
         ),
       ),
     );
@@ -171,8 +178,39 @@ class _CategoryCard extends StatelessWidget {
   final Map<String, dynamic> category;
   final VoidCallback onTap;
 
+  Widget _buildImage(String imgPath) {
+    if (imgPath.startsWith('http')) {
+      return Image.network(
+        imgPath,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _fallbackImage(),
+      );
+    }
+    return Image.asset(
+      imgPath,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => _fallbackImage(),
+    );
+  }
+
+  Widget _fallbackImage() {
+    return Container(
+      color: const Color(0xFF8F4D18),
+      alignment: Alignment.center,
+      child: const Icon(
+        Icons.menu_book_rounded,
+        color: Colors.white,
+        size: 30,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final title = (category['title'] ?? category['name'] ?? 'Granth').toString();
+    final count = (category['count'] ?? 1).toString();
+    final imgPath = (category['image'] ?? 'assets/images/bhagavad_gita.png').toString();
+
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -180,8 +218,8 @@ class _CategoryCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: const Color(0xFFF3E4D6)),
         boxShadow: [
-          BoxShadow( // Corrected from withValues to withOpacity
-            color: const Color(0xFFFF7700).withOpacity(0.08),
+          BoxShadow(
+            color: const Color(0xFFFF7700).withValues(alpha: 0.08),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -199,21 +237,7 @@ class _CategoryCard extends StatelessWidget {
                 child: SizedBox(
                   height: 78,
                   width: 102,
-                  child: Image.asset(
-                    category['image'] as String,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: const Color(0xFF8F4D18),
-                        alignment: Alignment.center,
-                        child: const Icon(
-                          Icons.menu_book_rounded,
-                          color: Colors.white,
-                          size: 30,
-                        ),
-                      );
-                    },
-                  ),
+                  child: _buildImage(imgPath),
                 ),
               ),
               const SizedBox(width: 16),
@@ -223,7 +247,7 @@ class _CategoryCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      category['title'] as String,
+                      title,
                       style: GoogleFonts.outfit(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
@@ -232,11 +256,11 @@ class _CategoryCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${category['count']} Granths',
+                      '$count Granths',
                       style: GoogleFonts.outfit(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: const Color(0xFF2E2A36).withOpacity(0.42),
+                        color: const Color(0xFF2E2A36).withValues(alpha: 0.42),
                       ),
                     ),
                   ],
@@ -248,7 +272,7 @@ class _CategoryCard extends StatelessWidget {
                 child: const Icon(
                   Icons.arrow_forward_ios_rounded,
                   color: Color(0xFFFF7700),
-                  size: 18,
+                  size: 16,
                 ),
               ),
             ],

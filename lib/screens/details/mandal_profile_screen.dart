@@ -1,271 +1,1180 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:share_plus/share_plus.dart';
+
+import 'create_mandal_post_screen.dart';
+import 'create_mandal_reel_screen.dart';
+import 'go_live_studio_screen.dart';
+
+enum MandalStatus { approved, pending, notRegistered }
+
+Widget buildSmartImage(String? path, {BoxFit fit = BoxFit.cover, double? width, double? height}) {
+  if (path == null || path.isEmpty) {
+    return Container(
+      color: const Color(0xFFFAF6F0),
+      child: const Center(
+        child: Icon(Icons.image_outlined, color: Colors.grey, size: 40),
+      ),
+    );
+  }
+  if (path.startsWith('assets/')) {
+    return Image.asset(path, fit: fit, width: width, height: height);
+  } else {
+    final file = File(path);
+    if (file.existsSync()) {
+      return Image.file(file, fit: fit, width: width, height: height);
+    }
+    return Image.asset('assets/images/ram_bhajan.png', fit: fit, width: width, height: height);
+  }
+}
+
+class PostItem {
+  final String id;
+  final String imageUrl;
+  final String caption;
+  final String festivalName;
+  final String location;
+  final String timeAgo;
+  int likes;
+  bool isLiked;
+  bool isSaved;
+
+  PostItem({
+    required this.id,
+    required this.imageUrl,
+    required this.caption,
+    this.festivalName = "Somnath Maha Shivratri Mahotsav",
+    this.location = "Ahmedabad, Gujarat",
+    required this.timeAgo,
+    required this.likes,
+    this.isLiked = false,
+    this.isSaved = false,
+  });
+}
+
+class ReelItem {
+  final String id;
+  final String thumbnailUrl;
+  final String title;
+  final String audioTrack;
+  final String festivalName;
+  final String views;
+  int likes;
+  bool isLiked;
+  bool isSaved;
+
+  ReelItem({
+    required this.id,
+    required this.thumbnailUrl,
+    required this.title,
+    required this.audioTrack,
+    this.festivalName = "Somnath Maha Shivratri Mahotsav",
+    required this.views,
+    required this.likes,
+    this.isLiked = false,
+    this.isSaved = false,
+  });
+}
+
+class LiveEventItem {
+  final String id;
+  final String title;
+  final String status; // "Upcoming" or "Recorded"
+  final String dateOrTime;
+  final String viewers;
+  final String thumbnailUrl;
+
+  LiveEventItem({
+    required this.id,
+    required this.title,
+    required this.status,
+    required this.dateOrTime,
+    required this.viewers,
+    required this.thumbnailUrl,
+  });
+}
 
 class MandalProfileScreen extends StatefulWidget {
-  final String mandalName;
-  final String location;
-  final String avatarUrl;
-  final String coverUrl;
+  final String? mandalName;
+  final String? location;
+  final String? avatarUrl;
+  final String? coverUrl;
+  final bool isOwnProfile;
 
   const MandalProfileScreen({
     super.key,
-    this.mandalName = "Shree Ganesh Yuva Mandal",
-    this.location = "Ahmedabad, Gujarat",
-    this.avatarUrl = "assets/images/new_year_card.png",
-    this.coverUrl = "assets/images/new_year_card.png",
+    this.mandalName,
+    this.location,
+    this.avatarUrl,
+    this.coverUrl,
+    this.isOwnProfile = false,
   });
 
   @override
   State<MandalProfileScreen> createState() => _MandalProfileScreenState();
 }
 
-class _MandalProfileScreenState extends State<MandalProfileScreen> {
-  // Tabs: Posts, Reels, Live, Images, Videos
-  int _activeTab = 0;
-  final List<String> _tabs = ["Posts", "Reels", "Live", "Images", "Videos"];
+class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTickerProviderStateMixin {
+  int _selectedTab = 0; // 0: Posts, 1: Reels, 2: Live, 3: Info
+  bool _isFollowing = false;
 
-  // SVG back arrow
-  static const String _backArrowSvg =
-      '<svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">'
-      '<path d="M2.87301 8.24994L8.56917 13.9461L7.49996 14.9999L0 7.49996L7.49996 0L8.56917 1.05382L2.87301 6.74998H14.9999V8.24994H2.87301Z" fill="#C8A882"/>'
-      '</svg>';
+  // Sample Mandal Details
+  String _mandalName = "Shree Ram Yuvak Mandal 🚩";
+  String _mandalTag = "Official Spiritual Organisation • Ahmedabad";
+  String _regNumber = "REG/2024/GJT/88492";
+  String _bio = "🛕 Dedicated to Prabhu Shree Ram Bhakti & Seva. 🌸 Morning & Evening Live Aarti, Annakshetra, Yatra & Youth Satsang.";
+
+  // Mock Posts Data
+  final List<PostItem> _posts = [
+    PostItem(
+      id: "1",
+      imageUrl: "assets/images/somnath_hero.png",
+      caption: "🌸 Daily Morning Maha Aarti at Mandal Premises. Har Har Mahadev! 🙏✨",
+      festivalName: "🛕 Somnath Maha Shivratri Mahotsav",
+      location: "Somnath Temple, Gujarat",
+      timeAgo: "2 hours ago",
+      likes: 1240,
+    ),
+    PostItem(
+      id: "2",
+      imageUrl: "assets/images/dhanterash.png",
+      caption: "🛕 Deepotsav & Grand Aarti Celebrations with all Mandal Devotees! 🪔",
+      festivalName: "🪔 Diwali Deepotsav Mahotsav",
+      location: "Ahmedabad, Gujarat",
+      timeAgo: "1 day ago",
+      likes: 2150,
+    ),
+    PostItem(
+      id: "3",
+      imageUrl: "assets/images/krishna.png",
+      caption: "✨ Shri Krishna Janmashtami Mahotsav Bhajan Sandhya highlights. Jai Shri Krishna! 🚩",
+      festivalName: "✨ Shri Krishna Janmashtami Utsav",
+      location: "Dwarka, Gujarat",
+      timeAgo: "3 days ago",
+      likes: 3410,
+    ),
+    PostItem(
+      id: "4",
+      imageUrl: "assets/images/ram_bhajan.png",
+      caption: "🎶 Grand Ram Dhun & Sunderkand Path organised by our Mandal Youth Team! 🙏",
+      festivalName: "🚩 Shree Ram Navami Mahotsav",
+      location: "Surat, Gujarat",
+      timeAgo: "5 days ago",
+      likes: 980,
+    ),
+    PostItem(
+      id: "5",
+      imageUrl: "assets/images/diwali.png",
+      caption: "🪔 Mandal Annakshetra Seva - Distributing Prasadam to 1000+ devotees. 🌸",
+      festivalName: "🪔 Diwali Deepotsav Mahotsav",
+      location: "Rajkot, Gujarat",
+      timeAgo: "1 week ago",
+      likes: 1890,
+    ),
+  ];
+
+  // Mock Reels Data
+  final List<ReelItem> _reels = [
+    ReelItem(
+      id: "r1",
+      thumbnailUrl: "assets/images/ram_bhajan.png",
+      title: "🔥 Ram Siya Ram Divine Aarti Clips",
+      audioTrack: "Ram Siya Ram • Original Mandal Audio",
+      festivalName: "🚩 Shree Ram Navami Mahotsav",
+      views: "45.2k",
+      likes: 5820,
+    ),
+    ReelItem(
+      id: "r2",
+      thumbnailUrl: "assets/images/somnath_hero.png",
+      title: "🛕 Somnath Live Darshan & Damru Dhun",
+      audioTrack: "Shiv Tandav Stotram • Sacred Beats",
+      festivalName: "🛕 Somnath Maha Shivratri Mahotsav",
+      views: "89.1k",
+      likes: 12400,
+    ),
+    ReelItem(
+      id: "r3",
+      thumbnailUrl: "assets/images/krishna.png",
+      title: "🌸 Flute Meditation by Mandal Gurukul",
+      audioTrack: "Krishna Bansuri Dhun • Mandal Studio",
+      festivalName: "✨ Shri Krishna Janmashtami Utsav",
+      views: "28.6k",
+      likes: 3100,
+    ),
+    ReelItem(
+      id: "r4",
+      thumbnailUrl: "assets/images/dhanterash.png",
+      title: "✨ 108 Diya Deepotsav Grand View",
+      audioTrack: "Deepawali Sacred Chants",
+      festivalName: "🪔 Diwali Deepotsav Mahotsav",
+      views: "64.0k",
+      likes: 7200,
+    ),
+  ];
+
+  // Mock Live Events Data
+  final List<LiveEventItem> _liveEvents = [
+    LiveEventItem(
+      id: "l1",
+      title: "🔴 Morning Live Mangala Aarti",
+      status: "Recorded",
+      dateOrTime: "Today • 6:30 AM",
+      viewers: "1,840 Viewers",
+      thumbnailUrl: "assets/images/somnath_hero.png",
+    ),
+    LiveEventItem(
+      id: "l2",
+      title: "🔴 Sunderkand Live Path & Bhajan",
+      status: "Upcoming",
+      dateOrTime: "Today • 7:00 PM",
+      viewers: "520 Devotees Waiting",
+      thumbnailUrl: "assets/images/ram_bhajan.png",
+    ),
+    LiveEventItem(
+      id: "l3",
+      title: "🔴 Maha Shivratri Night Live Jagran",
+      status: "Recorded",
+      dateOrTime: "5 days ago",
+      viewers: "8,920 Viewers",
+      thumbnailUrl: "assets/images/somnath_temple.png",
+    ),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.mandalName != null && widget.mandalName!.isNotEmpty) {
+      _mandalName = widget.mandalName!;
+    }
+    if (widget.location != null && widget.location!.isNotEmpty) {
+      _mandalTag = "Official Spiritual Organisation • ${widget.location!}";
+    }
+  }
+
+  // --- SEPARATE FULL SCREEN NAVIGATION HANDLERS ---
+
+  void _openCreatePostScreen() async {
+    final result = await Navigator.push<PostItem>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CreateMandalPostScreen(mandalName: _mandalName),
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _posts.insert(0, result);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("🎉 Post published to Mandal Profile!"),
+          backgroundColor: Color(0xFFFF7700),
+        ),
+      );
+    }
+  }
+
+  void _openCreateReelScreen() async {
+    final result = await Navigator.push<ReelItem>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CreateMandalReelScreen(mandalName: _mandalName),
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _reels.insert(0, result);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("🎬 Reel published successfully!"),
+          backgroundColor: Color(0xFFFF7700),
+        ),
+      );
+    }
+  }
+
+  void _openGoLiveStudioScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const GoLiveStudioScreen(),
+      ),
+    );
+  }
+
+  // POST DETAIL MODAL (FIXED OVERFLOW BUG & NATIVE SHARE)
+  void _showPostDetailModal(PostItem post) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.85,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundImage: AssetImage(widget.avatarUrl ?? "assets/images/ram_bhajan.png"),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  _mandalName,
+                                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.verified_rounded, color: Color(0xFFFF7700), size: 16),
+                              ],
+                            ),
+                            Text(
+                              post.timeAgo,
+                              style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        if (widget.isOwnProfile)
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+                            onPressed: () {
+                              setState(() => _posts.removeWhere((p) => p.id == post.id));
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Post deleted")),
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // Image
+                  Expanded(
+                    child: Container(
+                      width: double.infinity,
+                      color: Colors.black,
+                      child: buildSmartImage(post.imageUrl, fit: BoxFit.contain),
+                    ),
+                  ),
+                  // Action buttons (ONLY LIKE, SAVE, SHARE NATIVE)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            post.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                            color: post.isLiked ? Colors.red : Colors.black87,
+                            size: 26,
+                          ),
+                          onPressed: () {
+                            setModalState(() {
+                              post.isLiked = !post.isLiked;
+                              post.likes += post.isLiked ? 1 : -1;
+                            });
+                            setState(() {});
+                          },
+                        ),
+                        Text("${post.likes}", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                        const Spacer(),
+                        IconButton(
+                          icon: Icon(
+                            post.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                            color: post.isSaved ? const Color(0xFFFF7700) : Colors.black87,
+                            size: 26,
+                          ),
+                          onPressed: () {
+                            setModalState(() {
+                              post.isSaved = !post.isSaved;
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(post.isSaved ? "Saved to your Library! 🔖" : "Removed from Saved Items"),
+                                duration: const Duration(seconds: 1),
+                              ),
+                            );
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.send_rounded, color: Colors.black87, size: 24),
+                          onPressed: () {
+                            Share.share(
+                              " Check out this post by ${_mandalName} on Bharat Pray!\n\n${post.caption}\n\nDownload App: https://bharatpray.app/post/${post.id}",
+                              subject: "Bharat Pray Mandal Post",
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Caption & Festival Name
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFF7700).withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                post.festivalName,
+                                style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFFFF7700)),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(Icons.location_on_rounded, size: 12, color: Colors.grey.shade600),
+                            const SizedBox(width: 2),
+                            Expanded(
+                              child: Text(
+                                post.location,
+                                style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey.shade600),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          post.caption,
+                          style: GoogleFonts.outfit(fontSize: 13, color: Colors.black87),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showReelPlayerModal(ReelItem reel) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.black,
+      builder: (context) {
+        return _ReelPlayerFullscreen(reel: reel, mandalName: _mandalName, onLikedChanged: () => setState(() {}));
+      },
+    );
+  }
+
+  // --- BUILD METHOD ---
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFFE8D6),
-      body: SafeArea(
-        top: false,
-        child: Column(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF2E2A36)),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Row(
           children: [
-            Expanded(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 1. Cover Banner & Avatar Header (tight spacing)
-                    _buildProfileHeader(context),
-                    const SizedBox(height: 8),
+            Flexible(
+              child: Text(
+                _mandalName,
+                style: GoogleFonts.outfit(
+                  color: const Color(0xFF2E2A36),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.verified_rounded, color: Color(0xFFFF7700), size: 18),
+          ],
+        ),
+        actions: const [],
+      ),
+      body: _buildApprovedInstagramProfileView(),
+    );
+  }
 
-                    // 2. Mandal Details (Name, location, bio)
-                    _buildMandalInfoSection(),
-                    const SizedBox(height: 10),
+  // APPROVED INSTAGRAM STYLE PROFILE VIEW
+  Widget _buildApprovedInstagramProfileView() {
+    final coverImage = (widget.coverUrl != null && widget.coverUrl!.isNotEmpty)
+        ? widget.coverUrl!
+        : "assets/images/somnath_hero.png";
+    final avatarImage = (widget.avatarUrl != null && widget.avatarUrl!.isNotEmpty)
+        ? widget.avatarUrl!
+        : "assets/images/ram_bhajan.png";
 
-                    // 3. Stats & Share Button Row
-                    _buildStatsAndShareRow(),
-                    const SizedBox(height: 6),
-
-                    // 4. Tab Bar (Posts, Reels, Live, Images, Videos)
-                    _buildTabBar(),
-                    const SizedBox(height: 6),
-
-                    // 5. Grid/Feed Content
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                      child: _buildTabContent(),
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      child: Column(
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                height: 130,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  image: DecorationImage(
+                    image: AssetImage(coverImage),
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.black.withOpacity(0.4), Colors.transparent],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
                     ),
-                    const SizedBox(height: 24),
+                  ),
+                ),
+              ),
+
+              Positioned(
+                top: 12,
+                right: 16,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2E7D32),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.verified_user_rounded, color: Colors.white, size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        "Admin Approved",
+                        style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              Positioned(
+                bottom: -40,
+                left: 20,
+                child: Stack(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 3.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFFF7700).withOpacity(0.3),
+                            blurRadius: 10,
+                          ),
+                        ],
+                      ),
+                      child: CircleAvatar(
+                        radius: 42,
+                        backgroundImage: AssetImage(avatarImage),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 4,
+                      right: 4,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.verified_rounded, color: Color(0xFFFF7700), size: 20),
+                      ),
+                    ),
                   ],
                 ),
               ),
+            ],
+          ),
+
+          const SizedBox(height: 48),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _mandalName,
+                          style: GoogleFonts.outfit(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF2E2A36),
+                          ),
+                        ),
+                        Text(
+                          _mandalTag,
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: const Color(0xFF2E2A36).withOpacity(0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                Text(
+                  _bio,
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    color: const Color(0xFF2E2A36).withOpacity(0.9),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.badge_rounded, size: 14, color: Color(0xFFFF7700)),
+                    const SizedBox(width: 4),
+                    Text(
+                      "Govt Reg: $_regNumber",
+                      style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFFFF7700)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // STATS ROW (STRICTLY NO DEVOTEES)
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: const Color(0xFFEFE6DB)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildProfileStatColumn("${_posts.length}", "Posts"),
+                      Container(height: 24, width: 1, color: Colors.grey.shade300),
+                      _buildProfileStatColumn("${_reels.length}", "Reels"),
+                      Container(height: 24, width: 1, color: Colors.grey.shade300),
+                      _buildProfileStatColumn("${_liveEvents.length}", "Lives"),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 18),
+
+                // DYNAMIC ACTION BUTTONS (OWNER VS PUBLIC VISITOR)
+                if (widget.isOwnProfile)
+                  // OWNER MANDAL VIEW: Add Post, Add Reel, Go Live
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF7700),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            elevation: 2,
+                          ),
+                          icon: const Icon(Icons.add_photo_alternate_rounded, size: 18),
+                          label: Text(
+                            "Add Post",
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          onPressed: _openCreatePostScreen,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: const Color(0xFF2E2A36),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            side: const BorderSide(color: Color(0xFFFF7700), width: 1.5),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            elevation: 0,
+                          ),
+                          icon: const Icon(Icons.video_call_rounded, color: Color(0xFFFF7700), size: 20),
+                          label: Text(
+                            "Add Reel",
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          onPressed: _openCreateReelScreen,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFD32F2F),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            elevation: 2,
+                          ),
+                          icon: const Icon(Icons.sensors_rounded, size: 18),
+                          label: Text(
+                            "Go Live",
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          onPressed: _openGoLiveStudioScreen,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  // PUBLIC VISITOR VIEW (From Utsav / Top Mandals): Follow Mandal & Share
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _isFollowing ? Colors.grey.shade200 : const Color(0xFFFF7700),
+                            foregroundColor: _isFollowing ? const Color(0xFF2E2A36) : Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            elevation: _isFollowing ? 0 : 2,
+                          ),
+                          icon: Icon(
+                            _isFollowing ? Icons.check_circle_rounded : Icons.favorite_rounded,
+                            size: 18,
+                            color: _isFollowing ? const Color(0xFF2E7D32) : Colors.white,
+                          ),
+                          label: Text(
+                            _isFollowing ? "Following Mandal 🙏" : "Follow Mandal",
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isFollowing = !_isFollowing;
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(_isFollowing ? "You are now following ${_mandalName}! 🚩" : "Unfollowed Mandal"),
+                                duration: const Duration(seconds: 1),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 1,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: const Color(0xFF2E2A36),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            side: const BorderSide(color: Color(0xFFFF7700), width: 1.5),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            elevation: 0,
+                          ),
+                          icon: const Icon(Icons.share_rounded, color: Color(0xFFFF7700), size: 18),
+                          label: Text(
+                            "Share",
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          onPressed: () {
+                            Share.share(
+                              "🚩 Join ${_mandalName} on Bharat Pray App!\nWatch Live Aarti & Daily Darshan.\n\nExplore Mandal: https://bharatpray.app/mandal",
+                              subject: "Share Mandal Profile",
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
             ),
-          ],
-        ),
+          ),
+
+          const SizedBox(height: 24),
+
+          Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(
+                top: BorderSide(color: Color(0xFFEFE6DB)),
+                bottom: BorderSide(color: Color(0xFFEFE6DB)),
+              ),
+            ),
+            child: Row(
+              children: [
+                _buildTabItem(0, Icons.grid_on_rounded, "Posts (${_posts.length})"),
+                _buildTabItem(1, Icons.video_collection_rounded, "Reels (${_reels.length})"),
+                _buildTabItem(2, Icons.live_tv_rounded, "Live"),
+                _buildTabItem(3, Icons.info_outline_rounded, "Mandal Info"),
+              ],
+            ),
+          ),
+
+          IndexedStack(
+            index: _selectedTab,
+            children: [
+              _buildPostsGridTab(),
+              _buildReelsGridTab(),
+              _buildLiveEventsTab(),
+              _buildMandalInfoTab(),
+            ],
+          ),
+
+          const SizedBox(height: 40),
+        ],
       ),
     );
   }
 
-  // ─── Component Helpers ─────────────────────────────────────────────────────
-
-  Widget _buildProfileHeader(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        // Cover Image banner
-        Container(
-          height: 240,
-          width: double.infinity,
-          decoration: BoxDecoration(
-            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
+  // TAB 1: POSTS
+  Widget _buildPostsGridTab() {
+    if (_posts.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(40.0),
+        child: Center(
+          child: Column(
+            children: [
+              const Icon(Icons.photo_library_outlined, size: 48, color: Colors.grey),
+              const SizedBox(height: 12),
+              Text("No Posts Yet", style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text(
+                widget.isOwnProfile
+                    ? "Tap 'Add Post' to share your first Mandal update!"
+                    : "No posts shared by this Mandal yet.",
+                style: GoogleFonts.outfit(color: Colors.grey, fontSize: 12),
               ),
             ],
           ),
-          child: ClipRRect(
-            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
-            child: Image.asset(
-              widget.coverUrl,
-              fit: BoxFit.cover,
-            ),
-          ),
         ),
-
-        // Back arrow (size matches standard 40x40 circle back button)
-        Positioned(
-          top: 48,
-          left: 20,
-          child: GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFFC8A882), width: 1.0),
-              ),
-              child: Center(
-                child: SvgPicture.string(
-                  _backArrowSvg,
-                  width: 15,
-                  height: 15,
+      );
+    }
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _posts.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 2,
+        mainAxisSpacing: 2,
+        childAspectRatio: 1.0,
+      ),
+      itemBuilder: (context, index) {
+        final post = _posts[index];
+        return GestureDetector(
+          onTap: () => _showPostDetailModal(post),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              buildSmartImage(post.imageUrl, fit: BoxFit.cover),
+              Positioned(
+                bottom: 4,
+                right: 4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.favorite_rounded, color: Colors.white, size: 10),
+                      const SizedBox(width: 2),
+                      Text(
+                        "${post.likes}",
+                        style: GoogleFonts.outfit(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
-        ),
-
-        // Overlapping Profile Avatar (reduced height overlap spacing)
-        Positioned(
-          bottom: -32,
-          left: 20,
-          child: Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: const Color(0xFFFFE8D6),
-              border: Border.all(color: const Color(0xFFFFE8D6), width: 3.5),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: Image.asset(
-                widget.avatarUrl,
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 
-  Widget _buildMandalInfoSection() {
+  // TAB 2: REELS
+  Widget _buildReelsGridTab() {
+    if (_reels.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(40.0),
+        child: Center(
+          child: Column(
+            children: [
+              const Icon(Icons.video_library_outlined, size: 48, color: Colors.grey),
+              const SizedBox(height: 12),
+              Text("No Reels Yet", style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text(
+                widget.isOwnProfile
+                    ? "Tap 'Add Reel' to upload divine video clips!"
+                    : "No reels uploaded by this Mandal yet.",
+                style: GoogleFonts.outfit(color: Colors.grey, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _reels.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 2,
+        mainAxisSpacing: 2,
+        childAspectRatio: 0.7,
+      ),
+      itemBuilder: (context, index) {
+        final reel = _reels[index];
+        return GestureDetector(
+          onTap: () => _showReelPlayerModal(reel),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              buildSmartImage(reel.thumbnailUrl, fit: BoxFit.cover),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.black.withOpacity(0.6), Colors.transparent, Colors.black.withOpacity(0.7)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                ),
+              ),
+              const Center(
+                child: Icon(Icons.play_circle_fill_rounded, color: Colors.white70, size: 36),
+              ),
+              Positioned(
+                bottom: 6,
+                left: 6,
+                child: Row(
+                  children: [
+                    const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 14),
+                    const SizedBox(width: 2),
+                    Text(
+                      reel.views,
+                      style: GoogleFonts.outfit(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // TAB 3: LIVE EVENTS
+  Widget _buildLiveEventsTab() {
     return Padding(
-      padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 36),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Name + Verified Badge
-          Row(
-            children: [
-              Text(
-                widget.mandalName,
-                style: GoogleFonts.outfit(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF2E2A36),
+          if (widget.isOwnProfile)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFD32F2F), Color(0xFFFF5252)],
                 ),
+                borderRadius: BorderRadius.circular(20),
               ),
-              const SizedBox(width: 5),
-              const Icon(
-                Icons.verified_rounded,
-                color: Color(0xFFFF7700),
-                size: 18,
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-
-          // Location
-          Row(
-            children: [
-              const Icon(
-                Icons.location_on_rounded,
-                color: Color(0xFFC8A882),
-                size: 13,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                widget.location,
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  color: const Color(0xFF2E2A36).withValues(alpha: 0.55),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // Bio description
-          Text(
-            "We are here to spread devotion and celebrate festivals with enthusiasm. Join us in worship and celebrations.",
-            style: GoogleFonts.outfit(
-              fontSize: 12.5,
-              color: const Color(0xFF2E2A36).withValues(alpha: 0.8),
-              height: 1.35,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatsAndShareRow() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0),
-      child: Row(
-        children: [
-          _buildStatColumn("125", "Posts"),
-          const SizedBox(width: 24),
-          _buildStatColumn("12", "Live"),
-          const Spacer(),
-
-          // Share Mandal Button (orange button container)
-          SizedBox(
-            height: 38,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF7700),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-              ),
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      "Mandal link copied to clipboard!",
-                      style: GoogleFonts.outfit(color: Colors.white),
+              child: Row(
+                children: [
+                  const Icon(Icons.sensors_rounded, color: Colors.white, size: 32),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Broadcast Live Stream Now",
+                          style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        Text(
+                          "Go Live for Aarti, Satsang & Special Events",
+                          style: GoogleFonts.outfit(color: Colors.white.withOpacity(0.9), fontSize: 11),
+                        ),
+                      ],
                     ),
-                    backgroundColor: const Color(0xFF2E2A36),
                   ),
-                );
-              },
-              icon: const Icon(Icons.share_rounded, size: 15),
-              label: Text(
-                'Share',
-                style: GoogleFonts.outfit(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.bold,
-                ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFFD32F2F),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: _openGoLiveStudioScreen,
+                    child: Text("Go LIVE", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                  ),
+                ],
               ),
+            ),
+          if (widget.isOwnProfile) const SizedBox(height: 20),
+
+          Text(
+            "Live Stream Broadcasts & History",
+            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
+          ),
+          const SizedBox(height: 12),
+
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _liveEvents.length,
+            itemBuilder: (context, index) {
+              final live = _liveEvents[index];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFEFE6DB)),
+                ),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: buildSmartImage(live.thumbnailUrl, width: 60, height: 60, fit: BoxFit.cover),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: live.status == "Upcoming" ? Colors.orange : Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  live.status,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: live.status == "Upcoming" ? Colors.white : Colors.black87,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(live.dateOrTime, style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey)),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            live.title,
+                            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
+                          ),
+                          Text(
+                            live.viewers,
+                            style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFFFF7700), fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // TAB 4: MANDAL INFO
+  Widget _buildMandalInfoTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFEFE6DB)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.verified_user_rounded, color: Color(0xFF2E7D32), size: 24),
+                    const SizedBox(width: 8),
+                    Text(
+                      "Official Registration Certificate",
+                      style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _buildInfoRow("Registration Number:", _regNumber),
+                _buildInfoRow("Status:", "Approved by Bharat Pray Admin ✅"),
+                _buildInfoRow("Approved Date:", "12 January 2024"),
+                _buildInfoRow("Mandal President:", "Ayush Kyada"),
+                _buildInfoRow("Official Phone:", "+91 81287 53230"),
+                _buildInfoRow("Location:", "Ahmedabad, Gujarat"),
+              ],
             ),
           ),
         ],
@@ -273,321 +1182,397 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> {
     );
   }
 
-  Widget _buildStatColumn(String count, String label) {
+  Widget _buildProfileStatColumn(String count, String label) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           count,
-          style: GoogleFonts.outfit(
-            fontSize: 17,
-            fontWeight: FontWeight.bold,
-            color: const Color(0xFF2E2A36),
-          ),
+          style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
         ),
         Text(
           label,
-          style: GoogleFonts.outfit(
-            fontSize: 11.5,
-            color: const Color(0xFF2E2A36).withValues(alpha: 0.55),
-          ),
+          style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey),
         ),
       ],
     );
   }
 
-  Widget _buildTabBar() {
-    return SizedBox(
-      height: 40,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-        itemCount: _tabs.length,
-        itemBuilder: (context, i) {
-          final active = _activeTab == i;
-          return GestureDetector(
-            onTap: () => setState(() => _activeTab = i),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              margin: const EdgeInsets.symmetric(horizontal: 4.0),
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              decoration: BoxDecoration(
-                color: active ? const Color(0xFFFF7700) : const Color(0xFFFFEAD8),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: active
-                    ? [
-                        BoxShadow(
-                          color: const Color(0xFFFF7700).withValues(alpha: 0.25),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ]
-                    : null,
+  Widget _buildTabItem(int index, IconData icon, String label) {
+    final isSelected = _selectedTab == index;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _selectedTab = index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: isSelected ? const Color(0xFFFF7700) : Colors.transparent,
+                width: 2.5,
               ),
-              child: Center(
-                child: Text(
-                  _tabs[i],
-                  style: GoogleFonts.outfit(
-                    color: active ? Colors.white : const Color(0xFF8E5A2A),
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                color: isSelected ? const Color(0xFFFF7700) : Colors.grey,
+                size: 22,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? const Color(0xFFFF7700) : Colors.grey,
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String val) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(label, style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey)),
+          ),
+          Expanded(
+            child: Text(val, style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36))),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// FULLSCREEN REEL PLAYER (WITH NATIVE OS SHARE SHEET)
+class _ReelPlayerFullscreen extends StatefulWidget {
+  final ReelItem reel;
+  final String mandalName;
+  final VoidCallback onLikedChanged;
+
+  const _ReelPlayerFullscreen({
+    required this.reel,
+    required this.mandalName,
+    required this.onLikedChanged,
+  });
+
+  @override
+  State<_ReelPlayerFullscreen> createState() => _ReelPlayerFullscreenState();
+}
+
+class _ReelPlayerFullscreenState extends State<_ReelPlayerFullscreen> {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          buildSmartImage(widget.reel.thumbnailUrl, fit: BoxFit.cover),
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.transparent, Colors.black.withOpacity(0.8)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
+
+          const Center(
+            child: Icon(Icons.play_circle_fill_rounded, color: Colors.white54, size: 72),
+          ),
+
+          Positioned(
+            top: 40,
+            left: 16,
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+
+          // RIGHT SIDE ACTIONS (LIKE, SAVE, SHARE NATIVE)
+          Positioned(
+            right: 16,
+            bottom: 60,
+            child: Column(
+              children: [
+                IconButton(
+                  icon: Icon(
+                    widget.reel.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                    color: widget.reel.isLiked ? Colors.red : Colors.white,
+                    size: 32,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      widget.reel.isLiked = !widget.reel.isLiked;
+                      widget.reel.likes += widget.reel.isLiked ? 1 : -1;
+                    });
+                    widget.onLikedChanged();
+                  },
+                ),
+                Text(
+                  "${widget.reel.likes}",
+                  style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                const SizedBox(height: 16),
+                IconButton(
+                  icon: Icon(
+                    widget.reel.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                    color: widget.reel.isSaved ? const Color(0xFFFF7700) : Colors.white,
+                    size: 30,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      widget.reel.isSaved = !widget.reel.isSaved;
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(widget.reel.isSaved ? "Reel saved to Library! 🔖" : "Reel removed from Saved Items"),
+                        duration: const Duration(seconds: 1),
+                      ),
+                    );
+                  },
+                ),
+                Text(
+                  "Save",
+                  style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                ),
+                const SizedBox(height: 16),
+                IconButton(
+                  icon: const Icon(Icons.send_rounded, color: Colors.white, size: 30),
+                  onPressed: () {
+                    Share.share(
+                      " Check out this Divine Reel by ${widget.mandalName} on Bharat Pray!\n\n${widget.reel.title}\n\nDownload App: https://bharatpray.app/reel/${widget.reel.id}",
+                      subject: "Bharat Pray Mandal Reel",
+                    );
+                  },
+                ),
+                Text(
+                  "Share",
+                  style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+
+          Positioned(
+            bottom: 30,
+            left: 20,
+            right: 90,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const CircleAvatar(
+                      radius: 16,
+                      backgroundImage: AssetImage("assets/images/ram_bhajan.png"),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      widget.mandalName,
+                      style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.verified_rounded, color: Color(0xFFFF7700), size: 16),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  widget.reel.title,
+                  style: GoogleFonts.outfit(color: Colors.white, fontSize: 13),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.music_note_rounded, color: Colors.white70, size: 14),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        widget.reel.audioTrack,
+                        style: GoogleFonts.outfit(color: Colors.white70, fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- MANDAL POSTS FEED SCREEN ---
+class MandalPostsFeedScreen extends StatefulWidget {
+  final int startIndex;
+  final String mandalName;
+  final String avatarUrl;
+
+  const MandalPostsFeedScreen({
+    super.key,
+    this.startIndex = 0,
+    this.mandalName = "Shree Ram Yuvak Mandal",
+    this.avatarUrl = "assets/images/ram_bhajan.png",
+  });
+
+  @override
+  State<MandalPostsFeedScreen> createState() => _MandalPostsFeedScreenState();
+}
+
+class _MandalPostsFeedScreenState extends State<MandalPostsFeedScreen> {
+  late List<PostItem> _feedPosts;
+
+  @override
+  void initState() {
+    super.initState();
+    _feedPosts = [
+      PostItem(
+        id: "1",
+        imageUrl: "assets/images/somnath_hero.png",
+        caption: "🌸 Daily Morning Maha Aarti at Mandal Premises. Har Har Mahadev! 🙏✨",
+        timeAgo: "2 hours ago",
+        likes: 1240,
+      ),
+      PostItem(
+        id: "2",
+        imageUrl: "assets/images/dhanterash.png",
+        caption: "🛕 Deepotsav & Grand Aarti Celebrations with all Mandal Devotees! 🪔",
+        timeAgo: "1 day ago",
+        likes: 2150,
+      ),
+      PostItem(
+        id: "3",
+        imageUrl: "assets/images/krishna.png",
+        caption: "✨ Shri Krishna Janmashtami Mahotsav Bhajan Sandhya highlights. Jai Shri Krishna! 🚩",
+        timeAgo: "3 days ago",
+        likes: 3410,
+      ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFFFE8D6),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF2E2A36)),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          widget.mandalName,
+          style: GoogleFonts.outfit(color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _feedPosts.length,
+        itemBuilder: (context, index) {
+          final post = _feedPosts[index];
+          return Container(
+            margin: const EdgeInsets.only(bottom: 20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFEFE6DB)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundImage: AssetImage(widget.avatarUrl),
+                  ),
+                  title: Row(
+                    children: [
+                      Text(widget.mandalName, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14)),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.verified_rounded, color: Color(0xFFFF7700), size: 16),
+                    ],
+                  ),
+                  subtitle: Text(post.timeAgo, style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey)),
+                ),
+                ClipRRect(
+                  child: buildSmartImage(post.imageUrl, width: double.infinity, height: 260, fit: BoxFit.cover),
+                ),
+                // NO COMMENTS - ONLY LIKE, SAVE, SHARE NATIVE
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          post.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                          color: post.isLiked ? Colors.red : Colors.black87,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            post.isLiked = !post.isLiked;
+                            post.likes += post.isLiked ? 1 : -1;
+                          });
+                        },
+                      ),
+                      Text("${post.likes}", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                      const Spacer(),
+                      IconButton(
+                        icon: Icon(
+                          post.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                          color: post.isSaved ? const Color(0xFFFF7700) : Colors.black87,
+                        ),
+                        onPressed: () {
+                          setState(() => post.isSaved = !post.isSaved);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(post.isSaved ? "Saved to Library! 🔖" : "Removed from Saved Items"),
+                              duration: const Duration(seconds: 1),
+                            ),
+                          );
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.send_rounded, color: Colors.black87),
+                        onPressed: () {
+                          Share.share(
+                            " Check out this post by ${widget.mandalName} on Bharat Pray!\n\n${post.caption}\n\nDownload App: https://bharatpray.app/post/${post.id}",
+                            subject: "Bharat Pray Post",
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: Text(post.caption, style: GoogleFonts.outfit(fontSize: 13)),
+                ),
+                const SizedBox(height: 12),
+              ],
             ),
           );
         },
       ),
     );
   }
-
-  Widget _buildTabContent() {
-    switch (_activeTab) {
-      case 1: // Reels
-        return _buildReelsGrid();
-      case 2: // Live
-        return _buildLiveContent();
-      case 3: // Images
-        return _buildImagesGrid();
-      case 4: // Videos
-        return _buildVideosGrid();
-      case 0: // Posts Grid (like Instagram)
-      default:
-        return _buildPostsGrid();
-    }
-  }
-
-  // ─── Tab Content Views ─────────────────────────────────────────────────────
-
-  Widget _buildPostsGrid() {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 6,
-        mainAxisSpacing: 6,
-        childAspectRatio: 1.0,
-      ),
-      itemCount: 2,
-      itemBuilder: (context, i) {
-        final imageAsset = i == 0 ? "assets/images/new_year_card.png" : "assets/images/diwali_card.png";
-        return GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => MandalPostsFeedScreen(
-                  startIndex: i,
-                  mandalName: widget.mandalName,
-                  avatarUrl: widget.avatarUrl,
-                ),
-              ),
-            );
-          },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Image.asset(
-              imageAsset,
-              fit: BoxFit.cover,
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildReelsGrid() {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 6,
-        mainAxisSpacing: 6,
-        childAspectRatio: 0.7,
-      ),
-      itemCount: 6,
-      itemBuilder: (context, i) {
-        return GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => FullscreenReelViewer(
-                  startIndex: i,
-                  mandalName: widget.mandalName,
-                  avatarUrl: widget.avatarUrl,
-                ),
-              ),
-            );
-          },
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFF3E4D6)),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(9),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.asset(
-                    'assets/images/new_year_card.png',
-                    fit: BoxFit.cover,
-                  ),
-                  Positioned(
-                    bottom: 6,
-                    left: 6,
-                    child: Row(
-                      children: [
-                        const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 14),
-                        Text(
-                          "1.2K",
-                          style: GoogleFonts.outfit(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildLiveContent() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFF3E4D6)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.sensors_rounded, color: Colors.red, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                "Mandal Live Broadcasts",
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF2E2A36),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            "There are no active live broadcasts at this time. Live streams will start during the festival dates.",
-            style: GoogleFonts.outfit(
-              fontSize: 12,
-              color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
-              height: 1.35,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildImagesGrid() {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 6,
-        mainAxisSpacing: 6,
-        childAspectRatio: 1.0,
-      ),
-      itemCount: 9,
-      itemBuilder: (context, i) {
-        return GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => MandalImagesFeedScreen(
-                  startIndex: i,
-                  mandalName: widget.mandalName,
-                ),
-              ),
-            );
-          },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Image.asset(
-              'assets/images/diwali_card.png',
-              fit: BoxFit.cover,
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildVideosGrid() {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 6,
-        mainAxisSpacing: 6,
-        childAspectRatio: 1.0,
-      ),
-      itemCount: 3,
-      itemBuilder: (context, i) {
-        return GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => MandalVideosFeedScreen(
-                  startIndex: i,
-                  mandalName: widget.mandalName,
-                ),
-              ),
-            );
-          },
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFF3E4D6)),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(9),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.asset(
-                    'assets/images/new_year_card.png',
-                    fit: BoxFit.cover,
-                  ),
-                  const Center(
-                    child: Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 24),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
 }
 
-// ─── Fullscreen Reel Viewer ──────────────────────────────────────────────────
-
+// --- FULLSCREEN REEL VIEWER (WITH NATIVE OS SHARE SHEET) ---
 class FullscreenReelViewer extends StatefulWidget {
   final int startIndex;
   final String mandalName;
@@ -595,9 +1580,9 @@ class FullscreenReelViewer extends StatefulWidget {
 
   const FullscreenReelViewer({
     super.key,
-    required this.startIndex,
-    required this.mandalName,
-    required this.avatarUrl,
+    this.startIndex = 0,
+    this.mandalName = "Shree Ram Yuvak Mandal",
+    this.avatarUrl = "assets/images/ram_bhajan.png",
   });
 
   @override
@@ -605,12 +1590,43 @@ class FullscreenReelViewer extends StatefulWidget {
 }
 
 class _FullscreenReelViewerState extends State<FullscreenReelViewer> {
-  late final PageController _pageController;
+  late PageController _pageController;
+
+  final List<ReelItem> _allReels = [
+    ReelItem(
+      id: "r1",
+      thumbnailUrl: "assets/images/ram_bhajan.png",
+      title: "🔥 Ram Siya Ram Divine Aarti Clips",
+      audioTrack: "Ram Siya Ram • Original Mandal Audio",
+      views: "45.2k",
+      likes: 5820,
+    ),
+    ReelItem(
+      id: "r2",
+      thumbnailUrl: "assets/images/somnath_hero.png",
+      title: "🛕 Somnath Live Darshan & Damru Dhun",
+      audioTrack: "Shiv Tandav Stotram • Sacred Beats",
+      views: "89.1k",
+      likes: 12400,
+    ),
+    ReelItem(
+      id: "r3",
+      thumbnailUrl: "assets/images/krishna.png",
+      title: "🌸 Flute Meditation by Mandal Gurukul",
+      audioTrack: "Krishna Bansuri Dhun • Mandal Studio",
+      views: "28.6k",
+      likes: 3100,
+    ),
+  ];
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: widget.startIndex);
+    int initialPage = widget.startIndex;
+    if (initialPage < 0 || initialPage >= _allReels.length) {
+      initialPage = 0;
+    }
+    _pageController = PageController(initialPage: initialPage);
   }
 
   @override
@@ -626,100 +1642,115 @@ class _FullscreenReelViewerState extends State<FullscreenReelViewer> {
       body: PageView.builder(
         controller: _pageController,
         scrollDirection: Axis.vertical,
-        itemCount: 6,
+        itemCount: _allReels.length,
         itemBuilder: (context, index) {
+          final reel = _allReels[index];
           return Stack(
             fit: StackFit.expand,
             children: [
-              // Reel background (different image per index for a visual scroll indication)
-              Image.asset(
-                [
-                  'assets/images/new_year_card.png',
-                  'assets/images/diwali_card.png',
-                  'assets/images/dhanteras_card.png',
-                  'assets/images/bhaiduj_card.png',
-                  'assets/images/new_year_card.png',
-                  'assets/images/diwali_card.png',
-                ][index % 6],
-                fit: BoxFit.cover,
-              ),
-
-              // Overlay
-              Container(color: Colors.black.withValues(alpha: 0.3)),
-
-              // Top Header
-              Positioned(
-                top: 50,
-                left: 20,
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: const BoxDecoration(
-                          color: Colors.black26,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Center(
-                          child: Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 16),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Text(
-                      "Reels",
-                      style: GoogleFonts.outfit(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                      ),
-                    ),
-                  ],
+              buildSmartImage(reel.thumbnailUrl, fit: BoxFit.cover),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.transparent, Colors.black.withOpacity(0.8)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
                 ),
               ),
-
-              // Interaction options (Like, Share, Save)
+              const Center(
+                child: Icon(Icons.play_circle_fill_rounded, color: Colors.white54, size: 72),
+              ),
               Positioned(
-                bottom: 60,
+                top: 40,
+                left: 16,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+              // NO COMMENTS - ONLY LIKE, SAVE, SHARE NATIVE
+              Positioned(
                 right: 16,
+                bottom: 60,
                 child: Column(
                   children: [
-                    _buildReelInteraction(Icons.favorite_rounded, "1.2K"),
-                    const SizedBox(height: 20),
-                    _buildReelInteraction(Icons.share_rounded, "120"),
-                    const SizedBox(height: 20),
-                    _buildReelInteraction(Icons.bookmark_border_rounded, "Save"),
+                    IconButton(
+                      icon: Icon(
+                        reel.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                        color: reel.isLiked ? Colors.red : Colors.white,
+                        size: 32,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          reel.isLiked = !reel.isLiked;
+                          reel.likes += reel.isLiked ? 1 : -1;
+                        });
+                      },
+                    ),
+                    Text("${reel.likes}", style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                    const SizedBox(height: 16),
+                    IconButton(
+                      icon: Icon(
+                        reel.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                        color: reel.isSaved ? const Color(0xFFFF7700) : Colors.white,
+                        size: 30,
+                      ),
+                      onPressed: () {
+                        setState(() => reel.isSaved = !reel.isSaved);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(reel.isSaved ? "Saved to Library! 🔖" : "Removed from Saved Items"),
+                            duration: const Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                    ),
+                    Text("Save", style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                    const SizedBox(height: 16),
+                    IconButton(
+                      icon: const Icon(Icons.send_rounded, color: Colors.white, size: 30),
+                      onPressed: () {
+                        Share.share(
+                          " Check out this Divine Reel by ${widget.mandalName} on Bharat Pray!\n\n${reel.title}\n\nDownload App: https://bharatpray.app/reel/${reel.id}",
+                          subject: "Bharat Pray Reel",
+                        );
+                      },
+                    ),
+                    Text("Share", style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
                   ],
                 ),
               ),
-
-              // Info caption
               Positioned(
-                bottom: 40,
+                bottom: 30,
                 left: 20,
-                right: 80,
+                right: 90,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(15),
-                          child: Image.asset(widget.avatarUrl, width: 30, height: 30, fit: BoxFit.cover),
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundImage: AssetImage(widget.avatarUrl),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          widget.mandalName,
-                          style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                        ),
+                        Text(widget.mandalName, style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.verified_rounded, color: Color(0xFFFF7700), size: 16),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      "Bappa Aagman 2026 🙏 Reel #$index #BappaMorya",
-                      style: GoogleFonts.outfit(color: Colors.white.withValues(alpha: 0.9), fontSize: 13),
+                    Text(reel.title, style: GoogleFonts.outfit(color: Colors.white, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.music_note_rounded, color: Colors.white70, size: 14),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(reel.audioTrack, style: GoogleFonts.outfit(color: Colors.white70, fontSize: 12), overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -727,408 +1758,6 @@ class _FullscreenReelViewerState extends State<FullscreenReelViewer> {
             ],
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildReelInteraction(IconData icon, String count) {
-    return Column(
-      children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: const BoxDecoration(
-            color: Colors.black26,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: Colors.white, size: 24),
-        ),
-        if (count.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(
-            count,
-            style: GoogleFonts.outfit(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-// ─── Mandal Posts Scrollable Feed Screen (Instagram-like) ───────────────────
-
-class MandalPostsFeedScreen extends StatefulWidget {
-  final int startIndex;
-  final String mandalName;
-  final String avatarUrl;
-
-  const MandalPostsFeedScreen({
-    super.key,
-    required this.startIndex,
-    required this.mandalName,
-    required this.avatarUrl,
-  });
-
-  @override
-  State<MandalPostsFeedScreen> createState() => _MandalPostsFeedScreenState();
-}
-
-class _MandalPostsFeedScreenState extends State<MandalPostsFeedScreen> {
-  late final ScrollController _scrollController;
-
-  final List<Map<String, dynamic>> _posts = [
-    {
-      'time': '2h ago',
-      'content': 'Bappa is here! 🙏\nJoin us in the celebration.\n#GaneshChaturthi2026 #BappaMorya',
-      'image': 'assets/images/new_year_card.png',
-      'likes': 128,
-      'shares': 56,
-      'isLiked': false,
-    },
-    {
-      'time': '1 day ago',
-      'content': 'Decoration in progress ✨ Stay tuned for updates!',
-      'image': 'assets/images/diwali_card.png',
-      'likes': 94,
-      'shares': 38,
-      'isLiked': false,
-    }
-  ];
-
-  // SVG back arrow
-  static const String _backArrowSvg =
-      '<svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">'
-      '<path d="M2.87301 8.24994L8.56917 13.9461L7.49996 14.9999L0 7.49996L7.49996 0L8.56917 1.05382L2.87301 6.74998H14.9999V8.24994H2.87301Z" fill="#C8A882"/>'
-      '</svg>';
-
-  @override
-  void initState() {
-    super.initState();
-    _scrollController = ScrollController();
-    // Scroll to clicked index after build
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (widget.startIndex > 0 && widget.startIndex < _posts.length) {
-        // Approximate height per post card is around 380-420 pixels
-        _scrollController.animateTo(
-          widget.startIndex * 410.0,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFE8D6),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: Center(
-          child: GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFFC8A882), width: 1.0),
-              ),
-              child: Center(
-                child: SvgPicture.string(
-                  _backArrowSvg,
-                  width: 15,
-                  height: 15,
-                ),
-              ),
-            ),
-          ),
-        ),
-        title: Text(
-          'Posts',
-          style: GoogleFonts.outfit(
-            color: const Color(0xFF2E2A36),
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
-        ),
-        centerTitle: true,
-      ),
-      body: ListView.builder(
-        controller: _scrollController,
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
-        itemCount: _posts.length,
-        itemBuilder: (context, i) {
-          final post = _posts[i];
-          final liked = post['isLiked'] as bool;
-          final likesCount = post['likes'] as int;
-
-          return Container(
-            margin: const EdgeInsets.only(bottom: 18),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFF3E4D6)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.02),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top user info
-                Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Row(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: Image.asset(widget.avatarUrl, width: 36, height: 36, fit: BoxFit.cover),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.mandalName,
-                              style: GoogleFonts.outfit(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFF2E2A36),
-                              ),
-                            ),
-                            Text(
-                              post['time'] as String,
-                              style: GoogleFonts.outfit(
-                                fontSize: 11,
-                                color: const Color(0xFF2E2A36).withValues(alpha: 0.5),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Caption text
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 2.0),
-                  child: Text(
-                    post['content'] as String,
-                    style: GoogleFonts.outfit(
-                      fontSize: 13,
-                      color: const Color(0xFF2E2A36),
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                // Post Image content
-                ClipRRect(
-                  child: Image.asset(
-                    post['image'] as String,
-                    width: double.infinity,
-                    height: 230,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-
-                // Engagement Row (Removed comments option completely)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
-                  ),
-                  child: Row(
-                    children: [
-                      // Like
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            post['isLiked'] = !liked;
-                            post['likes'] = likesCount + (liked ? -1 : 1);
-                          });
-                        },
-                        child: Row(
-                          children: [
-                            Icon(
-                              liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                              color: liked ? Colors.red : const Color(0xFF2E2A36),
-                              size: 20,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              "${post['likes']}",
-                              style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 24),
-
-                      // Share
-                      Row(
-                        children: [
-                          const Icon(Icons.share_outlined, size: 18),
-                          const SizedBox(width: 4),
-                          Text(
-                            "${post['shares']}",
-                            style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-// ─── Mandal Images Feed Screen (Instagram-like scrollable viewer) ───────────
-
-class MandalImagesFeedScreen extends StatelessWidget {
-  final int startIndex;
-  final String mandalName;
-
-  const MandalImagesFeedScreen({
-    super.key,
-    required this.startIndex,
-    required this.mandalName,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Show scrollable image viewer
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFE8D6),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: Center(
-          child: GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFFC8A882), width: 1.0),
-              ),
-              child: const Center(
-                child: Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFFC8A882), size: 16),
-              ),
-            ),
-          ),
-        ),
-        title: Text(
-          'Images',
-          style: GoogleFonts.outfit(
-            color: const Color(0xFF2E2A36),
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
-        ),
-        centerTitle: true,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Image.asset(
-              'assets/images/diwali_card.png',
-              fit: BoxFit.contain,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Mandal Videos Feed Screen (Instagram-like scrollable video viewer) ─────
-
-class MandalVideosFeedScreen extends StatelessWidget {
-  final int startIndex;
-  final String mandalName;
-
-  const MandalVideosFeedScreen({
-    super.key,
-    required this.startIndex,
-    required this.mandalName,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: Center(
-          child: GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: const BoxDecoration(
-                color: Colors.white24,
-                shape: BoxShape.circle,
-              ),
-              child: const Center(
-                child: Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 16),
-              ),
-            ),
-          ),
-        ),
-        title: Text(
-          'Videos',
-          style: GoogleFonts.outfit(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
-        ),
-        centerTitle: true,
-      ),
-      body: Center(
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Image.asset(
-              'assets/images/new_year_card.png',
-              fit: BoxFit.contain,
-            ),
-            const Icon(
-              Icons.play_circle_fill_rounded,
-              color: Colors.white,
-              size: 64,
-            ),
-          ],
-        ),
       ),
     );
   }

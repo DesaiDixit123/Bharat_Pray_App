@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../services/api_service.dart';
 
+import '../../services/api_service.dart';
+import '../../services/saved_items_service.dart';
+import '../../widgets/top_toast_notification.dart';
 import 'granth_chapter_list_screen.dart';
 
 class GranthListByCategoryScreen extends StatefulWidget {
@@ -20,6 +22,7 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
   bool _isLoading = true;
   String _error = '';
   List<dynamic> _granths = [];
+  final Set<String> _savedGranthIds = <String>{};
 
   @override
   void initState() {
@@ -35,6 +38,9 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
     });
 
     try {
+      final savedList = await SavedItemsService.getSavedGranths();
+      final savedIds = savedList.map((g) => (g['_id'] ?? g['id'] ?? '').toString()).toSet();
+
       final categoryId = (widget.category['_id'] ?? widget.category['id'] ?? '').toString();
       final categoryTitle = (widget.category['title'] ?? widget.category['name'] ?? '').toString();
 
@@ -68,6 +74,8 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
 
       if (!mounted) return;
       setState(() {
+        _savedGranthIds.clear();
+        _savedGranthIds.addAll(savedIds);
         _granths = list;
         _isLoading = false;
         _error = list.isEmpty ? 'No granths available in this category.' : '';
@@ -78,6 +86,29 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
         _isLoading = false;
         _error = 'Failed to load granths for this category.';
       });
+    }
+  }
+
+  Future<void> _toggleGranthSave(Map<String, dynamic> granth) async {
+    final isNowSaved = await SavedItemsService.toggleSaveGranth(granth);
+    final granthId = (granth['_id'] ?? granth['id'] ?? '').toString();
+    final name = (granth['name'] ?? granth['title'] ?? 'Granth').toString();
+
+    setState(() {
+      if (isNowSaved) {
+        _savedGranthIds.add(granthId);
+      } else {
+        _savedGranthIds.remove(granthId);
+      }
+    });
+
+    if (mounted) {
+      TopToastNotification.showSavedNotification(
+        context: context,
+        title: name,
+        isSaved: isNowSaved,
+        savedTabIndex: 0,
+      );
     }
   }
 
@@ -145,8 +176,11 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
     if (_granths.isEmpty) {
       return Center(
         child: Text(
-          'No granths available in this category.', style: GoogleFonts.outfit(
-            color: const Color(0xFF2E2A36).withOpacity(0.6))),
+          'No granths available in this category.',
+          style: GoogleFonts.outfit(
+            color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
+          ),
+        ),
       );
     }
 
@@ -155,8 +189,8 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
         Container(
-          height: 192,
-          padding: const EdgeInsets.all(20),
+          constraints: const BoxConstraints(minHeight: 160),
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(28),
             gradient: const LinearGradient(
@@ -166,56 +200,50 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFFF7700).withOpacity(0.2),
+                color: const Color(0xFFFF7700).withValues(alpha: 0.2),
                 blurRadius: 24,
                 offset: const Offset(0, 10),
               ),
             ],
           ),
-          child: Stack(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Positioned(
-                left: -12,
-                bottom: 0,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: ApiService.resolveImageUrl((widget.category['image'] ?? '').toString()).startsWith('http')
-                      ? Image.network(
-                          ApiService.resolveImageUrl((widget.category['image'] ?? '').toString()),
-                          width: 134,
-                          height: 150,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => _placeholderImage(),
-                        )
-                      : _placeholderImage(),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: SizedBox(
+                  width: 110,
+                  height: 130,
+                  child: _buildHeaderImage(),
                 ),
               ),
-              Positioned(
-                left: 126,
-                right: 4,
-                top: 12,
-                bottom: 12,
+              const SizedBox(width: 16),
+              Expanded(
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       (widget.category['name'] ?? widget.category['title'] ?? 'Granth Category').toString(),
                       style: GoogleFonts.outfit(
-                        fontSize: 24,
+                        fontSize: 20,
                         fontWeight: FontWeight.w700,
                         color: Colors.white,
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
                       (widget.category['description'] ?? 'Explore sacred scriptures and timeless teachings.').toString(),
                       style: GoogleFonts.outfit(
-                        fontSize: 13,
+                        fontSize: 12.5,
                         fontWeight: FontWeight.w500,
-                        height: 1.45,
-                        color: Colors.white.withOpacity(0.92),
+                        height: 1.4,
+                        color: Colors.white.withValues(alpha: 0.92),
                       ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -229,21 +257,55 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
     );
   }
 
+  Widget _buildHeaderImage() {
+    final rawImg = (widget.category['image'] ?? widget.category['coverImage'] ?? '').toString();
+    final resolvedUrl = ApiService.resolveImageUrl(rawImg);
+
+    if (resolvedUrl.startsWith('http')) {
+      return Image.network(
+        resolvedUrl,
+        width: 110,
+        height: 130,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _placeholderImage(),
+      );
+    } else if (rawImg.startsWith('assets/')) {
+      return Image.asset(
+        rawImg,
+        width: 110,
+        height: 130,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _placeholderImage(),
+      );
+    }
+    return Image.asset(
+      'assets/images/bhagavad_gita.png',
+      width: 110,
+      height: 130,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => _placeholderImage(),
+    );
+  }
+
   Widget _placeholderImage() {
     return Container(
-      width: 134,
-      height: 150,
+      width: 110,
+      height: 130,
       alignment: Alignment.center,
-      color: Colors.white.withOpacity(0.12),
+      color: Colors.white.withValues(alpha: 0.15),
       child: const Icon(
         Icons.menu_book_rounded,
         color: Colors.white,
-        size: 40,
+        size: 38,
       ),
     );
   }
 
   Widget _buildGranthCard(Map<String, dynamic> granth) {
+    final granthId = (granth['_id'] ?? granth['id'] ?? '').toString();
+    final isSaved = _savedGranthIds.contains(granthId);
+    final chapterCount = granth['totalChapters'] ?? granth['chaptersCount'] ?? granth['chapterCount'] ?? granth['totalPages'] ?? (granth['chapters'] is List ? (granth['chapters'] as List).length : null) ?? 1;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -252,7 +314,7 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
         border: Border.all(color: const Color(0xFFF3E4D6)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFF7700).withOpacity(0.06),
+            color: const Color(0xFFFF7700).withValues(alpha: 0.06),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -275,29 +337,37 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
           child: IntrinsicHeight(
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
-                  width: 48,
-                  height: 48,
+                  width: 52,
+                  height: 52,
                   decoration: BoxDecoration(
                     color: const Color(0xFFFFF1E5),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   child: ApiService.resolveImageUrl((granth['coverImage'] ?? granth['image'] ?? '').toString()).startsWith('http')
                       ? ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(14),
                           child: Image.network(
                             ApiService.resolveImageUrl((granth['coverImage'] ?? granth['image'] ?? '').toString()),
                             fit: BoxFit.cover,
                             errorBuilder: (_, _, _) => const Icon(
                               Icons.menu_book_rounded,
                               color: Color(0xFFB56E28),
-                              size: 24,
+                              size: 26,
                             ),
                           ),
                         )
-                      : const Icon(Icons.menu_book_rounded, color: Color(0xFFB56E28), size: 24),
+                      : Image.asset(
+                          'assets/images/bhagavad_gita.png',
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => const Icon(
+                            Icons.menu_book_rounded,
+                            color: Color(0xFFB56E28),
+                            size: 26,
+                          ),
+                        ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -308,40 +378,52 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
                       Text(
                         (granth['name'] ?? granth['title'] ?? 'Sacred Granth').toString(),
                         style: GoogleFonts.outfit(
-                          fontSize: 15,
+                          fontSize: 15.5,
                           fontWeight: FontWeight.w700,
                           color: const Color(0xFF2E2A36),
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${granth['totalChapters'] ?? 0} Chapters',
+                        '$chapterCount Chapters',
                         style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: const Color(0xFF2E2A36).withOpacity(0.52),
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF2E2A36).withValues(alpha: 0.52),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                const SizedBox(
-                  height: 36,
-                  width: 36,
-                  child: Center(
-                    child: Icon(
+                const SizedBox(width: 10),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      onTap: () => _toggleGranthSave(granth),
+                      borderRadius: BorderRadius.circular(20),
+                      child: Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Icon(
+                          isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                          color: isSaved ? const Color(0xFFFF8C1A) : const Color(0xFFBFA58B),
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(
                       Icons.arrow_forward_ios_rounded,
                       color: Color(0xFFFF9B38),
-                      size: 18,
+                      size: 16,
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
           ),
         ),
-        ),
+      ),
     );
   }
 }

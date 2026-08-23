@@ -5,9 +5,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import 'festival_detail_screen.dart';
+import 'festival_activity_screen.dart';
 import 'mandal_status_tab_content.dart';
 import 'live_darshan_dashboard_screen.dart';
 import 'mandal_leaderboard_tab_content.dart';
+import 'mandal_profile_screen.dart';
 
 // ─── Static fallback festival data ────────────────────────────────────────────
 
@@ -37,7 +39,7 @@ const List<Map<String, dynamic>> _kUpcomingFestivals = [
     'endDate': '17 Aug 2026',
     'imageUrl': 'assets/images/dhanteras_card.png',
     'description': 'Celebrate the birth of Lord Krishna.',
-    'registrationStatus': 'coming_soon',
+    'registrationStatus': 'open',   // ← registration open — 4 days to go
   },
   {
     'name': 'Diwali 2026',
@@ -54,6 +56,49 @@ const List<Map<String, dynamic>> _kUpcomingFestivals = [
     'imageUrl': 'assets/images/new_year_card.png',
     'description': 'The festival of colours and joy.',
     'registrationStatus': 'coming_soon',
+  },
+];
+
+const List<Map<String, dynamic>> _kTopMandals = [
+  {
+    'rank': '1',
+    'badge': '🏆 #1',
+    'name': 'Lalbaugcha Raja Yuva Mandal',
+    'location': 'Mumbai, Maharashtra',
+    'votes': '12.4k Devotees',
+    'imageUrl': 'assets/images/new_year_card.png',
+  },
+  {
+    'rank': '2',
+    'badge': '🏆 #2',
+    'name': 'Shree Ganesh Yuvak Mandal',
+    'location': 'Ahmedabad, Gujarat',
+    'votes': '9.8k Devotees',
+    'imageUrl': 'assets/images/diwali_card.png',
+  },
+  {
+    'rank': '3',
+    'badge': '🏆 #3',
+    'name': 'Surat Sarvajanik Garba Mandal',
+    'location': 'Surat, Gujarat',
+    'votes': '8.6k Devotees',
+    'imageUrl': 'assets/images/dhanteras_card.png',
+  },
+  {
+    'rank': '4',
+    'badge': '🏅 #4',
+    'name': 'Maa Durga Mahotsav Samiti',
+    'location': 'Vadodara, Gujarat',
+    'votes': '7.1k Devotees',
+    'imageUrl': 'assets/images/bhaiduj_card.png',
+  },
+  {
+    'rank': '5',
+    'badge': '🏅 #5',
+    'name': 'Kashi Vishwanath Bhakta Mandal',
+    'location': 'Varanasi, Uttar Pradesh',
+    'votes': '6.4k Devotees',
+    'imageUrl': 'assets/images/new_year_card.png',
   },
 ];
 
@@ -102,8 +147,11 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
 
   int _currentBottomTab = 0;
 
-  List<Map<String, dynamic>> get _currentList =>
-      _segment == 0 ? _kActiveFestivals : _kUpcomingFestivals;
+  List<Map<String, dynamic>> get _currentList {
+    if (_segment == 0) return _kActiveFestivals;
+    if (_segment == 1) return _kUpcomingFestivals;
+    return _kTopMandals;
+  }
 
   @override
   void initState() {
@@ -193,17 +241,25 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
         _buildSegmentControl(),
         const SizedBox(height: 12),
 
-        // ── Festival list ────────────────────────────────────────────────
+        // ── Festival / Top Mandals list ──────────────────────────────────
         Expanded(
-          child: _currentList.isEmpty
-              ? _buildEmptyState()
-              : ListView.builder(
+          child: _segment == 2
+              ? ListView.builder(
                   physics: const BouncingScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 110),
-                  itemCount: _currentList.length,
+                  itemCount: _kTopMandals.length,
                   itemBuilder: (context, index) =>
-                      _buildFestivalCard(_currentList[index]),
-                ),
+                      _buildTopMandalCard(_kTopMandals[index]),
+                )
+              : (_currentList.isEmpty
+                  ? _buildEmptyState()
+                  : ListView.builder(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 110),
+                      itemCount: _currentList.length,
+                      itemBuilder: (context, index) =>
+                          _buildFestivalCard(_currentList[index]),
+                    )),
         ),
       ],
     );
@@ -417,12 +473,18 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: SizedBox(
         height: 40,
-        child: Row(
-          children: [
-            _buildSegmentTab('Active', 0),
-            const SizedBox(width: 8),
-            _buildSegmentTab('Upcoming', 1),
-          ],
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: [
+              _buildSegmentTab('Active', 0),
+              const SizedBox(width: 8),
+              _buildSegmentTab('Upcoming', 1),
+              const SizedBox(width: 8),
+              _buildSegmentTab('Top Mandals', 2),
+            ],
+          ),
         ),
       ),
     );
@@ -472,7 +534,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
     final regStatus = (festival['registrationStatus'] ?? 'coming_soon') as String;
     final isOpen = regStatus == 'open';
 
-    final isClickable = isOpen;
+    final isClickable = _segment == 0 || isOpen;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -494,16 +556,32 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: isClickable
-              ? () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => FestivalDetailScreen(
-                        festivalName: name,
-                        imageUrl: imageUrl,
-                        isMandal: true,
+              ? () {
+                  if (_segment == 0) {
+                    // Active → Popular Reels + Posts + Search
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => FestivalActivityScreen(
+                          festivalName: name,
+                          imageUrl: imageUrl,
+                        ),
                       ),
-                    ),
-                  )
+                    );
+                  } else {
+                    // Upcoming → Register flow
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => FestivalDetailScreen(
+                          festivalName: name,
+                          imageUrl: imageUrl,
+                          isMandal: true,
+                        ),
+                      ),
+                    );
+                  }
+                }
               : null,
           child: Padding(
             padding:
@@ -561,6 +639,122 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
                     : const SizedBox(width: 14),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopMandalCard(Map<String, dynamic> mandal) {
+    final name = (mandal['name'] ?? 'Mandal').toString();
+    final location = (mandal['location'] ?? '').toString();
+    final votes = (mandal['votes'] ?? '').toString();
+    final badge = (mandal['badge'] ?? '🏆').toString();
+    final imageUrl = (mandal['imageUrl'] ?? 'assets/images/new_year_card.png').toString();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFF3E4D6)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => MandalProfileScreen(
+                mandalName: name,
+                location: location,
+                avatarUrl: imageUrl,
+                coverUrl: imageUrl,
+              ),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Image.asset(
+                  imageUrl,
+                  width: 56,
+                  height: 56,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => Container(
+                    width: 56,
+                    height: 56,
+                    color: const Color(0xFFFFF1E5),
+                    child: const Icon(Icons.groups_rounded, color: Color(0xFFFF7700), size: 26),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF7700).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            badge,
+                            style: GoogleFonts.outfit(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFFFF7700),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.outfit(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF2E2A36),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$location • $votes',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12.5,
+                        color: const Color(0xFF2E2A36).withValues(alpha: 0.55),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 16,
+                color: Color(0xFFFF7700),
+              ),
+            ],
           ),
         ),
       ),

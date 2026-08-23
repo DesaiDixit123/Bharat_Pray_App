@@ -48,6 +48,14 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
         'Posting End': '24 Sep 2026',
         'Winners Announcement': '27 Sep 2026',
       };
+    } else if (widget.festivalName.contains('Krishna') || widget.festivalName.contains('Janmashtami')) {
+      return {
+        'Registration Start': '01 Aug 2026',
+        'Registration End': '14 Aug 2026',
+        'Posting Start': '15 Aug 2026',
+        'Posting End': '17 Aug 2026',
+        'Winners Announcement': '19 Aug 2026',
+      };
     } else {
       return {
         'Registration Start': '15 Aug 2026',
@@ -62,6 +70,8 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
   String _getMandalDatesText() {
     if (widget.festivalName.contains('Ganesh') || widget.festivalName.toLowerCase().contains('celebrate')) {
       return '15 Sep 2026 - 25 Sep 2026';
+    } else if (widget.festivalName.contains('Krishna') || widget.festivalName.contains('Janmashtami')) {
+      return '16 Aug 2026 - 17 Aug 2026';
     } else {
       return '03 Oct 2026 - 12 Oct 2026';
     }
@@ -70,6 +80,8 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
   String _getMandalDesc() {
     if (widget.festivalName.contains('Ganesh') || widget.festivalName.toLowerCase().contains('celebrate')) {
       return "Let's celebrate the arrival of Bappa together.";
+    } else if (widget.festivalName.contains('Krishna') || widget.festivalName.contains('Janmashtami')) {
+      return "Celebrate the divine birth of Lord Krishna with your Mandal. Decorate, perform, and win!";
     } else {
       return "Nine nights of devotion to Maa Durga.";
     }
