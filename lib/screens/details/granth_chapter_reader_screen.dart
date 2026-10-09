@@ -199,6 +199,7 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
   bool _turnForward = true;
   double _dragProgress = 0.0; // 0.0 to 1.0
   bool _isDragging = false;
+  bool _isClosingBook = false;
 
   late AnimationController _turnCtrl;
   late Animation<double> _turnAnim;
@@ -218,6 +219,10 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
 
   void _onAnimStatus(AnimationStatus status) {
     if (status == AnimationStatus.completed) {
+      if (_isClosingBook) {
+        Navigator.pop(context);
+        return;
+      }
       if (_turnForward && _currentPage == totalPages - 1) {
         // Swiped past the back cover!
         Navigator.pop(context);
@@ -244,7 +249,7 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
   }
 
   void _triggerTurn({required bool forward, int? durationMs}) {
-    if (_isTurning) return;
+    if (_isTurning || _isClosingBook) return;
     if (forward && _currentPage >= totalPages) return;
     if (!forward && _currentPage <= 0) return;
     HapticFeedback.lightImpact();
@@ -268,8 +273,18 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     _turnCtrl.reverse(from: _dragProgress.clamp(0.01, 1.0));
   }
 
+  void _triggerCloseBookAnimation() {
+    if (_isTurning || _isClosingBook) return;
+    setState(() {
+      _isClosingBook = true;
+      _turnForward = true; // Swings from right to left
+    });
+    _turnCtrl.duration = const Duration(milliseconds: 900); // Slower, dramatic close
+    _turnCtrl.forward(from: 0.0);
+  }
+
   void _onHorizontalDragStart(DragStartDetails d) {
-    if (_isTurning) return;
+    if (_isTurning || _isClosingBook) return;
     setState(() { 
       _isDragging = true; 
       _dragProgress = 0; 
@@ -494,16 +509,18 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     final w = size.width * 0.82;  // the original full book width
     final h = size.height * 0.65;
 
-    final bool isAnimatingOrDragging = progress > 0 || _isDragging;
+    final bool isAnimatingOrDragging = progress > 0 || _isDragging || _isClosingBook;
     final int basePageIndex = !isAnimatingOrDragging ? _currentPage : (_turnForward ? (_currentPage + 1) : _currentPage);
-    final int topPageIndex = !isAnimatingOrDragging ? _currentPage : (_turnForward ? _currentPage : (_currentPage - 1));
+    final int topPageIndex = _isClosingBook 
+        ? (totalPages - 1) 
+        : (!isAnimatingOrDragging ? _currentPage : (_turnForward ? _currentPage : (_currentPage - 1)));
 
     // Pages are always rendered at the FULL book width (w x h)
-    final Widget? basePage = _getPage(basePageIndex, w, h);
+    final Widget? basePage = _isClosingBook ? null : _getPage(basePageIndex, w, h);
     final Widget? topPage = _getPage(topPageIndex, w, h);
 
-    final bool isTurning = (progress > 0 || _isDragging) && topPage != null;
-    final bool isFrontCoverTurn = (topPageIndex == 0); 
+    final bool isTurning = (progress > 0 || _isDragging || _isClosingBook) && topPage != null;
+    final bool isFrontCoverTurn = (topPageIndex == 0) && !_isClosingBook; 
 
     // Dynamic Thickness Calculation
     final double maxStackW = 10.0;
@@ -521,19 +538,20 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     if (!isAnimatingOrDragging) {
       content = topPage != null ? _wrapPage(topPageIndex, topPage) : const SizedBox.shrink();
     } else {
-      if (isFrontCoverTurn) {
-        // True 2-Sided 180-Degree Rigid Door Swing for the Front Cover
-        // Using positive math.pi swings INTO the screen depth, exactly opposite as requested
-        final double turnAngle = _turnForward 
-            ? (progress * math.pi) 
-            : ((1.0 - progress) * math.pi);
+      if (isFrontCoverTurn || _isClosingBook) {
+        // True 2-Sided 180-Degree Rigid Door Swing for the Front/Back Cover
+        final double turnAngle = _isClosingBook
+            ? (progress * math.pi) // Closing back cover swings right to left
+            : (_turnForward ? (progress * math.pi) : ((1.0 - progress) * math.pi));
 
-        final bool isFrontVisible = turnAngle <= math.pi / 2;
+        final bool isFrontVisible = _isClosingBook
+            ? turnAngle <= math.pi / 2
+            : turnAngle <= math.pi / 2;
 
         content = Stack(
           clipBehavior: Clip.none,
           children: [
-            if (basePage != null) _wrapPage(basePageIndex, basePage),
+            if (basePage != null && !_isClosingBook) _wrapPage(basePageIndex, basePage),
             Transform(
               alignment: Alignment.centerLeft,
               transform: Matrix4.identity()
@@ -542,10 +560,14 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
               child: isFrontVisible 
                   ? _wrapPage(topPageIndex, topPage!) 
                   : Transform(
-                      // Render the inside of the cover! Flipped so it's not mirrored when swung -180 deg
+                      // Render the OUTSIDE of the cover! Flipped so it's not mirrored when swung -180 deg
                       alignment: Alignment.center,
                       transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
-                      child: _wrapPage(topPageIndex, _getInsidePage(topPageIndex, w, h) ?? topPage!, isLeft: false),
+                      child: _wrapPage(
+                        topPageIndex, 
+                        _isClosingBook ? _fallbackCover(w, h, showTitle: false) : (_getInsidePage(topPageIndex, w, h) ?? topPage!), 
+                        isLeft: false
+                      ),
                     ),
             ),
           ],
@@ -593,7 +615,7 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
               left: -w, top: 0, bottom: 0, width: w,
               child: _wrapPage(0, _buildInsideCover(w, h), isLeft: true),
             ),
-          if (_currentPage < totalPages - 1)
+          if (_currentPage < totalPages - 1 && !_isClosingBook)
             Positioned(
               left: 0, top: 0, bottom: 0, width: w,
               child: _wrapPage(totalPages - 1, _buildInsideCover(w, h), isLeft: false),
@@ -774,7 +796,7 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
       return _BackCoverPage(
         granthName: widget.granthTitle, 
         onReadAgain: () => setState(() { _currentPage = 0; }),
-        onClose: () => Navigator.pop(context),
+        onClose: _triggerCloseBookAnimation,
       );
     } else {
       return _VersePage(verse: widget.verses[index - 1], verseIndex: index - 1, sepiaMode: widget.sepiaMode);
@@ -789,12 +811,12 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     Widget imageContent;
     if (resolvedUrl.startsWith('http')) {
       imageContent = Image.network(resolvedUrl, fit: BoxFit.cover, width: w, height: h,
-          errorBuilder: (_, __, ___) => _fallbackCover());
+          errorBuilder: (_, __, ___) => _fallbackCover(w, h));
     } else if (rawCover.startsWith('assets/')) {
       imageContent = Image.asset(rawCover, fit: BoxFit.cover, width: w, height: h,
-          errorBuilder: (_, __, ___) => _fallbackCover());
+          errorBuilder: (_, __, ___) => _fallbackCover(w, h));
     } else {
-      imageContent = _fallbackCover();
+      imageContent = _fallbackCover(w, h);
     }
 
     return Stack(
@@ -816,7 +838,7 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     );
   }
 
-  Widget _fallbackCover() {
+  Widget _fallbackCover(double w, double h, {bool showTitle = true}) {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(colors: [Color(0xFF5C2008), Color(0xFF1E0A03), Color(0xFF4A1C08)], begin: Alignment.topLeft, end: Alignment.bottomRight),
@@ -824,31 +846,32 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
       child: Stack(
         children: [
           Positioned.fill(child: CustomPaint(painter: _LeatherTexturePainter())),
-          Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(border: Border.all(color: const Color(0xFFD4AF37), width: 1.5), borderRadius: BorderRadius.circular(8)),
-                  child: Column(
-                    children: [
-                      const Icon(Icons.auto_stories_rounded, color: Color(0xFFD4AF37), size: 56),
-                      const SizedBox(height: 16),
-                      Text(widget.granthTitle, textAlign: TextAlign.center,
-                          style: GoogleFonts.notoSerifDevanagari(fontSize: 22, fontWeight: FontWeight.bold, color: const Color(0xFFFFD700), height: 1.3)),
-                      const SizedBox(height: 10),
-                      Text('❖ ──── ॐ ──── ❖', style: GoogleFonts.outfit(color: const Color(0xFFD4AF37), fontSize: 11)),
-                      const SizedBox(height: 8),
-                      Text(widget.chapterTitle, textAlign: TextAlign.center,
-                          style: GoogleFonts.outfit(color: const Color(0xFFFFD700).withValues(alpha: 0.85), fontSize: 13, fontWeight: FontWeight.w600)),
-                    ],
+          if (showTitle)
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(border: Border.all(color: const Color(0xFFD4AF37), width: 1.5), borderRadius: BorderRadius.circular(8)),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.auto_stories_rounded, color: Color(0xFFD4AF37), size: 56),
+                        const SizedBox(height: 16),
+                        Text(widget.granthTitle, textAlign: TextAlign.center,
+                            style: GoogleFonts.notoSerifDevanagari(fontSize: 22, fontWeight: FontWeight.bold, color: const Color(0xFFFFD700), height: 1.3)),
+                        const SizedBox(height: 10),
+                        Text('❖ ──── ॐ ──── ❖', style: GoogleFonts.outfit(color: const Color(0xFFD4AF37), fontSize: 11)),
+                        const SizedBox(height: 8),
+                        Text(widget.chapterTitle, textAlign: TextAlign.center,
+                            style: GoogleFonts.outfit(color: const Color(0xFFFFD700).withValues(alpha: 0.85), fontSize: 13, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
