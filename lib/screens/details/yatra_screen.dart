@@ -14,6 +14,10 @@ import '../../widgets/empty_state_widget.dart';
 import 'start_yatra_overview_screen.dart';
 import 'yatra_live_sangha_screen.dart';
 import 'yatra_completed_screen.dart';
+import 'profile_screen.dart';
+import 'messages_screen.dart';
+import 'notification_screen.dart';
+import '../../services/yatra_personal_chat_service.dart';
 
 // Using YatraModel from api_service.dart
 
@@ -26,7 +30,10 @@ class YatraScreen extends StatefulWidget {
 }
 
 class _YatraScreenState extends State<YatraScreen> {
-  String _profileName = 'Shiv';
+  String _profileName = 'User';
+  String _profilePic = '';
+  int _notificationCount = 0;
+  int _messageCount = 0;
 
   static const String _pinSvg = '''<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g clip-path="url(#clip0_279_1650)">
@@ -65,8 +72,22 @@ class _YatraScreenState extends State<YatraScreen> {
   @override
   void initState() {
     super.initState();
-    _loadProfileName();
+    _loadProfileData();
     _fetchYatras();
+  }
+
+  @override
+  void dispose() {
+    YatraPersonalChatService().unreadMessageCount.removeListener(_onUnreadMessagesChanged);
+    super.dispose();
+  }
+
+  void _onUnreadMessagesChanged() {
+    if (mounted) {
+      setState(() {
+        _messageCount = YatraPersonalChatService().unreadMessageCount.value;
+      });
+    }
   }
 
   Future<void> _fetchYatras({bool forceRefresh = false}) async {
@@ -82,14 +103,14 @@ class _YatraScreenState extends State<YatraScreen> {
       final popularRes = await ApiService.getPopularYatra(token: token, forceRefresh: forceRefresh);
       final continueRes = await ApiService.getContinueYatra(token: token, forceRefresh: forceRefresh);
 
-        setState(() {
-          _popularYatras = (popularRes.data != null && popularRes.data!.isNotEmpty)
-              ? popularRes.data!
-              : _getMockPopularYatras();
-          _continueJourney = continueRes.data;
-          _isLoading = false;
-          _isError = false;
-        });
+      setState(() {
+        _popularYatras = (popularRes.data != null && popularRes.data!.isNotEmpty)
+            ? popularRes.data!
+            : _getMockPopularYatras();
+        _continueJourney = continueRes.data;
+        _isLoading = false;
+        _isError = false;
+      });
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -140,40 +161,148 @@ class _YatraScreenState extends State<YatraScreen> {
         duration: "2.5 Days",
         groupSize: "2.5 k",
         image: "assets/images/somnath_temple_new.png",
-        tag: "Popular Yatra",
+        tag: "Continue Yatra",
         progress: 0.35,
       ),
     ];
   }
 
-  Future<void> _loadProfileName() async {
-    final prefs = await SharedPreferences.getInstance();
-    String fullName = prefs.getString('user_name') ?? 'Shivangi Patel (Shiv)';
-    String firstName = fullName.split(' ')[0];
-    if (mounted) {
-      setState(() {
-        _profileName = firstName;
-      });
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) {
+      return 'Good Morning';
+    } else if (hour < 17) {
+      return 'Good Afternoon';
+    } else {
+      return 'Good Evening';
+    }
+  }
+
+  String _getGreetingIcon() {
+    final hour = DateTime.now().hour;
+    if (hour < 17) {
+      return '☀️';
+    } else {
+      return '🌙';
+    }
+  }
+
+  String _getMailSvg(int count) {
+    final fill = count > 0 ? '#FF0000' : 'none';
+    return '''<svg width="26" height="24" viewBox="0 0 26 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M6.01417 3.9978C3.80516 3.9978 2.01416 5.7888 2.01416 7.9978V15.9978C2.01416 18.2068 3.80516 19.9978 6.01417 19.9978H18.0142C20.2232 19.9978 22.0142 18.2068 22.0142 15.9978V7.9978C22.0142 5.7888 20.2232 3.9978 18.0142 3.9978H6.01417ZM6.01417 5.9978H18.0142C19.0222 5.9978 19.8552 6.73781 19.9932 7.70781C19.0352 8.60081 17.6112 9.6968 16.6702 10.3728C14.5052 11.9278 12.6002 12.9978 12.0142 12.9978C11.4282 12.9978 9.52317 11.9288 7.35816 10.3728C6.41716 9.6968 5.49217 8.9658 4.79517 8.3728C4.49817 8.1198 4.27816 7.9158 4.10816 7.7478C4.24616 6.7778 5.00616 5.9978 6.01417 5.9978ZM4.02417 10.3518C6.56218 12.4048 10.2812 14.9858 12.0142 14.9978C13.1432 15.0058 15.0742 13.9278 17.0442 12.5668C18.0632 11.8618 19.1972 11.0248 20.0152 10.3378L20.0142 15.9978C20.0142 17.1028 19.1192 17.9978 18.0142 17.9978H6.01417C4.90916 17.9978 4.01416 17.1028 4.01416 15.9978L4.02417 10.3518Z" fill="#6B4226"/>
+<circle cx="22" cy="4.5" r="4" fill="$fill"/>
+</svg>''';
+  }
+
+  String _getBellSvg(int count) {
+    final fill = count > 0 ? '#FF0000' : 'none';
+    return '''<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 6.43994V9.76994" stroke="#6B4226" stroke-width="1.5" stroke-miterlimit="10" stroke-linecap="round"/>
+<path d="M12.02 2C8.34002 2 5.36002 4.98 5.36002 8.66V10.76C5.36002 11.44 5.08002 12.46 4.73002 13.04L3.46002 15.16C2.68002 16.47 3.22002 17.93 4.66002 18.41C9.44002 20 14.61 20 19.39 18.41C20.74 17.96 21.32 16.38 20.59 15.16L19.32 13.04C18.97 12.46 18.69 11.43 18.69 10.76V8.66C18.68 5 15.68 2 12.02 2Z" stroke="#6B4226" stroke-width="1.5" stroke-miterlimit="10" stroke-linecap="round"/>
+<path d="M15.33 18.8199C15.33 20.6499 13.83 22.1499 12 22.1499C11.09 22.1499 10.25 21.7699 9.65004 21.1699C9.05004 20.5699 8.67004 19.7299 8.67004 18.8199" stroke="#6B4226" stroke-width="1.5" stroke-miterlimit="10"/>
+<circle cx="18" cy="4.5" r="4" fill="$fill"/>
+</svg>''';
+  }
+
+  Future<void> _loadProfileData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final localName = prefs.getString('user_name') ?? '';
+      final localPic = prefs.getString('profile_pic') ?? '';
+
+      if (mounted) {
+        setState(() {
+          _profileName = localName.isNotEmpty ? localName.split(' ')[0] : 'User';
+          _profilePic = localPic;
+          _messageCount = YatraPersonalChatService().unreadMessageCount.value;
+        });
+      }
+
+      YatraPersonalChatService().unreadMessageCount.removeListener(_onUnreadMessagesChanged);
+      YatraPersonalChatService().unreadMessageCount.addListener(_onUnreadMessagesChanged);
+      YatraPersonalChatService().refreshUnreadCount();
+
+      final token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
+      if (token.isNotEmpty) {
+        final homeData = await ApiService.getDarshanHome(token);
+        if (mounted && homeData != null) {
+          final user = homeData['user'] as Map<String, dynamic>?;
+          final name = user?['name']?.toString() ?? localName;
+          final pic = user?['profile_pic']?.toString() ?? localPic;
+          final notifCount = homeData['notificationCount'] is int
+              ? homeData['notificationCount'] as int
+              : 0;
+
+          setState(() {
+            if (name.isNotEmpty) {
+              _profileName = name.split(' ')[0];
+            }
+            _profilePic = pic;
+            _notificationCount = notifCount;
+            _messageCount = YatraPersonalChatService().unreadMessageCount.value;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading yatra header profile: $e');
     }
   }
 
   Widget _buildHeader() {
+    final greeting = _getGreeting();
+    final icon = _getGreetingIcon();
+    final resolvedPic = ApiService.resolveImageUrl(_profilePic);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
       child: Row(
         children: [
-          Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: const Color(0xFFFF7A00).withValues(alpha: 0.2),
-                width: 1.5,
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              ).then((_) => _loadProfileData());
+            },
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: const Color(0xFFFF7A00).withValues(alpha: 0.2),
+                  width: 1.5,
+                ),
               ),
-            ),
-            child: const CircleAvatar(
-              radius: 24,
-              backgroundImage: NetworkImage(
-                'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=60',
+              child: ClipOval(
+                child: resolvedPic.isNotEmpty
+                    ? Image.network(
+                        resolvedPic,
+                        width: 48,
+                        height: 48,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Center(
+                          child: Text(
+                            _profileName.isNotEmpty ? _profileName[0].toUpperCase() : 'U',
+                            style: GoogleFonts.outfit(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFFFF7700),
+                            ),
+                          ),
+                        ),
+                      )
+                    : Center(
+                        child: Text(
+                          _profileName.isNotEmpty ? _profileName[0].toUpperCase() : 'U',
+                          style: GoogleFonts.outfit(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFFFF7700),
+                          ),
+                        ),
+                      ),
               ),
             ),
           ),
@@ -199,10 +328,11 @@ class _YatraScreenState extends State<YatraScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Good Morning, $_profileName ☀️',
+                  '$greeting, $_profileName $icon',
                   style: GoogleFonts.outfit(
                     fontSize: 13,
                     color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
@@ -211,28 +341,33 @@ class _YatraScreenState extends State<YatraScreen> {
           
           // Mail Action Icon
           GestureDetector(
-            onTap: () {},
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const MessagesScreen()),
+              ).then((_) {
+                YatraPersonalChatService().refreshUnreadCount();
+                _loadProfileData();
+              });
+            },
             child: SvgPicture.string(
-              '''<svg width="26" height="24" viewBox="0 0 26 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M6.01417 3.9978C3.80516 3.9978 2.01416 5.7888 2.01416 7.9978V15.9978C2.01416 18.2068 3.80516 19.9978 6.01417 19.9978H18.0142C20.2232 19.9978 22.0142 18.2068 22.0142 15.9978V7.9978C22.0142 5.7888 20.2232 3.9978 18.0142 3.9978H6.01417ZM6.01417 5.9978H18.0142C19.0222 5.9978 19.8552 6.73781 19.9932 7.70781C19.0352 8.60081 17.6112 9.6968 16.6702 10.3728C14.5052 11.9278 12.6002 12.9978 12.0142 12.9978C11.4282 12.9978 9.52317 11.9288 7.35816 10.3728C6.41716 9.6968 5.49217 8.9658 4.79517 8.3728C4.49817 8.1198 4.27816 7.9158 4.10816 7.7478C4.24616 6.7778 5.00616 5.9978 6.01417 5.9978ZM4.02417 10.3518C6.56218 12.4048 10.2812 14.9858 12.0142 14.9978C13.1432 15.0058 15.0742 13.9278 17.0442 12.5668C18.0632 11.8618 19.1972 11.0248 20.0152 10.3378L20.0142 15.9978C20.0142 17.1028 19.1192 17.9978 18.0142 17.9978H6.01417C4.90916 17.9978 4.01416 17.1028 4.01416 15.9978L4.02417 10.3518Z" fill="#6B4226"/>
-<circle cx="22" cy="4.5" r="4" fill="#FF0000"/>
-</svg>''',
+              _getMailSvg(_messageCount),
               width: 24,
               height: 24,
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
           
           // Bell Action Icon
           GestureDetector(
-            onTap: () {},
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const NotificationScreen()),
+              ).then((_) => _loadProfileData());
+            },
             child: SvgPicture.string(
-              '''<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M12 6.43994V9.76994" stroke="#6B4226" stroke-width="1.5" stroke-miterlimit="10" stroke-linecap="round"/>
-<path d="M12.02 2C8.34002 2 5.36002 4.98 5.36002 8.66V10.76C5.36002 11.44 5.08002 12.46 4.73002 13.04L3.46002 15.16C2.68002 16.47 3.22002 17.93 4.66002 18.41C9.44002 20 14.61 20 19.39 18.41C20.74 17.96 21.32 16.38 20.59 15.16L19.32 13.04C18.97 12.46 18.69 11.43 18.69 10.76V8.66C18.68 5 15.68 2 12.02 2Z" stroke="#6B4226" stroke-width="1.5" stroke-miterlimit="10" stroke-linecap="round"/>
-<path d="M15.33 18.8199C15.33 20.6499 13.83 22.1499 12 22.1499C11.09 22.1499 10.25 21.7699 9.65004 21.1699C9.05004 20.5699 8.67004 19.7299 8.67004 18.8199" stroke="#6B4226" stroke-width="1.5" stroke-miterlimit="10"/>
-<circle cx="18" cy="4.5" r="4" fill="#FF0000"/>
-</svg>''',
+              _getBellSvg(_notificationCount),
               width: 24,
               height: 24,
             ),
@@ -505,15 +640,34 @@ class _YatraScreenState extends State<YatraScreen> {
     if (_isLoading) {
       return const Padding(
         padding: EdgeInsets.symmetric(horizontal: 20),
-        child: ShimmerYatraCard(height: 180),
+        child: ShimmerYatraCard(width: 333, height: 265),
       );
     }
 
-    if (_continueJourney == null) {
-      return const SizedBox.shrink(); // Don't show if user has no active running journey
+    YatraModel yatraItem;
+    if (_continueJourney != null) {
+      final journey = _continueJourney!;
+      yatraItem = YatraModel(
+        id: journey.routeId.isNotEmpty ? journey.routeId : (journey.journeyId.isNotEmpty ? journey.journeyId : '1'),
+        journeyId: journey.journeyId,
+        title: journey.title,
+        distance: journey.totalDistanceKm,
+        steps: '${journey.accumulatedSteps} Steps',
+        duration: '${journey.estimatedDays} Days',
+        groupSize: '1 Sangha',
+        image: journey.coverImage.isNotEmpty
+            ? journey.coverImage
+            : 'assets/images/somnath_temple_new.png',
+        tag: 'Continue Yatra',
+        progress: (journey.progressPercent / 100.0).clamp(0.0, 1.0),
+      );
+    } else {
+      final mockList = _getMockContinueYatras();
+      if (mockList.isEmpty) {
+        return const SizedBox.shrink();
+      }
+      yatraItem = mockList.first;
     }
-
-    final journey = _continueJourney!;
 
     return SizedBox(
       width: double.infinity,
@@ -532,124 +686,11 @@ class _YatraScreenState extends State<YatraScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          Padding(
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E1332),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withOpacity(0.1)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.network(
-                          journey.coverImage,
-                          width: 70,
-                          height: 70,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Image.asset(
-                            'assets/images/somnath_temple_new.png',
-                            width: 70,
-                            height: 70,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              journey.title,
-                              style: GoogleFonts.outfit(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Day ${journey.currentDay} of ${journey.estimatedDays}  •  ${journey.distanceCoveredKm} / ${journey.totalDistanceKm}',
-                              style: GoogleFonts.outfit(
-                                fontSize: 12,
-                                color: Colors.white70,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
-                              child: LinearProgressIndicator(
-                                value: journey.progressPercent / 100.0,
-                                backgroundColor: Colors.white.withOpacity(0.1),
-                                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFF7700)),
-                                minHeight: 6,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '${journey.progressPercent.toInt()}% Completed',
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFFFF7700),
-                        ),
-                      ),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => StartYatraOverviewScreen(
-                                id: journey.routeId.isNotEmpty ? journey.routeId : '1',
-                                title: journey.title,
-                                distance: journey.totalDistanceKm,
-                                steps: '${journey.accumulatedSteps} Steps',
-                                duration: '${journey.estimatedDays} Days',
-                                sangha: '1 Sangha',
-                                imageAsset: journey.coverImage,
-                              ),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFF7700),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        ),
-                        child: Text(
-                          'Resume',
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+            child: _buildYatraCard(yatraItem, isPopular: false),
           ),
         ],
       ),
@@ -743,14 +784,13 @@ class _YatraScreenState extends State<YatraScreen> {
                         ),
                       ),
                     ),
-                    // "Popular Yatra" Tag
+                    // "Popular Yatra" / "Continue Yatra" Tag
                     Positioned(
                       top: 20,
-                      left: 237,
-                      width: 76,
+                      right: 16,
                       height: 20,
                       child: Container(
-                        padding: const EdgeInsets.only(top: 4, right: 10, bottom: 4, left: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                         decoration: BoxDecoration(
                           color: const Color(0xFFFF7A00).withValues(alpha: 0.08), // var(--color-orange-50) translucent background
                           borderRadius: BorderRadius.circular(9999),

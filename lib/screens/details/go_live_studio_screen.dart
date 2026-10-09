@@ -3,9 +3,12 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../services/utsav_service.dart';
 
 class GoLiveStudioScreen extends StatefulWidget {
-  const GoLiveStudioScreen({super.key});
+  final String? initialTitle;
+  final String? mandalName;
+  const GoLiveStudioScreen({super.key, this.initialTitle, this.mandalName});
 
   @override
   State<GoLiveStudioScreen> createState() => _GoLiveStudioScreenState();
@@ -18,16 +21,15 @@ class _GoLiveStudioScreenState extends State<GoLiveStudioScreen> {
   bool _isCameraInitialized = false;
 
   bool _isLiveActive = false;
-  int _viewerCount = 1855;
-  int _liveLikes = 468;
+  int _viewerCount = 1;
+  int _liveLikes = 0;
   Timer? _viewerTimer;
-  final TextEditingController _liveTitleController = TextEditingController(text: "Evening Sandhya Aarti & Bhajan 🙏");
+  late final TextEditingController _liveTitleController;
   final List<String> _liveComments = [
-    "Jai Shree Ram! 🙏🚩",
+    "Jai Mata Di! 🙏✨",
     "Har Har Mahadev! 🌸",
     "Radhe Radhe! ✨",
-    "Greetings from Surat Mandal!",
-    "Jai Jinendra 🙏",
+    "Greetings to Mandal!",
     "Jay Somnath Mahadev ⛰️",
     "Beautiful Aarti Darshan ✨",
   ];
@@ -35,6 +37,9 @@ class _GoLiveStudioScreenState extends State<GoLiveStudioScreen> {
   @override
   void initState() {
     super.initState();
+    _liveTitleController = TextEditingController(
+      text: widget.initialTitle ?? (widget.mandalName != null ? "${widget.mandalName} Live Aarti 🙏" : "Mandal Live Aarti 🙏"),
+    );
     _initRealCamera();
   }
 
@@ -42,6 +47,8 @@ class _GoLiveStudioScreenState extends State<GoLiveStudioScreen> {
     try {
       _cameras = await availableCameras();
       if (_cameras != null && _cameras!.isNotEmpty) {
+        final backCamIdx = _cameras!.indexWhere((c) => c.lensDirection == CameraLensDirection.back);
+        _selectedCameraIndex = backCamIdx != -1 ? backCamIdx : 0;
         await _onNewCameraSelected(_cameras![_selectedCameraIndex]);
       }
     } catch (e) {
@@ -55,8 +62,8 @@ class _GoLiveStudioScreenState extends State<GoLiveStudioScreen> {
     }
     final CameraController cameraController = CameraController(
       description,
-      ResolutionPreset.high,
-      enableAudio: true,
+      ResolutionPreset.medium,
+      enableAudio: false,
     );
     _cameraController = cameraController;
 
@@ -91,7 +98,19 @@ class _GoLiveStudioScreenState extends State<GoLiveStudioScreen> {
     super.dispose();
   }
 
-  void _startLiveStream() {
+  void _startLiveStream() async {
+    final check = await UtsavService.checkFestivalStartedForMandal(mandalName: widget.mandalName);
+    if (check['isStarted'] != true) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("તહેવાર શરૂ થયા પછી જ Live Broadcast કરી શકાશે (${check['formattedDate']})."),
+            backgroundColor: const Color(0xFFD32F2F),
+          ),
+        );
+      }
+      return;
+    }
     setState(() => _isLiveActive = true);
     _viewerTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
       if (mounted) {
@@ -103,15 +122,28 @@ class _GoLiveStudioScreenState extends State<GoLiveStudioScreen> {
     });
   }
 
-  void _endLiveStream() {
+  void _endLiveStream() async {
     _viewerTimer?.cancel();
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("🔴 Live Stream Ended. Broadcast saved to Mandal Live History!"),
-        backgroundColor: Color(0xFFD32F2F),
-      ),
-    );
+    final liveTitle = _liveTitleController.text.trim().isNotEmpty
+        ? _liveTitleController.text.trim()
+        : (widget.mandalName != null ? "${widget.mandalName} Live Aarti" : "Mandal Live Aarti");
+    await UtsavService.saveMandalLiveEvent(widget.mandalName ?? 'Mandal', {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'title': liveTitle,
+      'status': 'Recorded',
+      'dateOrTime': 'Just now',
+      'viewers': '$_viewerCount Viewers',
+      'thumbnailUrl': 'assets/images/somnath_temple.png',
+    });
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("🔴 Live Stream Ended. Broadcast saved to Mandal Live History!"),
+          backgroundColor: Color(0xFFD32F2F),
+        ),
+      );
+    }
   }
 
   @override
@@ -123,28 +155,30 @@ class _GoLiveStudioScreenState extends State<GoLiveStudioScreen> {
         children: [
           // REAL DEVICE LIVE CAMERA PREVIEW FEED
           _isCameraInitialized && _cameraController != null && _cameraController!.value.isInitialized
-              ? CameraPreview(_cameraController!)
+              ? FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    width: _cameraController!.value.previewSize?.height ?? MediaQuery.of(context).size.width,
+                    height: _cameraController!.value.previewSize?.width ?? MediaQuery.of(context).size.height,
+                    child: CameraPreview(_cameraController!),
+                  ),
+                )
               : Container(
                   color: Colors.black,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.asset("assets/images/somnath_hero.png", fit: BoxFit.cover),
-                      Container(color: Colors.black45),
-                      Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const CircularProgressIndicator(color: Color(0xFFFF7700)),
-                            const SizedBox(height: 14),
-                            Text(
-                              "Initializing Live Camera...",
-                              style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                            ),
-                          ],
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.videocam_rounded, size: 54, color: Color(0xFFFF7700)),
+                        const SizedBox(height: 16),
+                        const CircularProgressIndicator(color: Color(0xFFFF7700), strokeWidth: 2.5),
+                        const SizedBox(height: 14),
+                        Text(
+                          "Starting Live Camera Preview...",
+                          style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
 

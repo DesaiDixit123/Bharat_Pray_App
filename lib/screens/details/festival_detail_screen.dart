@@ -1,18 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../../services/utsav_service.dart';
 import 'mandal_registration_screen.dart';
+import 'mandal_status_tab_content.dart';
+import 'mandal_profile_screen.dart';
 
 class FestivalDetailScreen extends StatefulWidget {
   final String festivalName;
   final String imageUrl;
   final bool isMandal;
+  final Map<String, dynamic>? festivalData;
 
   const FestivalDetailScreen({
     super.key,
     required this.festivalName,
     required this.imageUrl,
     this.isMandal = false,
+    this.festivalData,
   });
 
   @override
@@ -20,6 +26,9 @@ class FestivalDetailScreen extends StatefulWidget {
 }
 
 class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
+  Map<String, dynamic>? _festivalData;
+  Map<String, dynamic>? _myRegistration;
+
   // Checklist states (original view)
   final Map<String, bool> _checklist = {
     "Clay Diyas (मिट्टी के दीये)": false,
@@ -39,52 +48,91 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
     "Step 5: Perform the Aarti together with your family and distribute prasad.",
   ];
 
-  Map<String, String> _getMandalDates() {
-    if (widget.festivalName.contains('Ganesh') || widget.festivalName.toLowerCase().contains('celebrate')) {
-      return {
-        'Registration Start': '01 Aug 2026',
-        'Registration End': '10 Sep 2026',
-        'Posting Start': '11 Sep 2026',
-        'Posting End': '24 Sep 2026',
-        'Winners Announcement': '27 Sep 2026',
-      };
-    } else if (widget.festivalName.contains('Krishna') || widget.festivalName.contains('Janmashtami')) {
-      return {
-        'Registration Start': '01 Aug 2026',
-        'Registration End': '14 Aug 2026',
-        'Posting Start': '15 Aug 2026',
-        'Posting End': '17 Aug 2026',
-        'Winners Announcement': '19 Aug 2026',
-      };
-    } else {
-      return {
-        'Registration Start': '15 Aug 2026',
-        'Registration End': '25 Sep 2026',
-        'Posting Start': '26 Sep 2026',
-        'Posting End': '11 Oct 2026',
-        'Winners Announcement': '14 Oct 2026',
-      };
+  @override
+  void initState() {
+    super.initState();
+    _festivalData = widget.festivalData;
+    _loadFestivalDetails();
+    _loadMyRegistration();
+  }
+
+  Future<void> _loadMyRegistration() async {
+    final reg = await UtsavService.getMyMandalRegistration();
+    if (mounted) {
+      setState(() {
+        _myRegistration = reg;
+      });
     }
+  }
+
+  Future<void> _loadFestivalDetails() async {
+    final fest = await UtsavService.getFestivalByName(widget.festivalName);
+    if (fest != null && mounted) {
+      setState(() {
+        _festivalData = fest;
+      });
+    }
+  }
+
+  String _getFestivalTiming() {
+    if (_festivalData?['timing'] != null && _festivalData!['timing'].toString().trim().isNotEmpty) {
+      return _festivalData!['timing'].toString();
+    }
+    if (_festivalData?['timings'] != null && _festivalData!['timings'].toString().trim().isNotEmpty) {
+      return _festivalData!['timings'].toString();
+    }
+    final name = widget.festivalName.toLowerCase();
+    if (name.contains('navratri') || name.contains('garba')) {
+      return 'Daily Raas Garba & Aarti: 7:00 PM - 12:00 AM';
+    } else if (name.contains('diwali') || name.contains('deepotsav')) {
+      return 'Deepotsav & Lakshmi Aarti: 6:00 PM - 11:00 PM';
+    }
+    return 'Daily Darshan & Aarti: 6:00 AM - 11:30 PM';
+  }
+
+  Map<String, String> _getMandalDates() {
+    final regDate = _festivalData?['formattedRegDate'] ??
+        (_festivalData?['regStartDate'] != null && _festivalData?['regEndDate'] != null
+            ? '${_festivalData!['regStartDate']} - ${_festivalData!['regEndDate']}'
+            : '-');
+    final festDate = _festivalData?['formattedDate'] ??
+        (_festivalData?['startDate'] != null && _festivalData?['endDate'] != null
+            ? '${_festivalData!['startDate']} - ${_festivalData!['endDate']}'
+            : '-');
+    final status = _festivalData?['status'] ?? 'Upcoming';
+    final participants = '${_festivalData?['participantCount'] ?? 0} Mandals';
+    final votes = '${_festivalData?['totalVotes'] ?? 0} Devotees';
+
+    return {
+      'Registration Window': regDate.toString(),
+      'Mahotsav Dates': festDate.toString(),
+      'Daily Event Timing': _getFestivalTiming(),
+      'Current Stage': status.toString(),
+      'Participants': participants,
+      'Total Votes': votes,
+    };
   }
 
   String _getMandalDatesText() {
-    if (widget.festivalName.contains('Ganesh') || widget.festivalName.toLowerCase().contains('celebrate')) {
-      return '15 Sep 2026 - 25 Sep 2026';
-    } else if (widget.festivalName.contains('Krishna') || widget.festivalName.contains('Janmashtami')) {
-      return '16 Aug 2026 - 17 Aug 2026';
-    } else {
-      return '03 Oct 2026 - 12 Oct 2026';
+    if (_festivalData != null && _festivalData!['formattedDate'] != null) {
+      return _festivalData!['formattedDate'].toString();
     }
+    if (_festivalData != null && _festivalData!['startDate'] != null) {
+      final start = _festivalData!['startDate'];
+      final end = _festivalData!['endDate'];
+      return end != null ? '$start - $end' : '$start';
+    }
+    return '';
   }
 
   String _getMandalDesc() {
-    if (widget.festivalName.contains('Ganesh') || widget.festivalName.toLowerCase().contains('celebrate')) {
-      return "Let's celebrate the arrival of Bappa together.";
-    } else if (widget.festivalName.contains('Krishna') || widget.festivalName.contains('Janmashtami')) {
-      return "Celebrate the divine birth of Lord Krishna with your Mandal. Decorate, perform, and win!";
-    } else {
-      return "Nine nights of devotion to Maa Durga.";
+    if (_festivalData != null && _festivalData!['description'] != null) {
+      return _festivalData!['description'].toString();
     }
+    if (_festivalData != null && _festivalData!['slogan'] != null) {
+      return _festivalData!['slogan'].toString();
+    }
+    return '';
   }
 
   @override
@@ -101,6 +149,11 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFFFE8D6),
       appBar: AppBar(
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+          statusBarBrightness: Brightness.light,
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: Center(
@@ -119,7 +172,6 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
         centerTitle: true,
       ),
       body: SafeArea(
-        top: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20.0),
           child: Column(
@@ -149,6 +201,25 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
 
                       // 3. Status Badge
                       _buildMandalBadge(),
+                      const SizedBox(height: 10),
+
+                      // Timing Info
+                      Row(
+                        children: [
+                          const Icon(Icons.access_time_filled_rounded, size: 16, color: Color(0xFFFF7700)),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _getFestivalTiming(),
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF8E5A2A),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 12),
 
                       // 4. Description
@@ -161,6 +232,12 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
                         ),
                       ),
                       const SizedBox(height: 25),
+
+                      // Rewards section if available
+                      if (_festivalData?['rewards'] != null) ...[
+                        _buildRewardsSection(),
+                        const SizedBox(height: 25),
+                      ],
 
                       // 5. Divider
                       Container(
@@ -190,9 +267,7 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
   }
 
   Widget _buildMandalCoverCard() {
-    final displayName = widget.festivalName.toLowerCase().contains('celebrate')
-        ? 'Ganesh Chaturthi 2026'
-        : widget.festivalName;
+    final displayName = widget.festivalName;
     return Container(
       height: 200,
       width: double.infinity,
@@ -245,16 +320,123 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
   }
 
   Widget _buildMandalBadge() {
+    if (_myRegistration != null) {
+      final regFest = (_myRegistration!['festival'] ?? _myRegistration!['festivalName'] ?? _myRegistration!['category'])?.toString().toLowerCase() ?? '';
+      final currFest = widget.festivalName.toLowerCase();
+      final bool isMatch = regFest.isNotEmpty && currFest.isNotEmpty &&
+          (currFest.contains(regFest) || regFest.contains(currFest) ||
+           (currFest.contains('navratri') && regFest.contains('navratri')) ||
+           (currFest.contains('diwali') && regFest.contains('diwali')));
+
+      if (isMatch) {
+        final st = (_myRegistration!['status'] ?? 'Pending').toString().toLowerCase();
+        if (st == 'approved') {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8F8EE),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF27AE60)),
+                const SizedBox(width: 4),
+                Text(
+                  'Mandal Approved',
+                  style: GoogleFonts.outfit(
+                    color: const Color(0xFF27AE60),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          );
+        } else if (st == 'rejected') {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFEBEE),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.cancel_rounded, size: 14, color: Color(0xFFC62828)),
+                const SizedBox(width: 4),
+                Text(
+                  'Registration Rejected',
+                  style: GoogleFonts.outfit(
+                    color: const Color(0xFFC62828),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          );
+        } else {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF3E0),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.hourglass_top_rounded, size: 14, color: Color(0xFFE65100)),
+                const SizedBox(width: 4),
+                Text(
+                  'Verification in Progress ⏳',
+                  style: GoogleFonts.outfit(
+                    color: const Color(0xFFE65100),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+      }
+    }
+
+    final status = _festivalData?['registrationStatus']?.toString() ??
+        UtsavService.computeRegistrationStatus(
+          _festivalData?['regStartDate']?.toString(),
+          _festivalData?['regEndDate']?.toString(),
+          'coming_soon',
+          festivalName: widget.festivalName,
+        );
+    final isOpen = status == 'open';
+    final isClosed = status == 'closed';
+
+    String text = 'Coming Soon';
+    Color bgColor = const Color(0xFFFFF3E0);
+    Color textColor = const Color(0xFFE65100);
+
+    if (isOpen) {
+      text = 'Registrations Open';
+      bgColor = const Color(0xFFE8F8EE);
+      textColor = const Color(0xFF27AE60);
+    } else if (isClosed) {
+      text = 'Registrations Closed';
+      bgColor = const Color(0xFFFFEBEE);
+      textColor = const Color(0xFFC62828);
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFE8F8EE),
+        color: bgColor,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        'Registrations Open',
+        text,
         style: GoogleFonts.outfit(
-          color: const Color(0xFF27AE60),
+          color: textColor,
           fontWeight: FontWeight.bold,
           fontSize: 12,
         ),
@@ -279,7 +461,7 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
         ...dates.entries.map((e) => Padding(
               padding: const EdgeInsets.symmetric(vertical: 8.0),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     e.key,
@@ -289,12 +471,16 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  Text(
-                    e.value,
-                    style: GoogleFonts.outfit(
-                      fontSize: 14,
-                      color: const Color(0xFF2E2A36),
-                      fontWeight: FontWeight.w600,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      e.value,
+                      textAlign: TextAlign.end,
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        color: const Color(0xFF2E2A36),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -304,31 +490,251 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
     );
   }
 
+  Widget _buildRewardsSection() {
+    final rewards = _festivalData?['rewards'] as Map<String, dynamic>? ?? {};
+    final first = _cleanReward(rewards['first']?.toString() ?? 'Grand Winner Trophy & Golden Certificate');
+    final second = _cleanReward(rewards['second']?.toString() ?? 'Silver Shield & Runner-up Certificate');
+    final third = _cleanReward(rewards['third']?.toString() ?? 'Bronze Medal & Excellence Certificate');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.workspace_premium_rounded, color: Color(0xFFFF7700), size: 22),
+            const SizedBox(width: 8),
+            Text(
+              'Honors & Certificates',
+              style: GoogleFonts.outfit(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF2E2A36),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Official recognition & certified awards for participating mandals.',
+          style: GoogleFonts.outfit(
+            fontSize: 12.5,
+            color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildRewardRow("🏆 1st Winner", first, const Color(0xFFFFA000)),
+        _buildRewardRow("🥈 2nd Runner-up", second, const Color(0xFF78909C)),
+        _buildRewardRow("🥉 3rd Place", third, const Color(0xFF8D6E63)),
+        _buildRewardRow("📜 All Mandals", "Official Digital Certificate of Participation", const Color(0xFF2E7D32)),
+      ],
+    );
+  }
+
+  String _cleanReward(String text) {
+    // Strip any cash or rupee amounts like ₹1,50,000 or Rs. 1000
+    final cleaned = text.replaceAll(RegExp(r'(?:₹|Rs\.?)\s*[\d,]+\s*'), '').trim();
+    return cleaned.isNotEmpty ? cleaned : text;
+  }
+
+  Widget _buildRewardRow(String title, String desc, Color badgeColor) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFEFE6DB)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: badgeColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              title,
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: badgeColor,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              desc,
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF2E2A36),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRegisterButton() {
+    // 1. If user already has a registration
+    if (_myRegistration != null) {
+      final regStatus = (_myRegistration!['status'] ?? 'Pending').toString().toLowerCase();
+      final mandalName = (_myRegistration!['mandalName'] ?? 'Your Mandal').toString();
+      final logo = _myRegistration!['logo']?.toString();
+      final cover = _myRegistration!['cover']?.toString();
+
+      if (regStatus == 'approved') {
+        return SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF7700),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              elevation: 0,
+            ),
+            icon: const Icon(Icons.verified_rounded, size: 20),
+            label: Text(
+              'Go to Mandal Profile',
+              style: GoogleFonts.outfit(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => MandalProfileScreen(
+                    mandalName: mandalName,
+                    isOwnProfile: true,
+                    avatarUrl: logo,
+                    coverUrl: cover,
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      } else if (regStatus == 'rejected') {
+        return SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD32F2F),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              elevation: 0,
+            ),
+            icon: const Icon(Icons.error_outline_rounded, size: 20),
+            label: Text(
+              'Application Rejected • View Status',
+              style: GoogleFonts.outfit(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const MandalStatusTabContent(isStandalone: true),
+                ),
+              );
+              _loadMyRegistration();
+            },
+          ),
+        );
+      } else {
+        // Pending approval!
+        return SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFE67E22),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              elevation: 0,
+            ),
+            icon: const Icon(Icons.hourglass_top_rounded, size: 20),
+            label: Text(
+              'Application Pending Approval',
+              style: GoogleFonts.outfit(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const MandalStatusTabContent(isStandalone: true),
+                ),
+              );
+              _loadMyRegistration();
+            },
+          ),
+        );
+      }
+    }
+
+    // 2. Default registration flow when no registration exists
+    final status = _festivalData?['registrationStatus']?.toString() ??
+        UtsavService.computeRegistrationStatus(
+          _festivalData?['regStartDate']?.toString(),
+          _festivalData?['regEndDate']?.toString(),
+          'coming_soon',
+          festivalName: widget.festivalName,
+        );
+    final isOpen = status == 'open';
+    final isClosed = status == 'closed';
+
+    String btnText = 'Register Mandal';
+    if (isClosed) {
+      btnText = 'Registrations Closed';
+    } else if (!isOpen) {
+      btnText = 'Registration Starts Soon';
+    }
+
     return SizedBox(
       width: double.infinity,
       height: 52,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFFF7700),
+          backgroundColor: isOpen ? const Color(0xFFFF7700) : Colors.grey[400],
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
           elevation: 0,
         ),
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => MandalRegistrationScreen(
-                initialFestival: widget.festivalName,
-              ),
-            ),
-          );
-        },
+        onPressed: isOpen
+            ? () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => MandalRegistrationScreen(
+                      initialFestival: widget.festivalName,
+                    ),
+                  ),
+                );
+                _loadMyRegistration();
+              }
+            : null,
         child: Text(
-          'Register Mandal',
+          btnText,
           style: GoogleFonts.outfit(
             fontSize: 16,
             fontWeight: FontWeight.bold,

@@ -5,20 +5,14 @@ import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
 import '../models/yatra_model.dart';
 import '../models/journey_models.dart';
+import '../models/notification_model.dart';
 
 class ApiService {
-  // Set to true to use the live production server, false for local testing
-  static const bool isLive = false;
-
-  // Local backend IP: Active ADB Reverse USB Tunnel = 127.0.0.1, Port = 3020
-  static const String _localIp = '127.0.0.1';
-  static const int _localPort = 3020;
-  static String get baseUrl {
-    if (isLive) {
-      return 'https://api.bharatpray.com';
-    }
-    return 'http://$_localIp:$_localPort';
-  }
+  // ========================================================
+  // LIVE PRODUCTION SERVER (ACTIVE)
+  // ========================================================
+  static const bool isLive = true;
+  static const String baseUrl = 'https://api.bharatpray.com';
 
   static void _logApiCall(String method, Uri uri, {Map<String, String>? headers}) {
     final authHeader = headers?['Authorization'] ?? '';
@@ -70,7 +64,7 @@ class ApiService {
       return trimmed;
     }
 
-    // Remap any production/legacy IP host to active baseUrl
+    // Normalize port 3020 URLs (force http scheme and point to active baseUrl)
     trimmed = trimmed.replaceAll('https://api.bharatpray.com', baseUrl);
     trimmed = trimmed.replaceAll('http://api.bharatpray.com', baseUrl);
     trimmed = trimmed.replaceAll('https://localhost:3021', baseUrl);
@@ -86,11 +80,14 @@ class ApiService {
     trimmed = trimmed.replaceAll('http://192.168.29.113:3021', baseUrl);
     trimmed = trimmed.replaceAll('http://10.192.149.19:3021', baseUrl);
     trimmed = trimmed.replaceAll('http://10.192.149.19:3020', baseUrl);
-        
+
+    // Clean up any double slashes in the path
+    trimmed = trimmed.replaceAll('//uploads/', '/uploads/');
+
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       return trimmed;
     }
-    
+
     final isUploads = trimmed.contains('uploads/');
     final pathPrefix = trimmed.startsWith('/') ? '' : '/';
     return '$baseUrl${isUploads ? "" : "/uploads"}$pathPrefix$trimmed';
@@ -103,23 +100,19 @@ class ApiService {
       _logApiResponse('GET', uri, response);
       return response;
     } catch (e) {
-      if (!isLive && uri.host == '127.0.0.1') {
-        try {
-          final wifiUri = uri.replace(host: '192.168.29.163');
-          _logApiCall('GET (Wi-Fi Fallback)', wifiUri, headers: headers);
-          final res = await http.get(wifiUri, headers: headers).timeout(const Duration(seconds: 15));
-          _logApiResponse('GET (Wi-Fi Fallback)', wifiUri, res);
-          return res;
-        } catch (_) {}
-
-        try {
-          final emuUri = uri.replace(host: '10.0.2.2');
-          _logApiCall('GET (Emulator Fallback)', emuUri, headers: headers);
-          final res = await http.get(emuUri, headers: headers).timeout(const Duration(seconds: 15));
-          _logApiResponse('GET (Emulator Fallback)', emuUri, res);
-          return res;
-        } catch (_) {}
-      }
+      // Local fallbacks disabled in production (Commented out):
+      // if (!isLive) {
+      //   for (final host in ['192.168.29.73', '127.0.0.1', '10.0.2.2']) {
+      //     if (host == uri.host) continue;
+      //     try {
+      //       final fallbackUri = uri.replace(host: host);
+      //       _logApiCall('GET (Fallback $host)', fallbackUri, headers: headers);
+      //       final res = await http.get(fallbackUri, headers: headers).timeout(const Duration(seconds: 4));
+      //       _logApiResponse('GET (Fallback $host)', fallbackUri, res);
+      //       return res;
+      //     } catch (_) {}
+      //   }
+      // }
       print('[API ERROR] GET $uri | $e');
       rethrow;
     }
@@ -132,23 +125,19 @@ class ApiService {
       _logApiResponse('POST', uri, response);
       return response;
     } catch (e) {
-      if (!isLive && uri.host == '127.0.0.1') {
-        try {
-          final wifiUri = uri.replace(host: '192.168.29.163');
-          _logApiCall('POST (Wi-Fi Fallback)', wifiUri, headers: headers);
-          final res = await http.post(wifiUri, headers: headers, body: body).timeout(const Duration(seconds: 15));
-          _logApiResponse('POST (Wi-Fi Fallback)', wifiUri, res);
-          return res;
-        } catch (_) {}
-
-        try {
-          final emuUri = uri.replace(host: '10.0.2.2');
-          _logApiCall('POST (Emulator Fallback)', emuUri, headers: headers);
-          final res = await http.post(emuUri, headers: headers, body: body).timeout(const Duration(seconds: 15));
-          _logApiResponse('POST (Emulator Fallback)', emuUri, res);
-          return res;
-        } catch (_) {}
-      }
+      // Local fallbacks disabled in production (Commented out):
+      // if (!isLive) {
+      //   for (final host in ['192.168.29.73', '127.0.0.1', '10.0.2.2']) {
+      //     if (host == uri.host) continue;
+      //     try {
+      //       final fallbackUri = uri.replace(host: host);
+      //       _logApiCall('POST (Fallback $host)', fallbackUri, headers: headers);
+      //       final res = await http.post(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+      //       _logApiResponse('POST (Fallback $host)', fallbackUri, res);
+      //       return res;
+      //     } catch (_) {}
+      //   }
+      // }
       print('[API ERROR] POST $uri | $e');
       rethrow;
     }
@@ -161,23 +150,19 @@ class ApiService {
       _logApiResponse('PUT', uri, response);
       return response;
     } catch (e) {
-      if (!isLive && uri.host == '127.0.0.1') {
-        try {
-          final wifiUri = uri.replace(host: '192.168.29.163');
-          _logApiCall('PUT (Wi-Fi Fallback)', wifiUri, headers: headers);
-          final res = await http.put(wifiUri, headers: headers, body: body).timeout(const Duration(seconds: 15));
-          _logApiResponse('PUT (Wi-Fi Fallback)', wifiUri, res);
-          return res;
-        } catch (_) {}
-
-        try {
-          final emuUri = uri.replace(host: '10.0.2.2');
-          _logApiCall('PUT (Emulator Fallback)', emuUri, headers: headers);
-          final res = await http.put(emuUri, headers: headers, body: body).timeout(const Duration(seconds: 15));
-          _logApiResponse('PUT (Emulator Fallback)', emuUri, res);
-          return res;
-        } catch (_) {}
-      }
+      // Local fallbacks disabled in production (Commented out):
+      // if (!isLive) {
+      //   for (final host in ['192.168.29.73', '127.0.0.1', '10.0.2.2']) {
+      //     if (host == uri.host) continue;
+      //     try {
+      //       final fallbackUri = uri.replace(host: host);
+      //       _logApiCall('PUT (Fallback $host)', fallbackUri, headers: headers);
+      //       final res = await http.put(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+      //       _logApiResponse('PUT (Fallback $host)', fallbackUri, res);
+      //       return res;
+      //     } catch (_) {}
+      //   }
+      // }
       print('[API ERROR] PUT $uri | $e');
       rethrow;
     }
@@ -248,7 +233,7 @@ class ApiService {
 
   // POST /user/send-otp
   static Future<Map<String, dynamic>> sendOtp(String contact) async {
-    final response = await http.post(
+    final response = await _safePost(
       Uri.parse('$baseUrl/user/send-otp'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
@@ -263,7 +248,7 @@ class ApiService {
 
   // POST /user/verify-otp
   static Future<Map<String, dynamic>> verifyOtp(String contact, String otp) async {
-    final response = await http.post(
+    final response = await _safePost(
       Uri.parse('$baseUrl/user/verify-otp'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
@@ -284,7 +269,7 @@ class ApiService {
     required String name,
     required String profilePic,
   }) async {
-    final response = await http.post(
+    final response = await _safePost(
       Uri.parse('$baseUrl/user/google-auth'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
@@ -334,12 +319,9 @@ class ApiService {
 
   // GET /user/profile
   static Future<UserModel> getProfile(String token) async {
-    final response = await http.get(
+    final response = await _safeGet(
       Uri.parse('$baseUrl/user/profile'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+      headers: _jsonHeaders(token: token),
     );
     final data = _processResponse(response);
     return UserModel.fromJson(data['Data']);
@@ -349,24 +331,99 @@ class ApiService {
   static Future<Map<String, dynamic>> getDarshanHome(String token) async {
     final response = await _safeGet(
       Uri.parse('$baseUrl/user/darshan/home'),
+      headers: _jsonHeaders(token: token),
+    );
+    return _processResponse(response)['Data'];
+  }
+
+  // GET /user/notifications
+  static Future<Map<String, dynamic>> getNotifications(
+    String token, {
+    int page = 1,
+    int limit = 20,
+    String category = 'All',
+    bool unreadOnly = false,
+  }) async {
+    final queryParams = <String, String>{
+      'page': page.toString(),
+      'limit': limit.toString(),
+    };
+    if (category.isNotEmpty && category.toLowerCase() != 'all') {
+      queryParams['category'] = category.toLowerCase();
+    }
+    if (unreadOnly) {
+      queryParams['unread'] = 'true';
+    }
+
+    final uri = Uri.parse('$baseUrl/user/notifications').replace(queryParameters: queryParams);
+    final response = await _safeGet(
+      uri,
+      headers: _jsonHeaders(token: token),
+    );
+    return _processResponse(response)['Data'] ?? {};
+  }
+
+  // POST /user/notifications/mark-read
+  static Future<Map<String, dynamic>> markNotificationAsRead(
+    String token, {
+    String? notificationId,
+    bool markAll = false,
+  }) async {
+    final body = <String, dynamic>{};
+    if (markAll) {
+      body['mark_all'] = true;
+    } else if (notificationId != null) {
+      body['notification_id'] = notificationId;
+    }
+
+    final response = await _safePost(
+      Uri.parse('$baseUrl/user/notifications/mark-read'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
+      body: jsonEncode(body),
     );
-    return _processResponse(response)['Data'];
+    return _processResponse(response)['Data'] ?? {};
+  }
+
+  // POST /user/notifications/clear
+  static Future<bool> clearNotification(
+    String token, {
+    String? notificationId,
+    bool clearAll = false,
+  }) async {
+    final body = <String, dynamic>{};
+    if (clearAll) {
+      body['clear_all'] = true;
+    } else if (notificationId != null) {
+      body['notification_id'] = notificationId;
+    }
+
+    final response = await _safePost(
+      Uri.parse('$baseUrl/user/notifications/clear'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode(body),
+    );
+    final data = _processResponse(response);
+    return data['IsSuccess'] == true;
   }
 
   // GET /user/jap/list
   static Future<List<dynamic>> getJapList(String token) async {
     final response = await _safeGet(
       Uri.parse('$baseUrl/user/jap/list'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+      headers: _jsonHeaders(token: token),
     );
-    return _processResponse(response)['Data'];
+    final processed = _processResponse(response);
+    final data = processed['Data'];
+    if (data is List) {
+      return data;
+    }
+    return [];
   }
 
   // POST /user/jap/sync-progress
@@ -751,6 +808,22 @@ class ApiService {
       }
       // The backend must return a direct, network-accessible URL.
       return streamUrl;
+    });
+  }
+
+  // POST /api/bhajan/:bhajanId/play
+  static Future<Map<String, dynamic>> recordBhajanPlay(String bhajanId, {String token = ''}) async {
+    return _runBhajanApi('POST /api/bhajan/:bhajanId/play', () async {
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+      final response = await _safePost(
+        Uri.parse('$baseUrl/api/bhajan/$bhajanId/play'),
+        headers: headers,
+        body: jsonEncode({}),
+      );
+      return _processResponse(response)['Data'] ?? {};
     });
   }
 
@@ -2577,7 +2650,7 @@ class ApiService {
   }
 
   // GET /user/yatra-group/my-groups
-  static Future<Map<String, dynamic>> getMyYatraGroups(String token) async {
+  static Future<dynamic> getMyYatraGroups(String token) async {
     try {
       final response = await _safeGet(
         Uri.parse('$baseUrl/user/yatra-group/my-groups'),

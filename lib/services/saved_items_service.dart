@@ -193,6 +193,9 @@ class SavedItemsService {
         'avatarUrl': avatarUrl,
         'title': reel['title'] ?? 'Reel',
         'likes': reel['likes'] ?? '1.2K',
+        'thumbnailUrl': reel['thumbnailUrl'] ?? reel['image'] ?? 'assets/images/ram_bhajan.png',
+        'videoUrl': reel['videoUrl'] ?? '',
+        'audioTrack': reel['audioTrack'] ?? 'Original Mandal Audio • Sacred Chants',
         'savedAt': DateTime.now().toIso8601String(),
       });
       isNowSaved = true;

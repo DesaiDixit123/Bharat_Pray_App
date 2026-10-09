@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
+
+import '../../services/api_service.dart';
+import '../../services/yatra_personal_chat_service.dart';
+import 'notification_screen.dart';
+import 'messages_screen.dart';
 
 // Top-level constant — avoids static-inside-State issues
 const _audioPickerChannel = MethodChannel('com.bharatpray/audio_picker');
@@ -36,32 +43,86 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
   // Guard flag — prevents setState after widget is disposed
   bool _isActive = true;
 
-  // God categories (from backend — mocked here for UI)
-  final List<Map<String, String>> _categories = [
-    {'id': '1', 'name': '🕉️ Lord Shiva'},
-    {'id': '2', 'name': '🦚 Lord Krishna'},
-    {'id': '3', 'name': '🐘 Lord Ganesha'},
-    {'id': '4', 'name': '🐒 Lord Hanuman'},
-    {'id': '5', 'name': '🔱 Maa Durga'},
-    {'id': '6', 'name': '🌸 Maa Lakshmi'},
-    {'id': '7', 'name': '🌊 Lord Vishnu'},
-    {'id': '8', 'name': '☀️ Lord Ram'},
-  ];
+  // God categories (loaded dynamically from backend API)
+  List<Map<String, String>> _categories = [];
 
-  // Particle effect options
+  // 10 Chant effect options matching reference styles
   final List<Map<String, String>> _particleEffects = [
-    {'value': 'auto',    'label': '✨ Auto (Deity Default)'},
-    {'value': 'petal',   'label': '🌸 Flower Petals'},
-    {'value': 'leaf',    'label': '🍃 Bilva Leaves (Shiva)'},
-    {'value': 'feather', 'label': '🪶 Peacock Feathers (Krishna)'},
-    {'value': 'spark',   'label': '🔥 Sindoor & Fire Sparks (Hanuman/Durga)'},
-    {'value': 'ash',     'label': '✨ Sacred Ash (Mahadev)'},
+    {'value': 'auto',       'label': '✨ Auto (Deity Default)'},
+    {'value': 'ram',        'label': '🏹 1. Shri Ram - Golden Ram Burst'},
+    {'value': 'om',         'label': '🌿 2. Om - Green Leaf Effect'},
+    {'value': 'radhe',      'label': '🦚 3. Radhe Krishna - Blue Glow Effect'},
+    {'value': 'hanuman',    'label': '🚩 4. Hanuman - Red Flame Effect'},
+    {'value': 'shiva',      'label': '🔱 5. Shiva - Purple Cosmic Effect'},
+    {'value': 'durga',      'label': '🌺 6. Maa Durga - Flower Petals Effect'},
+    {'value': 'sai',        'label': '🕊️ 7. Sai Baba - White Light Effect'},
+    {'value': 'gayatri',    'label': '📜 8. Gayatri Mantra - Sanskrit Text Effect'},
+    {'value': 'navkar',     'label': '🪷 9. Navkar Mantra - Golden Particles Effect'},
+    {'value': 'meditation', 'label': '🧘 10. Meditation - Calm Wave Effect'},
   ];
 
   @override
   void initState() {
     super.initState();
+    _messageCount = YatraPersonalChatService().unreadMessageCount.value;
+    YatraPersonalChatService().unreadMessageCount.addListener(_onUnreadMessagesChanged);
+    YatraPersonalChatService().refreshUnreadCount();
     _retrieveLostData();
+    _fetchGodCategories();
+  }
+
+  void _onUnreadMessagesChanged() {
+    if (mounted) {
+      setState(() {
+        _messageCount = YatraPersonalChatService().unreadMessageCount.value;
+      });
+    }
+  }
+
+  Future<void> _fetchGodCategories() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
+
+      List<dynamic> rawList = [];
+      try {
+        rawList = await ApiService.getBhajanGodCategories(token);
+      } catch (e) {
+        debugPrint('[UploadGodPhoto] getBhajanGodCategories error: $e');
+      }
+
+      if (rawList.isEmpty) {
+        try {
+          rawList = await ApiService.getGodCategories(token);
+        } catch (e) {
+          debugPrint('[UploadGodPhoto] getGodCategories error: $e');
+        }
+      }
+
+      if (rawList.isNotEmpty) {
+        final List<Map<String, String>> parsed = [];
+        for (final item in rawList) {
+          if (item is Map) {
+            final id = (item['_id'] ?? item['id'] ?? '').toString();
+            final name = (item['name'] ?? item['title'] ?? item['categoryName'] ?? '').toString().trim();
+            if (id.isNotEmpty && name.isNotEmpty) {
+              parsed.add({
+                'id': id,
+                'name': name,
+              });
+            }
+          }
+        }
+
+        if (mounted && _isActive) {
+          setState(() {
+            _categories = parsed;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[UploadGodPhoto] Error fetching god categories: $e');
+    }
   }
 
   Future<void> _retrieveLostData() async {
@@ -82,6 +143,7 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
 
   @override
   void dispose() {
+    YatraPersonalChatService().unreadMessageCount.removeListener(_onUnreadMessagesChanged);
     _isActive = false;
     _nameController.dispose();
     _chantCountController.dispose();
@@ -321,48 +383,48 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
                 child: Divider(color: Color(0xFFEFE6DB), height: 1),
               ),
               Flexible(
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: options.length,
-                  separatorBuilder: (_, __) => const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
-                    child: Divider(color: Color(0xFFEFE6DB), height: 1),
-                  ),
-                  itemBuilder: (context, i) {
-                    final opt = options[i];
-                    final isSelected = selectedValue == opt['value'];
-                    return InkWell(
-                      onTap: () {
-                        Navigator.pop(context);
-                        onSelected(opt['value']!, opt['label'] ?? opt['name'] ?? '');
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                opt['label'] ?? opt['name'] ?? '',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 14,
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                  color: isSelected
-                                      ? const Color(0xFFFF7700)
-                                      : const Color(0xFF2E2A36),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: options.length,
+                    separatorBuilder: (_, __) => const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 20),
+                      child: Divider(color: Color(0xFFEFE6DB), height: 1),
+                    ),
+                    itemBuilder: (context, i) {
+                      final opt = options[i];
+                      final isSelected = selectedValue == opt['value'];
+                      return InkWell(
+                        onTap: () {
+                          Navigator.pop(context);
+                          onSelected(opt['value']!, opt['label'] ?? opt['name'] ?? '');
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  opt['label'] ?? opt['name'] ?? '',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 15,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                    color: isSelected
+                                        ? const Color(0xFFFF7700)
+                                        : const Color(0xFF2E2A36),
+                                  ),
                                 ),
                               ),
-                            ),
-                            if (isSelected)
-                              const Icon(Icons.check_circle_rounded,
-                                  color: Color(0xFFFF7700), size: 20),
-                          ],
+                              if (isSelected)
+                                const Icon(Icons.check_circle_rounded,
+                                    color: Color(0xFFFF7700), size: 20),
+                            ],
+                          ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-              ),
             ],
           ),
         );
@@ -471,7 +533,7 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
                       const SizedBox(height: 16),
 
                       // 4. Audio File — full width box
-                      _sectionLabel('Audio File'),
+                      _sectionLabel('Audio File (Optional)'),
                       const SizedBox(height: 8),
                       _buildAudioBox(),
                       const SizedBox(height: 16),
@@ -492,17 +554,19 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
                       const SizedBox(height: 8),
                       _buildDropdownTile(
                         hint: 'Select God Category',
-                        value: _selectedCategory != null
-                            ? _categories.firstWhere(
-                                (c) => c['id'] == _selectedCategory,
-                                orElse: () => {'name': ''},
-                              )['name']
-                            : null,
+                        value: () {
+                          if (_selectedCategory == null) return null;
+                          final match = _categories.where((c) => c['id'] == _selectedCategory);
+                          return match.isNotEmpty ? match.first['name'] : null;
+                        }(),
                         icon: Icons.account_balance_outlined,
                         onTap: () => _showDropdown(
                           title: 'Select God Category',
                           options: _categories
-                              .map((c) => {'value': c['id']!, 'label': c['name']!})
+                              .map((c) => {
+                                    'value': c['id'] ?? '',
+                                    'label': c['name'] ?? '',
+                                  })
                               .toList(),
                           selectedValue: _selectedCategory,
                           onSelected: (val, _) =>
@@ -547,6 +611,27 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
     );
   }
 
+  int _messageCount = 0;
+  int _notificationCount = 0;
+
+  String _getMailSvg(int count) {
+    final fill = count > 0 ? '#FF0000' : 'none';
+    return '''<svg width="26" height="24" viewBox="0 0 26 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M6.01417 3.9978C3.80516 3.9978 2.01416 5.7888 2.01416 7.9978V15.9978C2.01416 18.2068 3.80516 19.9978 6.01417 19.9978H18.0142C20.2232 19.9978 22.0142 18.2068 22.0142 15.9978V7.9978C22.0142 5.7888 20.2232 3.9978 18.0142 3.9978H6.01417ZM6.01417 5.9978H18.0142C19.0222 5.9978 19.8552 6.73781 19.9932 7.70781C19.0352 8.60081 17.6112 9.6968 16.6702 10.3728C14.5052 11.9278 12.6002 12.9978 12.0142 12.9978C11.4282 12.9978 9.52317 11.9288 7.35816 10.3728C6.41716 9.6968 5.49217 8.9658 4.79517 8.3728C4.49817 8.1198 4.27816 7.9158 4.10816 7.7478C4.24616 6.7778 5.00616 5.9978 6.01417 5.9978ZM4.02417 10.3518C6.56218 12.4048 10.2812 14.9858 12.0142 14.9978C13.1432 15.0058 15.0742 13.9278 17.0442 12.5668C18.0632 11.8618 19.1972 11.0248 20.0152 10.3378L20.0142 15.9978C20.0142 17.1028 19.1192 17.9978 18.0142 17.9978H6.01417C4.90916 17.9978 4.01416 17.1028 4.01416 15.9978L4.02417 10.3518Z" fill="#6B4226"/>
+<circle cx="22" cy="4.5" r="4" fill="$fill"/>
+</svg>''';
+  }
+
+  String _getBellSvg(int count) {
+    final fill = count > 0 ? '#FF0000' : 'none';
+    return '''<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 6.43994V9.76994" stroke="#6B4226" stroke-width="1.5" stroke-miterlimit="10" stroke-linecap="round"/>
+<path d="M12.02 2C8.34002 2 5.36002 4.98 5.36002 8.66V10.76C5.36002 11.44 5.08002 12.46 4.73002 13.04L3.46002 15.16C2.68002 16.47 3.22002 17.93 4.66002 18.41C9.44002 20 14.61 20 19.39 18.41C20.74 17.96 21.32 16.38 20.59 15.16L19.32 13.04C18.97 12.46 18.69 11.43 18.69 10.76V8.66C18.68 5 15.68 2 12.02 2Z" stroke="#6B4226" stroke-width="1.5" stroke-miterlimit="10" stroke-linecap="round"/>
+<path d="M15.33 18.8199C15.33 20.6499 13.83 22.1499 12 22.1499C11.09 22.1499 10.25 21.7699 9.65004 21.1699C9.05004 20.5699 8.67004 19.7299 8.67004 18.8199" stroke="#6B4226" stroke-width="1.5" stroke-miterlimit="10"/>
+<circle cx="18" cy="4.5" r="4" fill="$fill"/>
+</svg>''';
+  }
+
   // ─── Header ───────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     return Padding(
@@ -555,30 +640,34 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
         children: [
           // Back button
           GestureDetector(
-            onTap: () => Navigator.pop(context),
+            onTap: () {
+              if (Navigator.canPop(context)) {
+                Navigator.pop(context);
+              }
+            },
             child: Container(
-              width: 38,
-              height: 38,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: Colors.white,
                 shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFFEFE6DB)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+                border: Border.all(
+                  color: const Color(0xFFC8A882),
+                  width: 1.0,
+                ),
               ),
-              child: const Icon(
-                Icons.arrow_back_ios_new_rounded,
-                size: 16,
-                color: Color(0xFF2E2A36),
+              child: Center(
+                child: SvgPicture.string(
+                  '''<svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M2.87301 8.24994L8.56917 13.9461L7.49996 14.9999L0 7.49996L7.49996 0L8.56917 1.05382L2.87301 6.74998H14.9999V8.24994H2.87301Z" fill="#C8A882"/>
+</svg>''',
+                  width: 15,
+                  height: 15,
+                ),
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           // Title
           Expanded(
             child: Text(
@@ -591,56 +680,38 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
             ),
           ),
           // Mail icon
-          _headerIconBtn(
-            icon: Icons.mail_outline_rounded,
-            hasDot: false,
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const MessagesScreen()),
+              ).then((_) {
+                YatraPersonalChatService().refreshUnreadCount();
+              });
+            },
+            child: SvgPicture.string(
+              _getMailSvg(_messageCount),
+              width: 24,
+              height: 24,
+            ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
           // Notification icon
-          _headerIconBtn(
-            icon: Icons.notifications_none_rounded,
-            hasDot: true,
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const NotificationScreen()),
+              );
+            },
+            child: SvgPicture.string(
+              _getBellSvg(_notificationCount),
+              width: 24,
+              height: 24,
+            ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _headerIconBtn({required IconData icon, bool hasDot = false}) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFFEFE6DB)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Icon(icon, size: 18, color: const Color(0xFF2E2A36)),
-        ),
-        if (hasDot)
-          Positioned(
-            top: 5,
-            right: 5,
-            child: Container(
-              width: 7,
-              height: 7,
-              decoration: const BoxDecoration(
-                color: Color(0xFFFF3B42),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-      ],
     );
   }
 
@@ -938,7 +1009,7 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'Upload Audio File',
+                    'Upload Audio File (Optional)',
                     style: GoogleFonts.outfit(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -947,7 +1018,7 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    'MP3, M4A — Max 10MB',
+                    'Optional • MP3, M4A — Max 10MB',
                     style: GoogleFonts.outfit(
                       fontSize: 11,
                       color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
@@ -1011,9 +1082,9 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            Icon(
+            const Icon(
               Icons.keyboard_arrow_down_rounded,
-              color: const Color(0xFFC8A882),
+              color: Color(0xFFC8A882),
               size: 20,
             ),
           ],

@@ -323,7 +323,7 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
                 controller: _nameController,
                 style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF2E2A36), fontWeight: FontWeight.w600),
                 decoration: InputDecoration(
-                  hintText: 'e.g. Kedarnath Yatra Pilgrims',
+                  hintText: 'e.g. Kedarnath Yatra Sangha',
                   hintStyle: GoogleFonts.outfit(color: const Color(0xFF2E2A36).withValues(alpha: 0.4), fontSize: 13),
                   prefixIcon: const Icon(Icons.group_outlined, color: Color(0xFFFF7700), size: 20),
                   filled: true,

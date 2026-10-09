@@ -183,45 +183,14 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
     }
   }
 
-  Widget _buildPlaceholderImage(String title) {
+  Widget _buildPlaceholderImage() {
     return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFFFF7A00).withValues(alpha: 0.05),
-            const Color(0xFFFF7A00).withValues(alpha: 0.15),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
+      color: const Color(0xFFF7F4EF),
       child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF7A00).withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.temple_hindu_outlined,
-                color: Color(0xFFFF7A00),
-                size: 28,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(
-                fontSize: 12,
-                color: const Color(0xFFFF7A00),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
+        child: Icon(
+          Icons.image_outlined,
+          color: const Color(0xFF2E2A36).withValues(alpha: 0.18),
+          size: 32,
         ),
       ),
     );
@@ -312,7 +281,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                       ? Image.network(
                           imagePath,
                           fit: BoxFit.cover,
-                          errorBuilder: (c, e, s) => _buildPlaceholderImage(deityName),
+                          errorBuilder: (c, e, s) => _buildPlaceholderImage(),
                           loadingBuilder: (context, child, loadingProgress) {
                             if (loadingProgress == null) return child;
                             return Center(
@@ -326,7 +295,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                             );
                           },
                         )
-                      : _buildPlaceholderImage(deityName),
+                      : _buildPlaceholderImage(),
                 ),
               ),
               // Details

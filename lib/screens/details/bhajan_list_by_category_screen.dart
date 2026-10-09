@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -234,11 +235,19 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFF6EE),
-      body: SafeArea(
-        top: true,
-        child: Column(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+        systemNavigationBarColor: Color(0xFFFFE8D6),
+        systemNavigationBarIconBrightness: Brightness.dark,
+      ),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFFE8D6),
+        body: SafeArea(
+          top: true,
+          child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
@@ -285,8 +294,9 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildHeader() {
     return SizedBox(
@@ -458,6 +468,12 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
   }
 
   void _openNowPlaying(BhajanTrackItem track, List<BhajanTrackItem> queue) {
+    if (track.id.isNotEmpty) {
+      ApiService.recordBhajanPlay(track.id, token: _token).catchError((e) {
+        print('[BHAJAN PLAY RECORD ERROR] $e');
+        return <String, dynamic>{};
+      });
+    }
     Navigator.push(
       context,
       MaterialPageRoute(

@@ -10,119 +10,8 @@ import 'mandal_status_tab_content.dart';
 import 'live_darshan_dashboard_screen.dart';
 import 'mandal_leaderboard_tab_content.dart';
 import 'mandal_profile_screen.dart';
+import '../../services/utsav_service.dart';
 
-// ─── Static fallback festival data ────────────────────────────────────────────
-
-const List<Map<String, dynamic>> _kActiveFestivals = [
-  {
-    'name': 'Ganesh Chaturthi 2026',
-    'startDate': '15 Sep 2026',
-    'endDate': '25 Sep 2026',
-    'imageUrl': 'assets/images/new_year_card.png',
-    'description': "Let's celebrate the arrival of Bappa together.",
-    'registrationStatus': 'open',
-  },
-  {
-    'name': 'Navratri 2026',
-    'startDate': '03 Oct 2026',
-    'endDate': '12 Oct 2026',
-    'imageUrl': 'assets/images/diwali_card.png',
-    'description': 'Nine nights of devotion to Maa Durga.',
-    'registrationStatus': 'open',
-  },
-];
-
-const List<Map<String, dynamic>> _kUpcomingFestivals = [
-  {
-    'name': 'Krishna Janmashtami 2026',
-    'startDate': '16 Aug 2026',
-    'endDate': '17 Aug 2026',
-    'imageUrl': 'assets/images/dhanteras_card.png',
-    'description': 'Celebrate the birth of Lord Krishna.',
-    'registrationStatus': 'open',   // ← registration open — 4 days to go
-  },
-  {
-    'name': 'Diwali 2026',
-    'startDate': '08 Nov 2026',
-    'endDate': '08 Nov 2026',
-    'imageUrl': 'assets/images/bhaiduj_card.png',
-    'description': 'Festival of lights across India.',
-    'registrationStatus': 'coming_soon',
-  },
-  {
-    'name': 'Holi 2027',
-    'startDate': '01 Mar 2027',
-    'endDate': '02 Mar 2027',
-    'imageUrl': 'assets/images/new_year_card.png',
-    'description': 'The festival of colours and joy.',
-    'registrationStatus': 'coming_soon',
-  },
-];
-
-const List<Map<String, dynamic>> _kTopMandals = [
-  {
-    'rank': '1',
-    'badge': '🏆 #1',
-    'name': 'Lalbaugcha Raja Yuva Mandal',
-    'location': 'Mumbai, Maharashtra',
-    'votes': '12.4k Devotees',
-    'imageUrl': 'assets/images/new_year_card.png',
-  },
-  {
-    'rank': '2',
-    'badge': '🏆 #2',
-    'name': 'Shree Ganesh Yuvak Mandal',
-    'location': 'Ahmedabad, Gujarat',
-    'votes': '9.8k Devotees',
-    'imageUrl': 'assets/images/diwali_card.png',
-  },
-  {
-    'rank': '3',
-    'badge': '🏆 #3',
-    'name': 'Surat Sarvajanik Garba Mandal',
-    'location': 'Surat, Gujarat',
-    'votes': '8.6k Devotees',
-    'imageUrl': 'assets/images/dhanteras_card.png',
-  },
-  {
-    'rank': '4',
-    'badge': '🏅 #4',
-    'name': 'Maa Durga Mahotsav Samiti',
-    'location': 'Vadodara, Gujarat',
-    'votes': '7.1k Devotees',
-    'imageUrl': 'assets/images/bhaiduj_card.png',
-  },
-  {
-    'rank': '5',
-    'badge': '🏅 #5',
-    'name': 'Kashi Vishwanath Bhakta Mandal',
-    'location': 'Varanasi, Uttar Pradesh',
-    'votes': '6.4k Devotees',
-    'imageUrl': 'assets/images/new_year_card.png',
-  },
-];
-
-// Cover banners for the horizontal carousel
-const List<Map<String, String>> _kCoverBanners = [
-  {
-    'title': 'Celebrate Festivals',
-    'subtitle': 'Connect. Devotion. Win.',
-    'tag': '1. Utsav',
-    'imageUrl': 'assets/images/new_year_card.png',
-  },
-  {
-    'title': 'Navratri 2026',
-    'subtitle': 'Nine nights of divine devotion.',
-    'tag': '2. Utsav',
-    'imageUrl': 'assets/images/diwali_card.png',
-  },
-  {
-    'title': 'Diwali 2026',
-    'subtitle': 'Festival of lights & prosperity.',
-    'tag': '3. Utsav',
-    'imageUrl': 'assets/images/dhanteras_card.png',
-  },
-];
 
 const String _kBackArrowSvg =
     '<svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">'
@@ -144,13 +33,21 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
   Timer? _bannerTimer;
 
   int _segment = 0;
-
   int _currentBottomTab = 0;
+  bool _hasRegisteredMandal = false;
+  Map<String, dynamic>? _myRegistration;
+
+  List<Map<String, dynamic>> _activeFestivals = [];
+  List<Map<String, dynamic>> _upcomingFestivals = [];
+  List<Map<String, dynamic>> _topMandals = [];
+  bool _isLoading = true;
 
   List<Map<String, dynamic>> get _currentList {
-    if (_segment == 0) return _kActiveFestivals;
-    if (_segment == 1) return _kUpcomingFestivals;
-    return _kTopMandals;
+    if (_segment == 0) return _activeFestivals;
+    if (_segment == 1) return _upcomingFestivals;
+    // Segment 2: Top Mandals — If no active festival, top mandals should be empty!
+    if (_activeFestivals.isEmpty) return [];
+    return _topMandals;
   }
 
   @override
@@ -158,6 +55,36 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
     super.initState();
     _bannerController = PageController(viewportFraction: 0.92);
     _startBannerTimer();
+    _loadUtsavData();
+  }
+
+  Future<void> _loadUtsavData() async {
+    try {
+      final active = await UtsavService.getFestivals(status: 'Active');
+      final upcoming = await UtsavService.getFestivals(status: 'Upcoming');
+      final mandals = await UtsavService.getMandals();
+      final myReg = await UtsavService.getMyMandalRegistration();
+      final isRegActive = await UtsavService.isRegistrationActive(myReg);
+      if (mounted) {
+        setState(() {
+          _activeFestivals = active;
+          _upcomingFestivals = upcoming;
+          _topMandals = mandals;
+          _myRegistration = myReg;
+          _hasRegisteredMandal = myReg != null && isRegActive && (myReg['mandalName']?.toString().trim().isNotEmpty ?? false);
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _activeFestivals = [];
+          _upcomingFestivals = [];
+          _topMandals = [];
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -171,12 +98,15 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
     _bannerTimer?.cancel();
     _bannerTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (mounted && _bannerController.hasClients) {
-        final next = (_bannerPage + 1) % _kCoverBanners.length;
-        _bannerController.animateToPage(
-          next,
-          duration: const Duration(milliseconds: 700),
-          curve: Curves.easeInOutCubic,
-        );
+        final total = _bannerItems.length;
+        if (total > 0) {
+          final next = (_bannerPage + 1) % total;
+          _bannerController.animateToPage(
+            next,
+            duration: const Duration(milliseconds: 700),
+            curve: Curves.easeInOutCubic,
+          );
+        }
       }
     });
   }
@@ -216,16 +146,28 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
     );
   }
   Widget _buildTabBody(BuildContext context) {
-    switch (_currentBottomTab) {
-      case 1:
-        return const LiveDarshanDashboardScreen();
-      case 2:
-        return const MandalStatusTabContent();
-      case 3:
-        return const MandalLeaderboardTabContent();
-      case 0:
-      default:
-        return _buildHomeTabBody(context);
+    if (_hasRegisteredMandal) {
+      switch (_currentBottomTab) {
+        case 1:
+          return const LiveDarshanDashboardScreen();
+        case 2:
+          return const MandalStatusTabContent();
+        case 3:
+          return const MandalLeaderboardTabContent();
+        case 0:
+        default:
+          return _buildHomeTabBody(context);
+      }
+    } else {
+      switch (_currentBottomTab) {
+        case 1:
+          return const LiveDarshanDashboardScreen();
+        case 2:
+          return const MandalLeaderboardTabContent();
+        case 0:
+        default:
+          return _buildHomeTabBody(context);
+      }
     }
   }
   Widget _buildHomeTabBody(BuildContext context) {
@@ -243,23 +185,36 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
 
         // ── Festival / Top Mandals list ──────────────────────────────────
         Expanded(
-          child: _segment == 2
-              ? ListView.builder(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 110),
-                  itemCount: _kTopMandals.length,
-                  itemBuilder: (context, index) =>
-                      _buildTopMandalCard(_kTopMandals[index]),
+          child: _isLoading
+              ? Padding(
+                  padding: EdgeInsets.only(bottom: 90.0 + MediaQuery.of(context).padding.bottom),
+                  child: const Center(
+                    child: CircularProgressIndicator(color: Color(0xFFFF7700)),
+                  ),
                 )
-              : (_currentList.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 110),
-                      itemCount: _currentList.length,
-                      itemBuilder: (context, index) =>
-                          _buildFestivalCard(_currentList[index]),
-                    )),
+              : RefreshIndicator(
+                  color: const Color(0xFFFF7700),
+                  onRefresh: _loadUtsavData,
+                  child: _segment == 2
+                      ? (_currentList.isEmpty
+                          ? _buildEmptyState()
+                          : ListView.builder(
+                              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 110),
+                              itemCount: _currentList.length,
+                              itemBuilder: (context, index) =>
+                                  _buildTopMandalCard(_currentList[index]),
+                            ))
+                      : (_currentList.isEmpty
+                          ? _buildEmptyState()
+                          : ListView.builder(
+                              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 110),
+                              itemCount: _currentList.length,
+                              itemBuilder: (context, index) =>
+                                  _buildFestivalCard(_currentList[index]),
+                            )),
+                ),
         ),
       ],
     );
@@ -269,12 +224,20 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
 
   Widget _buildHeader(BuildContext context) {
     String title = 'Utsav Vibes';
-    if (_currentBottomTab == 1) {
-      title = 'Live Darshan';
-    } else if (_currentBottomTab == 2) {
-      title = 'Registration Status';
-    } else if (_currentBottomTab == 3) {
-      title = 'Leaderboard';
+    if (_hasRegisteredMandal) {
+      if (_currentBottomTab == 1) {
+        title = 'Live Darshan';
+      } else if (_currentBottomTab == 2) {
+        title = 'Registration Status';
+      } else if (_currentBottomTab == 3) {
+        title = 'Leaderboard';
+      }
+    } else {
+      if (_currentBottomTab == 1) {
+        title = 'Live Darshan';
+      } else if (_currentBottomTab == 2) {
+        title = 'Leaderboard';
+      }
     }
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
@@ -323,28 +286,42 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
     );
   }
 
+  List<Map<String, dynamic>> get _bannerItems {
+    final list = [..._activeFestivals, ..._upcomingFestivals];
+    return list.map((f) => {
+      'title': (f['name'] ?? 'Festival').toString(),
+      'subtitle': (f['slogan'] ?? f['description'] ?? 'Connect. Devotion. Win.').toString(),
+      'tag': '${f['status'] ?? 'Active'} Utsav',
+      'imageUrl': (f['banner'] ?? f['imageUrl'] ?? 'assets/images/devotional/navratri_garba_festival.jpg').toString(),
+      'rawFestival': f,
+    }).toList();
+  }
+
   // ── Banner Carousel ─────────────────────────────────────────────────────────
 
   Widget _buildBannerCarousel() {
+    final items = _bannerItems;
+    final total = items.length;
+    if (total == 0) return const SizedBox.shrink();
     return Column(
       children: [
         SizedBox(
           height: 168,
           child: PageView.builder(
             controller: _bannerController,
-            itemCount: _kCoverBanners.length,
+            itemCount: total,
             onPageChanged: (i) {
               setState(() => _bannerPage = i);
               _startBannerTimer();
             },
-            itemBuilder: (_, i) => _buildBannerCard(_kCoverBanners[i]),
+            itemBuilder: (_, i) => _buildBannerCard(items[i % total]),
           ),
         ),
         const SizedBox(height: 10),
         // Dot indicators
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(_kCoverBanners.length, (i) {
+          children: List.generate(total, (i) {
             final active = i == _bannerPage;
             return AnimatedContainer(
               duration: const Duration(milliseconds: 300),
@@ -364,7 +341,11 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
     );
   }
 
-  Widget _buildBannerCard(Map<String, String> banner) {
+  Widget _buildBannerCard(Map<String, dynamic> banner) {
+    final title = (banner['title'] ?? '').toString();
+    final imageUrl = (banner['imageUrl'] ?? 'assets/images/new_year_card.png').toString();
+    final rawFest = banner['rawFestival'] as Map<String, dynamic>?;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6),
       child: GestureDetector(
@@ -372,9 +353,10 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
           context,
           MaterialPageRoute(
             builder: (_) => FestivalDetailScreen(
-              festivalName: banner['title']!,
-              imageUrl: banner['imageUrl']!,
+              festivalName: title,
+              imageUrl: imageUrl,
               isMandal: true,
+              festivalData: rawFest,
             ),
           ),
         ),
@@ -527,11 +509,19 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
   // ── Festival List Card — same style as bhajan _buildTrackCard ────────────────
 
   Widget _buildFestivalCard(Map<String, dynamic> festival) {
-    final name = (festival['name'] ?? '') as String;
-    final startDate = (festival['startDate'] ?? '') as String;
-    final endDate = (festival['endDate'] ?? '') as String;
-    final imageUrl = (festival['imageUrl'] ?? '') as String;
-    final regStatus = (festival['registrationStatus'] ?? 'coming_soon') as String;
+    final name = (festival['name'] ?? '').toString();
+    final startDate = (festival['formattedDate'] ?? festival['startDate'] ?? '').toString();
+    final endDate = (festival['formattedDate'] != null ? '' : (festival['endDate'] ?? '')).toString();
+    final imageUrl = (festival['banner'] ?? festival['imageUrl'] ?? 'assets/images/new_year_card.png').toString();
+    String regStatus = (festival['registrationStatus'] ?? '').toString();
+    if (regStatus.isEmpty) {
+      regStatus = UtsavService.computeRegistrationStatus(
+        festival['regStartDate']?.toString(),
+        festival['regEndDate']?.toString(),
+        festival['status'] == 'Active' ? 'open' : 'coming_soon',
+        festivalName: name,
+      );
+    }
     final isOpen = regStatus == 'open';
 
     final isClickable = _segment == 0 || isOpen;
@@ -556,30 +546,56 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: isClickable
-              ? () {
+              ? () async {
+                  // Check if this festival has user's registration
+                  final regFest = (_myRegistration?['festival'] ?? _myRegistration?['festivalName'] ?? _myRegistration?['category'])?.toString().toLowerCase() ?? '';
+                  final currFest = name.toLowerCase();
+                  final bool isRegisteredForThis = _myRegistration != null && regFest.isNotEmpty && currFest.isNotEmpty &&
+                      (currFest.contains(regFest) || regFest.contains(currFest) ||
+                       (currFest.contains('navratri') && regFest.contains('navratri')) ||
+                       (currFest.contains('diwali') && regFest.contains('diwali')));
+
+                  if (isRegisteredForThis) {
+                    final st = (_myRegistration!['status'] ?? 'Pending').toString().toLowerCase();
+                    if (st == 'pending' || st == 'rejected') {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const MandalStatusTabContent(isStandalone: true),
+                        ),
+                      );
+                      _loadUtsavData();
+                      return;
+                    }
+                  }
+
                   if (_segment == 0) {
                     // Active → Popular Reels + Posts + Search
-                    Navigator.push(
+                    await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => FestivalActivityScreen(
                           festivalName: name,
                           imageUrl: imageUrl,
+                          festivalData: festival,
                         ),
                       ),
                     );
+                    _loadUtsavData();
                   } else {
                     // Upcoming → Register flow
-                    Navigator.push(
+                    await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => FestivalDetailScreen(
                           festivalName: name,
                           imageUrl: imageUrl,
                           isMandal: true,
+                          festivalData: festival,
                         ),
                       ),
                     );
+                    _loadUtsavData();
                   }
                 }
               : null,
@@ -623,7 +639,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      _buildStatusText(regStatus),
+                      _buildStatusText(regStatus, festivalName: name),
                     ],
                   ),
                 ),
@@ -647,10 +663,12 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
 
   Widget _buildTopMandalCard(Map<String, dynamic> mandal) {
     final name = (mandal['name'] ?? 'Mandal').toString();
-    final location = (mandal['location'] ?? '').toString();
-    final votes = (mandal['votes'] ?? '').toString();
-    final badge = (mandal['badge'] ?? '🏆').toString();
-    final imageUrl = (mandal['imageUrl'] ?? 'assets/images/new_year_card.png').toString();
+    final location = (mandal['city'] ?? mandal['location'] ?? '').toString();
+    final votesVal = mandal['votes'];
+    final votes = votesVal is num ? '$votesVal Devotees' : (mandal['votes'] ?? '').toString();
+    final rankVal = mandal['rank'];
+    final badge = (mandal['badge'] ?? (rankVal != null ? '🏆 #$rankVal' : '🏆')).toString();
+    final imageUrl = (mandal['imageUrl'] ?? mandal['banner'] ?? 'assets/images/new_year_card.png').toString();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -788,9 +806,75 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
     );
   }
 
-  Widget _buildStatusText(String regStatus) {
+  Widget _buildStatusText(String regStatus, {String? festivalName}) {
+    // 1. If user has registered for this festival, show their real Mandal registration status!
+    if (_myRegistration != null) {
+      final regFest = (_myRegistration!['festival'] ?? _myRegistration!['festivalName'] ?? _myRegistration!['category'])?.toString().toLowerCase() ?? '';
+      final currFest = (festivalName ?? '').toLowerCase();
+      final bool isMatch = regFest.isNotEmpty && currFest.isNotEmpty &&
+          (currFest.contains(regFest) || regFest.contains(currFest) ||
+           (currFest.contains('navratri') && regFest.contains('navratri')) ||
+           (currFest.contains('diwali') && regFest.contains('diwali')));
+
+      if (isMatch) {
+        final st = (_myRegistration!['status'] ?? 'Pending').toString().toLowerCase();
+        if (st == 'approved') {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF27AE60)),
+              const SizedBox(width: 4),
+              Text(
+                'Mandal Approved',
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF27AE60),
+                ),
+              ),
+            ],
+          );
+        } else if (st == 'rejected') {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cancel_rounded, size: 14, color: Color(0xFFE74C3C)),
+              const SizedBox(width: 4),
+              Text(
+                'Registration Rejected',
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFFE74C3C),
+                ),
+              ),
+            ],
+          );
+        } else {
+          // Pending status
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.hourglass_top_rounded, size: 14, color: Color(0xFFE67E22)),
+              const SizedBox(width: 4),
+              Text(
+                'Verification in Progress ⏳',
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFFE67E22),
+                ),
+              ),
+            ],
+          );
+        }
+      }
+    }
+
+    // 2. Default Festival Status
     final isActive = _segment == 0;
     final isOpen = regStatus == 'open';
+    final isClosed = regStatus == 'closed';
 
     String text = 'Coming Soon';
     Color color = const Color(0xFF2E2A36).withValues(alpha: 0.45);
@@ -801,6 +885,9 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
     } else if (isOpen) {
       text = 'Registrations Open';
       color = const Color(0xFF27AE60);
+    } else if (isClosed) {
+      text = 'Registrations Closed';
+      color = const Color(0xFFE74C3C);
     }
 
     return Text(
@@ -814,24 +901,168 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.celebration_outlined,
-              color: Color(0xFFFF7700), size: 48),
-          const SizedBox(height: 16),
-          Text(
-            _segment == 0
-                ? 'No active festivals right now.'
-                : 'No upcoming festivals yet.',
-            style: GoogleFonts.outfit(
-              fontSize: 15,
-              color: const Color(0xFF2E2A36).withValues(alpha: 0.55),
+    Widget content;
+    if (_segment == 0) {
+      content = _buildActiveEmptyContent();
+    } else if (_segment == 2) {
+      content = _buildTopMandalsEmptyContent();
+    } else {
+      content = _buildUpcomingEmptyContent();
+    }
+
+    final bottomInset = 90.0 + MediaQuery.of(context).padding.bottom;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.maxHeight,
+            ),
+            child: Padding(
+              padding: EdgeInsets.only(bottom: bottomInset, left: 24.0, right: 24.0),
+              child: Center(
+                child: content,
+              ),
             ),
           ),
-        ],
-      ),
+        );
+      },
+    );
+  }
+
+  Widget _buildActiveEmptyContent() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFF7700).withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.celebration_outlined, color: Color(0xFFFF7700), size: 36),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'No Active Festivals Today',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.outfit(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF2E2A36),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Maha Navratri Garba Utsav starts on 11 Oct 2026.\nRegistrations are open now in Upcoming!',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.outfit(
+            fontSize: 13.5,
+            color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 20),
+        ElevatedButton.icon(
+          onPressed: () {
+            setState(() => _segment = 1);
+          },
+          icon: const Icon(Icons.app_registration_rounded, size: 18, color: Colors.white),
+          label: Text(
+            'View Upcoming & Register Mandal',
+            style: GoogleFonts.outfit(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFFF7700),
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUpcomingEmptyContent() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFF7700).withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.event_note_rounded, color: Color(0xFFFF7700), size: 36),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'No Upcoming Festivals',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.outfit(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF2E2A36),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'New festival schedules and registration dates will appear here soon.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.outfit(
+            fontSize: 13.5,
+            color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTopMandalsEmptyContent() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFF7700).withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.groups_rounded, color: Color(0xFFFF7700), size: 36),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'No Top Mandals Yet',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.outfit(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF2E2A36),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Top mandals will be featured when an active festival begins.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.outfit(
+            fontSize: 13.5,
+            color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
+            height: 1.4,
+          ),
+        ),
+      ],
     );
   }
 
@@ -870,18 +1101,27 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
             isActive: _currentBottomTab == 1,
             onTap: () => setState(() => _currentBottomTab = 1),
           ),
-          _buildBottomNavItem(
-            iconData: Icons.assignment_turned_in_rounded,
-            label: 'Status',
-            isActive: _currentBottomTab == 2,
-            onTap: () => setState(() => _currentBottomTab = 2),
-          ),
-          _buildBottomNavItem(
-            iconData: Icons.leaderboard_rounded,
-            label: 'Leaderboard',
-            isActive: _currentBottomTab == 3,
-            onTap: () => setState(() => _currentBottomTab = 3),
-          ),
+          if (_hasRegisteredMandal) ...[
+            _buildBottomNavItem(
+              iconData: Icons.assignment_turned_in_rounded,
+              label: 'Status',
+              isActive: _currentBottomTab == 2,
+              onTap: () => setState(() => _currentBottomTab = 2),
+            ),
+            _buildBottomNavItem(
+              iconData: Icons.leaderboard_rounded,
+              label: 'Leaderboard',
+              isActive: _currentBottomTab == 3,
+              onTap: () => setState(() => _currentBottomTab = 3),
+            ),
+          ] else ...[
+            _buildBottomNavItem(
+              iconData: Icons.leaderboard_rounded,
+              label: 'Leaderboard',
+              isActive: _currentBottomTab == 2,
+              onTap: () => setState(() => _currentBottomTab = 2),
+            ),
+          ],
         ],
       ),
     );

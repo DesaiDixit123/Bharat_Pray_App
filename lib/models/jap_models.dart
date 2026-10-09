@@ -203,17 +203,28 @@ class EffectPack {
   static const EffectPack defaultGoldPreset = defaultGold;
 
   static EffectPack resolve({required String name, String? particleShape, String? customTitle, String? customSubtitle}) {
+    final shapeKey = (particleShape ?? '').toLowerCase().trim();
     final n = name.toLowerCase();
     EffectPack base;
-    if (n.contains('shiva') || n.contains('mahadev') || n.contains('shankar')) base = shiva;
-    else if (n.contains('krishna') || n.contains('radha') || n.contains('govind')) base = krishna;
-    else if (n.contains('ganesh') || n.contains('ganpati') || n.contains('ganapati')) base = ganesha;
-    else if (n.contains('hanuman') || n.contains('bajrang') || n.contains('maruti')) base = hanuman;
-    else if (n.contains('durga') || n.contains('kali') || n.contains('shakti') || n.contains('mata')) base = durga;
-    else if (n.contains('lakshmi') || n.contains('laxmi')) base = lakshmi;
-    else if (n.contains('vishnu') || n.contains('narayan') || n.contains('hari')) base = vishnu;
-    else if (n.contains('ram') || n.contains('raghav') || n.contains('sita')) base = ram;
-    else base = defaultGold;
+    if (shapeKey.contains('ram') || (shapeKey.isEmpty || shapeKey == 'auto') && (n.contains('ram') || n.contains('raghav') || n.contains('sita'))) {
+      base = ram;
+    } else if (shapeKey.contains('radhe') || shapeKey.contains('krishna') || (shapeKey.isEmpty || shapeKey == 'auto') && (n.contains('krishna') || n.contains('radha') || n.contains('govind'))) {
+      base = krishna;
+    } else if (shapeKey.contains('hanuman') || (shapeKey.isEmpty || shapeKey == 'auto') && (n.contains('hanuman') || n.contains('bajrang') || n.contains('maruti'))) {
+      base = hanuman;
+    } else if (shapeKey.contains('shiva') || shapeKey.contains('shiv') || (shapeKey.isEmpty || shapeKey == 'auto') && (n.contains('shiva') || n.contains('mahadev') || n.contains('shankar') || n.contains('somnath'))) {
+      base = shiva;
+    } else if (shapeKey.contains('durga') || (shapeKey.isEmpty || shapeKey == 'auto') && (n.contains('durga') || n.contains('kali') || n.contains('shakti') || n.contains('mata') || n.contains('amba'))) {
+      base = durga;
+    } else if (shapeKey.contains('ganesh') || shapeKey.contains('om') || (shapeKey.isEmpty || shapeKey == 'auto') && (n.contains('ganesh') || n.contains('ganpati') || n.contains('om'))) {
+      base = ganesha;
+    } else if (n.contains('lakshmi') || n.contains('laxmi')) {
+      base = lakshmi;
+    } else if (n.contains('vishnu') || n.contains('narayan') || n.contains('hari')) {
+      base = vishnu;
+    } else {
+      base = defaultGold;
+    }
     final shape = (particleShape != null && particleShape.isNotEmpty && particleShape != 'auto')
         ? _parseShape(particleShape) : base.shape;
     final title = (customTitle != null && customTitle.trim().isNotEmpty) ? customTitle.trim() : base.blessingTitle;
@@ -232,30 +243,59 @@ class JapConfig {
   final String id; final String name; final String? godCategoryId; final String? templeId;
   final String thumbnailUrl; final String darshanImageUrl; final String shlokText;
   final String? shlokAudioUrl; final int targetCount; int progress; final EffectPack effectPack;
+  final String? particleShape;
   JapConfig({required this.id, required this.name, this.godCategoryId, this.templeId,
     required this.thumbnailUrl, required this.darshanImageUrl, required this.shlokText,
-    this.shlokAudioUrl, this.targetCount = 108, this.progress = 0, required this.effectPack});
+    this.shlokAudioUrl, this.targetCount = 108, this.progress = 0, required this.effectPack,
+    this.particleShape});
+  static String defaultDeityImage(String name) {
+    final n = name.toLowerCase();
+    if (n.contains('shiv') || n.contains('mahadev') || n.contains('shankar') || n.contains('bhole')) {
+      return 'assets/images/deity_shiva.png';
+    } else if (n.contains('krishna') || n.contains('radha') || n.contains('kanha')) {
+      return 'assets/images/deity_krishna.png';
+    } else if (n.contains('ganesh') || n.contains('ganpati') || n.contains('ganapati')) {
+      return 'assets/images/deity_ganesha.png';
+    } else if (n.contains('hanuman') || n.contains('bajrang') || n.contains('maruti')) {
+      return 'assets/images/deity_hanuman.png';
+    } else if (n.contains('ram') || n.contains('raghav') || n.contains('sita')) {
+      return 'assets/images/deity_ram.png';
+    } else if (n.contains('amba') || n.contains('durga') || n.contains('mata') || n.contains('kali')) {
+      return 'assets/images/deity_amba.png';
+    }
+    return 'assets/images/somnath_temple.png';
+  }
+
   static String _sanitizeUrl(String? url) => ApiService.resolveImageUrl(url);
   factory JapConfig.fromJson(Map<String, dynamic> json) {
     final name = json['name'] ?? '';
+    final defaultImg = defaultDeityImage(name);
+    final pShape = json['particleShape']?.toString() ?? json['particleEffect']?.toString();
     EffectPack effectPack;
     if (json['effectPack'] is Map<String, dynamic>) {
       effectPack = EffectPack.fromJson(json['effectPack'] as Map<String, dynamic>);
     } else {
-      effectPack = EffectPack.resolve(name: name, particleShape: json['particleShape'],
+      effectPack = EffectPack.resolve(name: name, particleShape: pShape,
           customTitle: json['blessingTitle'], customSubtitle: json['blessingSubtitle']);
     }
+
+    final rawThumb = _sanitizeUrl(json['thumbnail'] ?? '');
+    final rawDarshan = _sanitizeUrl(json['darshanImage'] ?? json['thumbnail'] ?? '');
+    final thumb = rawThumb.isNotEmpty ? rawThumb : defaultImg;
+    final darshan = rawDarshan.isNotEmpty ? rawDarshan : thumb;
+
     return JapConfig(
       id: json['_id'] ?? json['id'] ?? '', name: name,
       godCategoryId: json['godCategory'] is Map ? json['godCategory']['_id']?.toString() : json['godCategory']?.toString(),
       templeId: json['temple'] is Map ? json['temple']['_id']?.toString() : json['temple']?.toString(),
-      thumbnailUrl: _sanitizeUrl(json['thumbnail'] ?? ''),
-      darshanImageUrl: _sanitizeUrl(json['darshanImage'] ?? json['thumbnail'] ?? ''),
+      thumbnailUrl: thumb,
+      darshanImageUrl: darshan,
       shlokText: json['shlokText'] ?? '',
       shlokAudioUrl: _sanitizeUrl(json['shlokAudio'] ?? ''),
       targetCount: (json['targetCount'] is num) ? (json['targetCount'] as num).toInt() : 108,
       progress: (json['progress'] is num) ? (json['progress'] as num).toInt() : 0,
       effectPack: effectPack,
+      particleShape: pShape,
     );
   }
 }

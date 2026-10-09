@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/utsav_service.dart';
 import 'mandal_profile_screen.dart';
 
 class MandalLeaderboardTabContent extends StatefulWidget {
@@ -11,51 +12,120 @@ class MandalLeaderboardTabContent extends StatefulWidget {
 }
 
 class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabContent> {
-  // Demo State: 0 = Contest Ongoing (Screen 10), 1 = Contest Ended/Winners (Screen 11)
+  // State: 0 = Contest Active, 1 = Contest Ended
   int _contestState = 0;
 
   // Countdown timer values
-  int _days = 5;
-  int _hours = 12;
-  int _minutes = 45;
-  int _seconds = 30;
+  int _days = 0;
+  int _hours = 0;
+  int _minutes = 0;
+  int _seconds = 0;
   Timer? _countdownTimer;
+
+  // Dynamic Data
+  bool _isLoading = true;
+  String _festivalName = "";
+  List<Map<String, dynamic>> _rankings = [];
+  List<Map<String, dynamic>> _topThree = [];
+  String? _userMandalName;
+
+  bool _hasEndedFestival = false;
+  Map<String, dynamic>? _completedFestival;
 
   @override
   void initState() {
     super.initState();
-    _startCountdown();
+    _loadLeaderboardData();
   }
 
-  void _startCountdown() {
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+  Future<void> _loadLeaderboardData() async {
+    try {
+      final myReg = await UtsavService.getMyMandalRegistration();
+      final data = await UtsavService.getLeaderboard();
+      final allFestivals = await UtsavService.getFestivals(status: 'ALL');
+      final completedList = allFestivals
+          .where((f) => (f['status'] ?? '').toString().toLowerCase() == 'completed')
+          .toList();
+
       if (mounted) {
         setState(() {
-          if (_seconds > 0) {
-            _seconds--;
+          _userMandalName = myReg?['mandalName'];
+          if (data['festival'] != null && data['festival']['name'] != null) {
+            _festivalName = data['festival']['name'].toString();
           } else {
-            _seconds = 59;
-            if (_minutes > 0) {
-              _minutes--;
-            } else {
-              _minutes = 59;
-              if (_hours > 0) {
-                _hours--;
-              } else {
-                _hours = 23;
-                if (_days > 0) {
-                  _days--;
-                } else {
-                  // Timer expired, show winners
-                  _contestState = 1;
-                  _countdownTimer?.cancel();
-                }
-              }
-            }
+            _festivalName = "";
           }
+          final list = (data['rankings'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+          _rankings = list;
+          final top = (data['topThree'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+          _topThree = top.isNotEmpty ? top : (_rankings.take(3).toList());
+
+          _hasEndedFestival = completedList.isNotEmpty;
+          _completedFestival = completedList.isNotEmpty ? completedList.first : null;
+          if (!_hasEndedFestival) {
+            _contestState = 0;
+          }
+          _isLoading = false;
+        });
+        _updateCountdown(data['festival'] as Map<String, dynamic>?);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _updateCountdown(Map<String, dynamic>? fest) {
+    _countdownTimer?.cancel();
+    if (fest == null) {
+      if (mounted) {
+        setState(() {
+          _days = 0;
+          _hours = 0;
+          _minutes = 0;
+          _seconds = 0;
         });
       }
-    });
+      return;
+    }
+
+    final endStr = (fest['endDate'] ?? fest['date'])?.toString();
+    DateTime? endDate;
+    if (endStr != null && endStr.isNotEmpty) {
+      endDate = DateTime.tryParse(endStr);
+    }
+
+    if (endDate == null) return;
+
+    void tick() {
+      final now = DateTime.now();
+      final diff = endDate!.difference(now);
+      if (diff.isNegative) {
+        if (mounted) {
+          setState(() {
+            _days = 0;
+            _hours = 0;
+            _minutes = 0;
+            _seconds = 0;
+            _hasEndedFestival = true;
+          });
+        }
+        _countdownTimer?.cancel();
+      } else {
+        if (mounted) {
+          setState(() {
+            _days = diff.inDays;
+            _hours = diff.inHours % 24;
+            _minutes = diff.inMinutes % 60;
+            _seconds = diff.inSeconds % 60;
+          });
+        }
+      }
+    }
+
+    tick();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) => tick());
   }
 
   @override
@@ -66,30 +136,49 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = 90.0 + MediaQuery.of(context).padding.bottom;
+
+    if (_isLoading) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: bottomInset),
+        child: const Center(
+          child: CircularProgressIndicator(color: Color(0xFFFF7700)),
+        ),
+      );
+    }
+
     return Column(
       children: [
-        // ── State Selector (For Testing) ─────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-          child: Container(
-            height: 38,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFC8A882).withValues(alpha: 0.4)),
-            ),
-            child: Row(
-              children: [
-                _buildToggleTab("Contest Active", 0),
-                _buildToggleTab("Contest Ended", 1),
-              ],
+        // ── State Selector (Contest Active / Contest Ended) ──────────────────
+        // Only visible when a festival contest has actually ended!
+        if (_hasEndedFestival)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+            child: Container(
+              height: 38,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFC8A882).withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: [
+                  _buildToggleTab("Contest Active", 0),
+                  _buildToggleTab("Contest Ended", 1),
+                ],
+              ),
             ),
           ),
-        ),
 
         // ── Main Body ────────────────────────────────────────────────────────
         Expanded(
-          child: _contestState == 0 ? _buildLeaderboardView() : _buildWinnersView(),
+          child: RefreshIndicator(
+            color: const Color(0xFFFF7700),
+            onRefresh: _loadLeaderboardData,
+            child: (_hasEndedFestival && _contestState == 1)
+                ? _buildWinnersView()
+                : _buildLeaderboardView(),
+          ),
         ),
       ],
     );
@@ -120,11 +209,72 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
     );
   }
 
-  // ─── 1. Contest Active Leaderboard View (Screen 10) ────────────────────────
+  // ─── 1. Contest Active Leaderboard View ─────────────────────────────────────
 
   Widget _buildLeaderboardView() {
+    final bottomInset = 90.0 + MediaQuery.of(context).padding.bottom;
+
+    if (_rankings.isEmpty) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight,
+              ),
+              child: Padding(
+                padding: EdgeInsets.only(bottom: bottomInset, left: 28.0, right: 28.0),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 88,
+                        height: 88,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFEAD8),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: const Color(0xFFFF7700).withValues(alpha: 0.25), width: 2),
+                        ),
+                        child: const Icon(
+                          Icons.leaderboard_outlined,
+                          color: Color(0xFFFF7700),
+                          size: 44,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        "No Active Contest Right Now",
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.outfit(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF2E2A36),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        "Leaderboard rankings will be live once an active festival begins (Maha Navratri starts on 11 Oct 2026).",
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13.5,
+                          color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
+                          height: 1.45,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
     return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
+      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -137,11 +287,19 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
               color: const Color(0xFFFFF7EF),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: const Color(0xFFF7E6D7)),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF8E5A2A).withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: Column(
               children: [
                 Text(
-                  "Ganesh Chaturthi 2026",
+                  _festivalName,
+                  textAlign: TextAlign.center,
                   style: GoogleFonts.outfit(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -179,7 +337,7 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                "Rankings",
+                "Rankings (${_rankings.length})",
                 style: GoogleFonts.outfit(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
@@ -187,7 +345,7 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
                 ),
               ),
               Text(
-                "Score",
+                "Score / Votes",
                 style: GoogleFonts.outfit(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -198,12 +356,38 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
           ),
           const SizedBox(height: 10),
 
-          // Rankings List
-          _buildLeaderboardRow(1, "Shree Ganesh Yuva Mandal", "12.5K Likes • 3.2K Shares", "15.7K", isUserMandal: true),
-          _buildLeaderboardRow(2, "Krishna Yuva Mandal", "9.8K Likes • 2.1K Shares", "11.9K"),
-          _buildLeaderboardRow(3, "Jay Mataji Mandal", "6.4K Likes • 1.8K Shares", "8.2K"),
-          _buildLeaderboardRow(4, "Shiv Shakti Mandal", "4.2K Likes • 1.2K Shares", "5.4K"),
-          _buildLeaderboardRow(5, "Swaminarayan Mandal", "3.6K Likes • 950 Shares", "4.5K"),
+          // Dynamic Rankings List
+          if (_rankings.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Text(
+                  "No mandal rankings available yet.",
+                  style: GoogleFonts.outfit(color: const Color(0xFF8E5A2A)),
+                ),
+              ),
+            )
+          else
+            ...List.generate(_rankings.length, (index) {
+              final item = _rankings[index];
+              final rank = index + 1;
+              final name = (item['name'] ?? 'Mandal').toString();
+              final likes = item['likes'] ?? '${item['votes'] ?? 0}';
+              final shares = item['shares'] ?? '1.2K';
+              final subtitle = "$likes Likes • $shares Shares";
+              final score = item['votes'] != null ? '${item['votes']}' : '0';
+              final isUserMandal = _userMandalName != null &&
+                  _userMandalName!.trim().toLowerCase() == name.trim().toLowerCase();
+
+              return _buildLeaderboardRow(
+                rank,
+                name,
+                subtitle,
+                score,
+                imageUrl: item['imageUrl']?.toString(),
+                isUserMandal: isUserMandal,
+              );
+            }),
         ],
       ),
     );
@@ -254,7 +438,14 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
     );
   }
 
-  Widget _buildLeaderboardRow(int rank, String name, String subtitle, String score, {bool isUserMandal = false}) {
+  Widget _buildLeaderboardRow(
+    int rank,
+    String name,
+    String subtitle,
+    String score, {
+    String? imageUrl,
+    bool isUserMandal = false,
+  }) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -271,19 +462,26 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
           color: isUserMandal ? const Color(0xFFFFF7EF) : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isUserMandal ? const Color(0xFFFF7700).withValues(alpha: 0.3) : const Color(0xFFF3E4D6),
+            color: isUserMandal ? const Color(0xFFFF7700).withValues(alpha: 0.4) : const Color(0xFFF3E4D6),
             width: isUserMandal ? 1.5 : 1.0,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Row(
           children: [
             // Rank Number
             SizedBox(
-              width: 24,
+              width: 28,
               child: Text(
-                "$rank",
+                "#$rank",
                 style: GoogleFonts.outfit(
-                  fontSize: 15,
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: rank <= 3 ? const Color(0xFFFF7700) : const Color(0xFFB59E83),
                 ),
@@ -292,17 +490,22 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
 
             // Mandal Avatar
             Container(
-              width: 40,
-              height: 40,
+              width: 44,
+              height: 44,
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
                 color: Color(0xFFFFF1E5),
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(22),
                 child: Image.asset(
-                  'assets/images/new_year_card.png',
+                  imageUrl != null && imageUrl.isNotEmpty ? imageUrl : 'assets/images/new_year_card.png',
                   fit: BoxFit.cover,
+                  errorBuilder: (_, error, stack) => const Icon(
+                    Icons.groups_rounded,
+                    color: Color(0xFFFF7700),
+                    size: 22,
+                  ),
                 ),
               ),
             ),
@@ -313,13 +516,39 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    name,
-                    style: GoogleFonts.outfit(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF2E2A36),
-                    ),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF2E2A36),
+                          ),
+                        ),
+                      ),
+                      if (isUserMandal) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF7700),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            "YOU",
+                            style: GoogleFonts.outfit(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -339,7 +568,7 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
               style: GoogleFonts.outfit(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF2E2A36),
+                color: const Color(0xFFFF7700),
               ),
             ),
           ],
@@ -348,81 +577,270 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
     );
   }
 
-  // ─── 2. Contest Ended Winners View (Screen 11) ─────────────────────────────
+  // ─── 2. Contest Ended Winners View (Redesigned 3D Podium) ──────────────────
 
   Widget _buildWinnersView() {
+    final bottomInset = 90.0 + MediaQuery.of(context).padding.bottom;
+
+    if (!_hasEndedFestival || _topThree.isEmpty) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight,
+              ),
+              child: Padding(
+                padding: EdgeInsets.only(bottom: bottomInset, left: 28.0, right: 28.0),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 88,
+                        height: 88,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFEAD8),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: const Color(0xFFFF7700).withValues(alpha: 0.25), width: 2),
+                        ),
+                        child: const Icon(
+                          Icons.emoji_events_outlined,
+                          color: Color(0xFFFF7700),
+                          size: 44,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        "No Ended Contest Yet",
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.outfit(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF2E2A36),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        "Winner certificates and champions will be announced once an active festival concludes.",
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13.5,
+                          color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
+                          height: 1.45,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    final endedFestName = (_completedFestival?['name'] ?? _festivalName).toString();
+    final m1 = _topThree[0];
+    final m2 = _topThree.length > 1 ? _topThree[1] : null;
+    final m3 = _topThree.length > 2 ? _topThree[2] : null;
+
+    final isUserWinner = _userMandalName != null &&
+        _userMandalName!.trim().toLowerCase() == (m1['name'] ?? '').toString().trim().toLowerCase();
+
     return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
+      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            "Ganesh Chaturthi 2026 Winners",
-            style: GoogleFonts.outfit(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF2E2A36),
+          // Header Badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFEAD8),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFC8A882).withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.emoji_events_rounded, color: Color(0xFFFF7700), size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  "Official Grand Winners",
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF8E5A2A),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 36),
+          const SizedBox(height: 8),
 
-          // Podium Layout (Screen 11 style)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              // 2nd Place
-              _buildPodiumColumn(
-                rank: 2,
-                name: "Krishna Yuva\nMandal",
-                height: 100,
-                color: const Color(0xFFD5DADE),
-              ),
-              const SizedBox(width: 12),
-
-              // 1st Place (Center / Taller)
-              _buildPodiumColumn(
-                rank: 1,
-                name: "Shree Ganesh\nYuva Mandal",
-                height: 140,
-                color: const Color(0xFFFFD700),
-              ),
-              const SizedBox(width: 12),
-
-              // 3rd Place
-              _buildPodiumColumn(
-                rank: 3,
-                name: "Jay Mataji\nMandal",
-                height: 80,
-                color: const Color(0xFFE6C29E),
-              ),
-            ],
+          Text(
+            "$endedFestName\nChampions",
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF2E2A36),
+              height: 1.25,
+            ),
           ),
-          const SizedBox(height: 48),
+          const SizedBox(height: 24),
 
-          // User Mandal Winner Special Banner to Claim/View Certificate (Screen 12 navigation)
+          // ── Grand 3D Winner Podium Section ──
+          if (_topThree.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.75),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFFF0D6BE), width: 1.2),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF8E5A2A).withValues(alpha: 0.08),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  // Row of 3 Pedestals (Rank 2 - Left, Rank 1 - Center, Rank 3 - Right)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // 2nd Place (Silver)
+                      Expanded(
+                        child: _buildPodiumColumn(
+                          rank: 2,
+                          mandal: m2,
+                          height: 128,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+
+                      // 1st Place (Gold Champion)
+                      Expanded(
+                        child: _buildPodiumColumn(
+                          rank: 1,
+                          mandal: m1,
+                          height: 165,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+
+                      // 3rd Place (Bronze)
+                      Expanded(
+                        child: _buildPodiumColumn(
+                          rank: 3,
+                          mandal: m3,
+                          height: 108,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Grand Podium Stage Base Platform
+                  Container(
+                    width: double.infinity,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [
+                          Color(0xFFE8D5C4),
+                          Color(0xFFC8A882),
+                          Color(0xFFB58E62),
+                          Color(0xFFC8A882),
+                          Color(0xFFE8D5C4),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF8E5A2A).withValues(alpha: 0.25),
+                          blurRadius: 6,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+
+          // User Mandal Winner Certificate Banner (Screen 12 navigation)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFF7EF),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFFF7700).withValues(alpha: 0.3)),
+              gradient: LinearGradient(
+                colors: isUserWinner
+                    ? [const Color(0xFFFFF7EF), const Color(0xFFFFE8D6)]
+                    : [Colors.white, const Color(0xFFFFF9F2)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: isUserWinner ? const Color(0xFFFF7700) : const Color(0xFFE8D4C2),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF8E5A2A).withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: Column(
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.stars_rounded, color: Color(0xFFFF7700), size: 24),
-                    const SizedBox(width: 10),
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFFFF7700).withValues(alpha: 0.12),
+                      ),
+                      child: const Center(
+                        child: Icon(Icons.workspace_premium_rounded, color: Color(0xFFFF7700), size: 26),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        "Congratulations! Your mandal secured 1st Position.",
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF2E2A36),
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isUserWinner
+                                ? "Congratulations! You Won 1st Prize!"
+                                : "Official Winner Certificate",
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF2E2A36),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            "Verified digital certificate of honor & devotion.",
+                            style: GoogleFonts.outfit(
+                              fontSize: 11.5,
+                              color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -436,7 +854,7 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
                       backgroundColor: const Color(0xFFFF7700),
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       elevation: 0,
                     ),
@@ -444,96 +862,322 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const MandalCertificateScreen(),
+                          builder: (context) => MandalCertificateScreen(
+                            mandalName: (m1['name'] ?? 'Mandal').toString(),
+                            festivalName: endedFestName.isNotEmpty ? endedFestName : 'Festival',
+                          ),
                         ),
                       );
                     },
-                    child: Text(
-                      "View Winner Certificate",
-                      style: GoogleFonts.outfit(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.visibility_rounded, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          "View Winner Certificate",
+                          style: GoogleFonts.outfit(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ],
             ),
           ),
+          const SizedBox(height: 24),
+
+          // Remaining Leaderboard List (Rank 4, 5, etc.)
+          if (_rankings.length > 3) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                "Other Participants",
+                style: GoogleFonts.outfit(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF2E2A36),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            ...List.generate(_rankings.length - 3, (i) {
+              final idx = i + 3;
+              final item = _rankings[idx];
+              final rank = idx + 1;
+              final name = (item['name'] ?? 'Mandal').toString();
+              final likes = item['likes'] ?? '${item['votes'] ?? 0}';
+              final shares = item['shares'] ?? '1.2K';
+              final subtitle = "$likes Likes • $shares Shares";
+              final score = item['votes'] != null ? '${item['votes']}' : '0';
+              final isUserMandal = _userMandalName != null &&
+                  _userMandalName!.trim().toLowerCase() == name.trim().toLowerCase();
+
+              return _buildLeaderboardRow(
+                rank,
+                name,
+                subtitle,
+                score,
+                imageUrl: item['imageUrl']?.toString(),
+                isUserMandal: isUserMandal,
+              );
+            }),
+          ],
         ],
       ),
     );
   }
 
+  // ─── 3D Podium Column Widget ───────────────────────────────────────────────
+
   Widget _buildPodiumColumn({
     required int rank,
-    required String name,
+    required Map<String, dynamic>? mandal,
     required double height,
-    required Color color,
   }) {
+    final name = (mandal?['name'] ?? 'Mandal').toString();
+    final votes = mandal?['votes'] != null ? '${mandal!['votes']}' : '0';
+    final imageUrl = mandal?['imageUrl']?.toString();
+
+    // Theme configurations according to rank
+    late final List<Color> gradientColors;
+    late final Color borderColor;
+    late final Color shadowColor;
+    late final String rankLabel;
+    late final IconData crownIcon;
+    late final double avatarSize;
+
+    if (rank == 1) {
+      // 1st Place - Champion Gold
+      gradientColors = const [
+        Color(0xFFFFE082),
+        Color(0xFFFFCA28),
+        Color(0xFFFFA000),
+        Color(0xFFFF8F00),
+      ];
+      borderColor = const Color(0xFFFFB300);
+      shadowColor = const Color(0xFFFF8F00).withValues(alpha: 0.4);
+      rankLabel = "CHAMPION";
+      crownIcon = Icons.emoji_events_rounded;
+      avatarSize = 72;
+    } else if (rank == 2) {
+      // 2nd Place - Metallic Silver
+      gradientColors = const [
+        Color(0xFFECEFF1),
+        Color(0xFFCFD8DC),
+        Color(0xFFB0BEC5),
+        Color(0xFF90A4AE),
+      ];
+      borderColor = const Color(0xFF90A4AE);
+      shadowColor = const Color(0xFF78909C).withValues(alpha: 0.35);
+      rankLabel = "RUNNER UP";
+      crownIcon = Icons.workspace_premium_rounded;
+      avatarSize = 60;
+    } else {
+      // 3rd Place - Warm Bronze / Copper (Matches warm peach theme)
+      gradientColors = const [
+        Color(0xFFEFEBE9),
+        Color(0xFFD7CCC8),
+        Color(0xFFBCAAA4),
+        Color(0xFFA1887F),
+      ];
+      borderColor = const Color(0xFFA1887F);
+      shadowColor = const Color(0xFF8D6E63).withValues(alpha: 0.35);
+      rankLabel = "3RD PLACE";
+      crownIcon = Icons.military_tech_rounded;
+      avatarSize = 58;
+    }
+
     return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        // Avatar circle
+        // Trophy / Crown Icon for Rank 1
+        if (rank == 1)
+          Container(
+            padding: const EdgeInsets.all(5),
+            margin: const EdgeInsets.only(bottom: 4),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFFF3D0), Color(0xFFFFD54F), Color(0xFFFF8F00)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFF8F00).withValues(alpha: 0.4),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Icon(crownIcon, color: const Color(0xFF4E2C00), size: 20),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.all(4),
+            margin: const EdgeInsets.only(bottom: 4),
+            child: Icon(crownIcon, color: borderColor, size: 18),
+          ),
+
+        // Avatar circle with Glowing 3D Frame
+        GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => MandalProfileScreen(mandalName: name),
+              ),
+            );
+          },
+          child: Container(
+            width: avatarSize,
+            height: avatarSize,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: borderColor, width: rank == 1 ? 3.5 : 2.5),
+              boxShadow: [
+                BoxShadow(
+                  color: shadowColor,
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: Image.asset(
+                imageUrl != null && imageUrl.isNotEmpty ? imageUrl : 'assets/images/new_year_card.png',
+                fit: BoxFit.cover,
+                errorBuilder: (_, error, stack) => Container(
+                  color: const Color(0xFFFFF1E5),
+                  child: Icon(Icons.groups_rounded, color: borderColor, size: 24),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+
+        // Mandal Name (Fixed height so 1 or 2 lines never push podium unevenly)
         Container(
-          width: rank == 1 ? 74 : 64,
-          height: rank == 1 ? 74 : 64,
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 2.0),
+          alignment: Alignment.center,
+          child: Text(
+            name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(
+              fontSize: rank == 1 ? 12 : 11,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF2E2A36),
+              height: 1.15,
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+
+        // 3D Pedestal Body
+        Container(
+          width: double.infinity,
+          height: height,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: color, width: 3),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: gradientColors,
+            ),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(rank == 1 ? 16 : 12)),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.6),
+              width: 1.2,
+            ),
             boxShadow: [
               BoxShadow(
-                color: color.withValues(alpha: 0.25),
+                color: shadowColor,
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
             ],
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: Image.asset(
-              'assets/images/new_year_card.png',
-              fit: BoxFit.cover,
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-
-        // Rank Badge Ribbon
-        Container(
-          width: 44,
-          height: height,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-          ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              const SizedBox(height: 12),
-              Text(
-                "$rank",
-                style: GoogleFonts.outfit(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+              const SizedBox(height: 8),
+              // Medal Seal Badge with Rank Number
+              Container(
+                width: rank == 1 ? 38 : 32,
+                height: rank == 1 ? 38 : 32,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
                   color: Colors.white,
-                  shadows: [
-                    const Shadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 1))
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
                   ],
+                ),
+                child: Center(
+                  child: Text(
+                    "$rank",
+                    style: GoogleFonts.outfit(
+                      fontSize: rank == 1 ? 20 : 17,
+                      fontWeight: FontWeight.w900,
+                      color: rank == 1
+                          ? const Color(0xFFFF8F00)
+                          : (rank == 2 ? const Color(0xFF607D8B) : const Color(0xFF8D6E63)),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+
+              // Rank Tag
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  rankLabel,
+                  style: GoogleFonts.outfit(
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ),
+              const Spacer(),
+
+              // Votes counter at bottom of pedestal
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Text(
+                  "$votes Votes",
+                  style: GoogleFonts.outfit(
+                    fontSize: rank == 1 ? 11 : 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    shadows: [
+                      const Shadow(
+                        color: Colors.black38,
+                        blurRadius: 3,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
-          ),
-        ),
-        const SizedBox(height: 10),
-
-        // Mandal Name
-        Text(
-          name,
-          textAlign: TextAlign.center,
-          style: GoogleFonts.outfit(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: const Color(0xFF2E2A36),
           ),
         ),
       ],
@@ -544,7 +1188,13 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
 // ─── 3. Winner Certificate View Screen (Screen 12) ───────────────────────────
 
 class MandalCertificateScreen extends StatelessWidget {
-  const MandalCertificateScreen({super.key});
+  final String mandalName;
+  final String festivalName;
+  const MandalCertificateScreen({
+    super.key,
+    this.mandalName = 'Mandal',
+    this.festivalName = 'Utsav Mahotsav',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -663,7 +1313,7 @@ class MandalCertificateScreen extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                "Ganesh Chaturthi 2026",
+                                festivalName,
                                 style: GoogleFonts.outfit(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
@@ -683,7 +1333,7 @@ class MandalCertificateScreen extends StatelessWidget {
                               ),
                               const SizedBox(height: 12),
                               Text(
-                                "Shree Ganesh Yuva Mandal",
+                                mandalName,
                                 textAlign: TextAlign.center,
                                 style: GoogleFonts.outfit(
                                   fontSize: 19,

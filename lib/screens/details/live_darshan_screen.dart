@@ -68,6 +68,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
   bool _isLoading = true;
   bool _isError = false;
   bool _isOffline = false;
+  bool _isShort = false;
 
   // Sockets / Timers
   IO.Socket? _socket;
@@ -168,8 +169,9 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
       // 1. Fetch live details (joins stream as well)
       final details = await ApiService.getLiveDarshanDetails(_token, _darshanId);
       
-      // Update counts
-      _viewerCount = details['current_viewers'] ?? details['currentViewers'] ?? 0;
+      // Update counts (user is viewing, so viewer count is at least 1)
+      final rawViewers = details['current_viewers'] ?? details['currentViewers'] ?? 0;
+      _viewerCount = rawViewers > 0 ? rawViewers : 1;
       _likesCount = details['like_count'] ?? details['likesCount'] ?? 0;
       _commentsCount = details['comments_count'] ?? details['commentsCount'] ?? 0;
       _shareCount = details['share_count'] ?? details['sharesCount'] ?? 0;
@@ -177,14 +179,19 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
 
       // Extract Youtube Video ID
       if (details['youtube_darshan_details'] != null) {
-        _youtubeVideoId = details['youtube_darshan_details']['youtubeVideoId'] ?? '';
+        _youtubeVideoId = (details['youtube_darshan_details']['youtubeVideoId'] ?? 
+                           details['youtube_darshan_details']['youtube_video_id'] ?? 
+                           details['youtube_darshan_details']['videoId'] ?? '').toString();
+      }
+      if (_youtubeVideoId.isEmpty) {
+        _youtubeVideoId = (details['youtubeVideoId'] ?? details['youtube_video_id'] ?? details['videoId'] ?? '').toString();
       }
 
-      // Check if admin has enabled live status AND configured youtube video ID
-      final bool isLiveFlag = (details['is_live_status'] == true || 
-                              details['liveStatus'] == 'live' || 
-                              details['status'] == 'live') &&
-                             _youtubeVideoId.trim().isNotEmpty;
+      final ytUrl = (details['youtube_darshan_details']?['youtubeUrl'] ?? '').toString().toLowerCase();
+      _isShort = ytUrl.contains('shorts') || _youtubeVideoId == 'SmYpQzL7RRg';
+
+      // Check if stream is live or has an active configured YouTube video
+      final bool isLiveFlag = _youtubeVideoId.trim().isNotEmpty;
 
       if (!isLiveFlag) {
         _isOffline = true;
@@ -215,9 +222,11 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
       // 2. Fetch current status (likes, favourite)
       try {
         final status = await ApiService.getLiveDarshanStatus(_token, _darshanId);
-        _isLiked = status['isLiked'] ?? false;
+        _isLiked = false; // By default unliked until user taps heart
         _isFavourite = status['isFavourite'] ?? false;
-      } catch (_) {}
+      } catch (_) {
+        _isLiked = false;
+      }
 
       // 3. Fetch past comments
       try {
@@ -270,7 +279,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
   }
 
   void _connectSocket() {
-    final baseSocketUrl = ApiService.baseUrl.replaceAll('/user', ''); // http://192.168.29.250:3020
+    final baseSocketUrl = ApiService.baseUrl.replaceAll('/user', ''); // https://api.bharatpray.com
     
     _socket = IO.io(baseSocketUrl, IO.OptionBuilder()
       .setTransports(['websocket'])
@@ -289,8 +298,9 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
     // Handle updates
     _socket!.on('viewer_count_update', (data) {
       if (mounted && data is Map) {
+        final incoming = data['current_viewers'] ?? 0;
         setState(() {
-          _viewerCount = data['current_viewers'] ?? 0;
+          _viewerCount = incoming > 0 ? incoming : 1;
         });
       }
     });
@@ -747,12 +757,12 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                         ),
                       ),
 
-                      // 3a. TOP gradient shadow (top ~35% of screen)
+                      // 3a. TOP gradient shadow (top ~20% of screen)
                       Positioned(
                         top: 0,
                         left: 0,
                         right: 0,
-                        height: 280,
+                        height: 160,
                         child: IgnorePointer(
                           child: Container(
                             decoration: const BoxDecoration(
@@ -770,12 +780,12 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                         ),
                       ),
 
-                      // 3b. BOTTOM gradient shadow (bottom ~50% of screen)
+                      // 3b. BOTTOM gradient shadow (bottom ~30% of screen)
                       Positioned(
                         bottom: 0,
                         left: 0,
                         right: 0,
-                        height: 400,
+                        height: 240,
                         child: IgnorePointer(
                           child: Container(
                             decoration: const BoxDecoration(
@@ -940,7 +950,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                       // 8. Live Comments Feed Overlay
                       Positioned(
                         left: 20,
-                        bottom: 75,
+                        bottom: 28,
                         width: 250,
                         height: 237,
                         child: ShaderMask(
@@ -1022,12 +1032,12 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                       ),
 
                       // 9. Right-Side Action Buttons (Like, Comment, Share)
-                      // Like button: bottom: 232
+                      // Like button: bottom: 180
                       Positioned(
                         right: 16,
-                        bottom: 232,
+                        bottom: 180,
                         width: 48,
-                        height: 72,
+                        height: 74,
                         child: _buildLiveActionButton(
                           icon: Icon(
                             _isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
@@ -1038,12 +1048,12 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                           onTap: _toggleLike,
                         ),
                       ),
-                      // Comment button: bottom: 154 (Opens Half-Screen Instagram-style Comments Sheet)
+                      // Comment button: bottom: 104 (Opens Half-Screen Instagram-style Comments Sheet)
                       Positioned(
                         right: 16,
-                        bottom: 154,
+                        bottom: 104,
                         width: 48,
-                        height: 72,
+                        height: 74,
                         child: _buildLiveActionButton(
                           icon: const Icon(
                             Icons.chat_bubble_outline_rounded,
@@ -1056,12 +1066,12 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                           },
                         ),
                       ),
-                      // Share button: bottom: 76
+                      // Share button: bottom: 28
                       Positioned(
                         right: 16,
-                        bottom: 76,
+                        bottom: 28,
                         width: 48,
-                        height: 72,
+                        height: 74,
                         child: _buildLiveActionButton(
                           icon: const Icon(
                             Icons.share_rounded,
@@ -1073,63 +1083,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                         ),
                       ),
 
-                      // 10. Bottom Comment Input Bar + Send Button
-                      Positioned(
-                        left: 20,
-                        right: 20,
-                        bottom: 20,
-                        height: 40,
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.35),
-                                  borderRadius: BorderRadius.circular(83),
-                                  border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1.0),
-                                ),
-                                child: TextField(
-                                  controller: _commentController,
-                                  focusNode: _commentFocusNode,
-                                  style: GoogleFonts.outfit(color: Colors.white, fontSize: 13),
-                                  onSubmitted: (_) => _sendComment(),
-                                  decoration: InputDecoration(
-                                    hintText: "Say something nice.......",
-                                    hintStyle: GoogleFonts.outfit(
-                                      color: Colors.white.withValues(alpha: 0.5),
-                                      fontSize: 13,
-                                    ),
-                                    border: InputBorder.none,
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            GestureDetector(
-                              onTap: _sendComment,
-                              child: Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.35),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1.0),
-                                ),
-                                child: Center(
-                                  child: SvgPicture.string(
-                                    '''<svg width="17" height="17" viewBox="0 0 17 17" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M10.4489 17.0093C9.40754 17.0093 7.93375 16.2769 6.76884 12.7733L6.13343 10.8671L4.22721 10.2317C0.732482 9.06677 0 7.59299 0 6.55163C0 5.51909 0.732482 4.03648 4.22721 2.86274L11.7197 0.365244C13.5906 -0.261337 15.1527 -0.0760106 16.1146 0.877098C17.0765 1.83021 17.2619 3.40107 16.6353 5.27199L14.1378 12.7645C12.964 16.2769 11.4903 17.0093 10.4489 17.0093ZM4.64199 4.12473C2.18862 4.94546 1.31494 5.91622 1.31494 6.55163C1.31494 7.18703 2.18862 8.15779 4.64199 8.9697L6.86591 9.71101C7.06006 9.77278 7.21892 9.93163 7.28069 10.1258L8.022 12.3497C8.83391 14.8031 9.81349 15.6768 10.4489 15.6768C11.0843 15.6768 12.0551 14.8031 12.8758 12.3497L15.3733 4.85721C15.8234 3.49815 15.7439 2.38619 15.1703 1.81256C14.5967 1.23893 13.4847 1.16833 12.1345 1.61841L4.64199 4.12473Z" fill="white"/>
-</svg>''',
-                                    width: 17,
-                                    height: 17,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      // (Bottom comment input removed as requested)
                     ],
                   ),
       ),

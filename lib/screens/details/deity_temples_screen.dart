@@ -5,7 +5,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/api_service.dart';
+import '../../services/yatra_personal_chat_service.dart';
 import 'live_darshan_screen.dart';
+import 'messages_screen.dart';
 
 class DeityTemplesScreen extends StatefulWidget {
   final String deityName;
@@ -26,7 +28,7 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
   String _profilePic = '';
   String _token = '';
   int _notificationCount = 2;
-  int _messageCount = 1;
+  int _messageCount = 0;
 
   List<dynamic> _templeDarshans = [];
   bool _isLoading = true;
@@ -35,7 +37,24 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
   @override
   void initState() {
     super.initState();
+    _messageCount = YatraPersonalChatService().unreadMessageCount.value;
+    YatraPersonalChatService().unreadMessageCount.addListener(_onUnreadMessagesChanged);
+    YatraPersonalChatService().refreshUnreadCount();
     _loadProfileData();
+  }
+
+  void _onUnreadMessagesChanged() {
+    if (mounted) {
+      setState(() {
+        _messageCount = YatraPersonalChatService().unreadMessageCount.value;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    YatraPersonalChatService().unreadMessageCount.removeListener(_onUnreadMessagesChanged);
+    super.dispose();
   }
 
   Future<void> _loadProfileData() async {
@@ -64,7 +83,7 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
           _profileName = homeData['user']['name'] ?? 'User';
           _profilePic = homeData['user']['profile_pic'] ?? '';
           _notificationCount = homeData['notificationCount'] ?? 2;
-          _messageCount = homeData['messageCount'] ?? 1;
+          _messageCount = YatraPersonalChatService().unreadMessageCount.value;
         });
       }
 
@@ -235,7 +254,12 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
               width: 24,
               height: 24,
               child: GestureDetector(
-                onTap: () => _showMailNotificationSheet(context, "Messages", "You have a new message from the Somnath Temple Trust: 'The morning Aarti timings have been adjusted to 06:00 AM due to the summer season.'"),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const MessagesScreen()),
+                ).then((_) {
+                  YatraPersonalChatService().refreshUnreadCount();
+                }),
                 child: SvgPicture.string(
                   _getMailSvg(_messageCount),
                   width: 24,
@@ -275,45 +299,14 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
     return "$name's Darshan";
   }
 
-  Widget _buildPlaceholderImage(String title) {
+  Widget _buildPlaceholderImage() {
     return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFFFF7A00).withValues(alpha: 0.05),
-            const Color(0xFFFF7A00).withValues(alpha: 0.15),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
+      color: const Color(0xFFF7F4EF),
       child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF7A00).withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.temple_hindu_outlined,
-                color: Color(0xFFFF7A00),
-                size: 24,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(
-                fontSize: 11,
-                color: const Color(0xFFFF7A00),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
+        child: Icon(
+          Icons.image_outlined,
+          color: const Color(0xFF2E2A36).withValues(alpha: 0.18),
+          size: 32,
         ),
       ),
     );
@@ -722,9 +715,9 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
                     ? Image.network(
                         imagePath,
                         fit: BoxFit.cover,
-                        errorBuilder: (c, e, s) => _buildPlaceholderImage(deityName),
+                        errorBuilder: (c, e, s) => _buildPlaceholderImage(),
                       )
-                    : _buildPlaceholderImage(deityName),
+                    : _buildPlaceholderImage(),
               ),
             ),
             // Details area at the bottom

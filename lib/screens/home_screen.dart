@@ -20,6 +20,10 @@ import 'prayer_detail_screen.dart';
 import '../models/prayer.dart';
 import '../services/api_service.dart';
 import '../services/yatra_group_socket_service.dart';
+import 'details/notification_screen.dart';
+import 'details/messages_screen.dart';
+import '../models/notification_model.dart';
+import '../services/yatra_personal_chat_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -38,7 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _profilePic = '';
   int _currentTab = 0;
   int _notificationCount = 2;
-  int _messageCount = 1;
+  int _messageCount = 0;
 
   final List<Map<String, String>> _heroBanners = [
     {
@@ -77,9 +81,21 @@ class _HomeScreenState extends State<HomeScreen> {
       _profileName = fullName.isNotEmpty ? fullName : 'User';
       _profilePic = pic;
     });
+    _messageCount = YatraPersonalChatService().unreadMessageCount.value;
+    YatraPersonalChatService().unreadMessageCount.addListener(_onUnreadMessagesChanged);
+    YatraPersonalChatService().refreshUnreadCount();
+
     // Fetch live dashboard data from backend
     _fetchDashboardData();
     _initYatraGroupSocket();
+  }
+
+  void _onUnreadMessagesChanged() {
+    if (mounted) {
+      setState(() {
+        _messageCount = YatraPersonalChatService().unreadMessageCount.value;
+      });
+    }
   }
 
   Future<void> _initYatraGroupSocket() async {
@@ -107,7 +123,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _profileName = homeData['user']['name'] ?? 'User';
             _profilePic = homeData['user']['profile_pic'] ?? '';
             _notificationCount = homeData['notificationCount'] ?? 2;
-            _messageCount = homeData['messageCount'] ?? 1;
+            _messageCount = YatraPersonalChatService().unreadMessageCount.value;
           });
         }
       }
@@ -264,7 +280,13 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 24,
               height: 24,
               child: GestureDetector(
-                onTap: () => _showMailNotificationSheet(context, "Messages", "You have a new message from the Somnath Temple Trust: 'The morning Aarti timings have been adjusted to 06:00 AM due to the summer season.'"),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const MessagesScreen()),
+                ).then((_) {
+                  YatraPersonalChatService().refreshUnreadCount();
+                  _fetchDashboardData();
+                }),
                 child: SvgPicture.string(
                   _getMailSvg(_messageCount),
                   width: 24,
@@ -280,7 +302,7 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 24,
               height: 24,
               child: GestureDetector(
-                onTap: () => _showMailNotificationSheet(context, "Notifications", "📿 Daily Chant Reminder: You have not completed your Jap goals for today. Tap the center bead button to start chanting."),
+                onTap: () => _showNotificationPopup(context),
                 child: SvgPicture.string(
                   _getBellSvg(_notificationCount),
                   width: 24,
@@ -310,6 +332,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    YatraPersonalChatService().unreadMessageCount.removeListener(_onUnreadMessagesChanged);
     _carouselTimer?.cancel();
     _pageController.dispose();
     super.dispose();
@@ -1582,6 +1605,296 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> _fetchNotificationsFuture() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      return await ApiService.getNotifications(token, limit: 4);
+    } catch (_) {
+      return {};
+    }
+  }
+
+  void _showNotificationPopup(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          return FutureBuilder<Map<String, dynamic>>(
+            future: _fetchNotificationsFuture(),
+            builder: (context, snapshot) {
+              final isLoading = snapshot.connectionState == ConnectionState.waiting;
+              final rawList = snapshot.data?['notifications'] as List? ?? [];
+              final notifs = rawList
+                  .map((e) => AppNotification.fromJson(e as Map<String, dynamic>))
+                  .take(4)
+                  .toList();
+              final unread = snapshot.data?['unread_count'] is int
+                  ? snapshot.data!['unread_count'] as int
+                  : notifs.where((n) => !n.isRead).length;
+
+              return Container(
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFBF6EF),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                ),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                child: SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Drag Handle
+                      Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2E2A36).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Header Row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                "Notifications",
+                                style: GoogleFonts.outfit(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF2E2A36),
+                                ),
+                              ),
+                              if (unread > 0) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFF7700),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '$unread New',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              if (unread > 0)
+                                TextButton(
+                                  onPressed: () async {
+                                    final prefs = await SharedPreferences.getInstance();
+                                    final token = prefs.getString('auth_token') ?? '';
+                                    await ApiService.markNotificationAsRead(token, markAll: true);
+                                    if (mounted) {
+                                      setState(() {
+                                        _notificationCount = 0;
+                                      });
+                                    }
+                                    setSheetState(() {});
+                                  },
+                                  child: Text(
+                                    "Mark read",
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFFFF7700),
+                                    ),
+                                  ),
+                                ),
+                              IconButton(
+                                icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF2E2A36)),
+                                onPressed: () => Navigator.pop(context),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const Divider(color: Color(0xFFEFE6DB), height: 16),
+
+                      // Notification items list or loading/empty
+                      if (isLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 36.0),
+                          child: Center(
+                            child: CircularProgressIndicator(color: Color(0xFFFF7700), strokeWidth: 2.5),
+                          ),
+                        )
+                      else if (notifs.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24.0),
+                          child: Column(
+                            children: [
+                              const Icon(Icons.notifications_none_rounded, size: 36, color: Color(0xFFFF7700)),
+                              const SizedBox(height: 8),
+                              Text(
+                                "No new notifications right now 🙏",
+                                style: GoogleFonts.outfit(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF2E2A36),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: notifs.length,
+                          separatorBuilder: (context, index) => const SizedBox(height: 8),
+                          itemBuilder: (context, index) {
+                            final n = notifs[index];
+                            return InkWell(
+                              onTap: () {
+                                Navigator.pop(context);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                                ).then((_) => _fetchDashboardData());
+                              },
+                              borderRadius: BorderRadius.circular(14),
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: n.isRead ? Colors.white : const Color(0xFFFFF9EE),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: n.isRead
+                                        ? const Color(0xFFEFE6DB)
+                                        : const Color(0xFFFF7700).withValues(alpha: 0.35),
+                                  ),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: n.iconBgColor,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Icon(n.icon, size: 18, color: n.iconColor),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  n.title,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 13,
+                                                    fontWeight: n.isRead ? FontWeight.w600 : FontWeight.bold,
+                                                    color: const Color(0xFF2E2A36),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                n.timeAgo,
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 10,
+                                                  color: const Color(0xFF2E2A36).withValues(alpha: 0.45),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            n.message,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 11.5,
+                                              color: const Color(0xFF2E2A36).withValues(alpha: 0.7),
+                                              height: 1.3,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (!n.isRead) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        width: 6,
+                                        height: 6,
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFFFF7700),
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+
+                      const SizedBox(height: 16),
+
+                      // View All Button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 46,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF7700),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          onPressed: () {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                            ).then((_) => _fetchDashboardData());
+                          },
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                "View All Notifications",
+                                style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(width: 6),
+                              const Icon(Icons.arrow_forward_rounded, size: 16),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }

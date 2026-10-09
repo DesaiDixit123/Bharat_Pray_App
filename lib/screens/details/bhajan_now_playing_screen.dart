@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -37,6 +38,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
   Duration _position = Duration.zero;
   _NowPlayingView _activeView = _NowPlayingView.player;
   bool _showUpNext = false;
+  bool _hasRecordedPlay = false;
 
   Duration? _parseDuration(String? value) {
     if (value == null || !value.contains(':')) {
@@ -168,6 +170,16 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
     super.dispose();
   }
 
+  Future<void> _recordPlayOnce() async {
+    if (_hasRecordedPlay || widget.currentTrack.id.isEmpty) return;
+    _hasRecordedPlay = true;
+    try {
+      await ApiService.recordBhajanPlay(widget.currentTrack.id, token: _token);
+    } catch (e) {
+      print('[RECORD PLAY ERROR] $e');
+    }
+  }
+
   Future<void> _initAudio() async {
     if (widget.currentTrack.id.isEmpty) return;
     try {
@@ -178,7 +190,10 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
       }
 
       await _audioPlayer.setSource(UrlSource(streamUrl));
-      if (_autoplay) await _audioPlayer.resume();
+      if (_autoplay) {
+        await _audioPlayer.resume();
+        _recordPlayOnce();
+      }
     } catch (e) {
       _showMessage('Failed to load audio. ${e.toString().replaceFirst('Exception: ', '')}');
     }
@@ -187,6 +202,9 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
   Future<void> _loadTokenAndSaveHistory() async {
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('auth_token') ?? '';
+
+    // Record play count immediately
+    _recordPlayOnce();
 
     await _initAudio();
 
@@ -206,11 +224,13 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
     } else {
       if (_position >= _duration && _duration > Duration.zero) {
         await _audioPlayer.seek(Duration.zero);
+        _hasRecordedPlay = false;
       } 
       // The source is set in _initAudio. If it's null, _initAudio failed and showed a message.
       // We just need to resume. If resume fails, it's an unrecoverable player state issue.
       if (_audioPlayer.source != null) {
         await _audioPlayer.resume();
+        _recordPlayOnce();
       } else {
         // If source is null, it means _initAudio failed. Let's try again.
         await _initAudio();
@@ -318,24 +338,33 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFF6EE),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
-              child: _buildHeader(),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
-              child: _buildViewToggle(),
-            ),
-            Expanded(
-              child: _activeView == _NowPlayingView.player ? _buildPlayerView() : _buildLyricsView(),
-            ),
-            if (_activeView == _NowPlayingView.lyrics) _buildLyricsMiniPlayer(),
-          ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+        systemNavigationBarColor: Color(0xFFFFE8D6),
+        systemNavigationBarIconBrightness: Brightness.dark,
+      ),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFFE8D6),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+                child: _buildHeader(),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
+                child: _buildViewToggle(),
+              ),
+              Expanded(
+                child: _activeView == _NowPlayingView.player ? _buildPlayerView() : _buildLyricsView(),
+              ),
+              if (_activeView == _NowPlayingView.lyrics) _buildLyricsMiniPlayer(),
+            ],
+          ),
         ),
       ),
     );
@@ -746,7 +775,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
             borderRadius: BorderRadius.circular(16),
             gradient: LinearGradient(
               colors: [
-                const Color(0xFFFFF6EE).withValues(alpha: 0),
+                const Color(0xFFFFE8D6).withValues(alpha: 0),
                 const Color(0xFFF4DDBF).withValues(alpha: 0.6),
               ],
               begin: Alignment.topCenter,

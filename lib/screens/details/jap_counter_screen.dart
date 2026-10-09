@@ -14,6 +14,10 @@ import '../../services/jap_offline_repository.dart';
 import '../../services/jap_session_controller.dart';
 import 'darshan_runtime_screen.dart';
 import 'upload_god_photo_screen.dart';
+import 'notification_screen.dart';
+import 'messages_screen.dart';
+import '../../services/yatra_personal_chat_service.dart';
+import '../../widgets/devotional_chant_overlay.dart';
 
 // ─────────────────────────────────────────────
 // Main Jap List Screen
@@ -38,17 +42,28 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
   String _profileName = 'Devotee';
   String _profilePic = '';
   int _notificationCount = 2;
-  int _messageCount = 1;
+  int _messageCount = 0;
 
   @override
   void initState() {
     super.initState();
+    _messageCount = YatraPersonalChatService().unreadMessageCount.value;
+    YatraPersonalChatService().unreadMessageCount.addListener(_onUnreadMessagesChanged);
+    YatraPersonalChatService().refreshUnreadCount();
     _fetchJaps();
+  }
+
+  void _onUnreadMessagesChanged() {
+    if (mounted) {
+      setState(() {
+        _messageCount = YatraPersonalChatService().unreadMessageCount.value;
+      });
+    }
   }
 
   Future<void> _fetchJaps() async {
     final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('auth_token') ?? '';
+    _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
 
     // Load local SharedPreferences profile cache first
     _profileName = prefs.getString('user_name') ?? 'Ayush Kyada';
@@ -62,22 +77,20 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
           _profileName = homeData['user']['name'] ?? _profileName;
           _profilePic = homeData['user']['profile_pic'] ?? _profilePic;
           _notificationCount = homeData['notificationCount'] ?? 2;
-          _messageCount = homeData['messageCount'] ?? 1;
+          _messageCount = YatraPersonalChatService().unreadMessageCount.value;
         }
       } catch (e) {
         debugPrint('[JapCounterScreen] Error fetching user profile: $e');
       }
     }
 
-    // 2. Fetch remote japs (isolated try-catch so failures don't block offline japs)
+    // 2. Fetch remote japs (always runs, backend supports guest token)
     List<JapConfig> remoteJaps = [];
-    if (_token.isNotEmpty) {
-      try {
-        final data = await ApiService.getJapList(_token);
-        remoteJaps = data.map((e) => JapConfig.fromJson(e)).toList();
-      } catch (e) {
-        debugPrint('[JapCounterScreen] Error fetching remote japs: $e');
-      }
+    try {
+      final data = await ApiService.getJapList(_token);
+      remoteJaps = data.map((e) => JapConfig.fromJson(e)).toList();
+    } catch (e) {
+      debugPrint('[JapCounterScreen] Error fetching remote japs: $e');
     }
 
     // 3. Load custom user Japs from local offline storage (always runs)
@@ -91,8 +104,11 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       debugPrint('[JapCounterScreen] Error loading local custom japs: $e');
     }
 
-    // 4. Combine and overlay local cached progress
-    final combined = [...customJaps, ...remoteJaps];
+    // 4. Combine and overlay local cached progress (prioritize remote/admin japs)
+    final combined = [
+      ...remoteJaps,
+      ...customJaps.where((c) => !remoteJaps.any((r) => r.id == c.id)),
+    ];
     try {
       for (final jap in combined) {
         final cached = await JapOfflineRepository.getProgress(
@@ -249,6 +265,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
 
   @override
   void dispose() {
+    YatraPersonalChatService().unreadMessageCount.removeListener(_onUnreadMessagesChanged);
     _searchController.dispose();
     super.dispose();
   }
@@ -300,6 +317,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
         shlokAudioUrl: result.audioFilePath,
         targetCount: result.chantCount,
         progress: 0,
+        particleShape: result.particleEffect,
         effectPack: EffectPack.resolve(
           name: result.name,
           particleShape: result.particleEffect,
@@ -314,6 +332,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
         'shlokText': newCustomConfig.shlokText,
         'shlokAudio': newCustomConfig.shlokAudioUrl,
         'targetCount': newCustomConfig.targetCount,
+        'particleShape': result.particleEffect,
         'progress': 0,
       });
 
@@ -437,11 +456,16 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                     ),
                   ),
                   GestureDetector(
-                    onTap: () => _showMailNotificationSheet(
-                      context,
-                      "Messages",
-                      "You have a new message from the Somnath Temple Trust: 'The morning Aarti timings have been adjusted to 06:00 AM due to the summer season.'",
-                    ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const MessagesScreen(),
+                        ),
+                      ).then((_) {
+                        YatraPersonalChatService().refreshUnreadCount();
+                      });
+                    },
                     child: SvgPicture.string(
                       _getMailSvg(_messageCount),
                       width: 24,
@@ -450,11 +474,14 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                   ),
                   const SizedBox(width: 12),
                   GestureDetector(
-                    onTap: () => _showMailNotificationSheet(
-                      context,
-                      "Notifications",
-                      "📿 Daily Chant Reminder: You have not completed your Jap goals for today. Tap the center bead button to start chanting.",
-                    ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const NotificationScreen(),
+                        ),
+                      );
+                    },
                     child: SvgPicture.string(
                       _getBellSvg(_notificationCount),
                       width: 24,
@@ -715,7 +742,7 @@ class _JapCard extends StatelessWidget {
               child: SizedBox(
                 width: 140,
                 height: double.infinity,
-                child: _buildImage(entry.thumbnailUrl),
+                child: _buildImage(entry.thumbnailUrl, deityName: entry.name),
               ),
             ),
 
@@ -753,7 +780,7 @@ class _JapCard extends StatelessWidget {
                     ),
                     const Spacer(),
 
-                    // Progress Bar
+                    // Progress Bar (Always Orange)
                     Row(
                       children: [
                         Expanded(
@@ -762,8 +789,8 @@ class _JapCard extends StatelessWidget {
                             child: LinearProgressIndicator(
                               value: progressRatio,
                               backgroundColor: const Color(0xFFFFF0E6),
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                entry.effectPack.primaryColor,
+                              valueColor: const AlwaysStoppedAnimation<Color>(
+                                Color(0xFFFF7700),
                               ),
                               minHeight: 6,
                             ),
@@ -775,14 +802,14 @@ class _JapCard extends StatelessWidget {
                           style: GoogleFonts.outfit(
                             fontWeight: FontWeight.bold,
                             fontSize: 11,
-                            color: entry.effectPack.primaryColor,
+                            color: const Color(0xFFFF7700),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
 
-                    // Chant CTA Button
+                    // Chant CTA Button (Always Orange)
                     Align(
                       alignment: Alignment.centerRight,
                       child: Container(
@@ -791,13 +818,20 @@ class _JapCard extends StatelessWidget {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
+                          gradient: const LinearGradient(
                             colors: [
-                              entry.effectPack.primaryColor,
-                              entry.effectPack.secondaryColor,
+                              Color(0xFFFF9933),
+                              Color(0xFFFF6600),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFF7700).withValues(alpha: 0.3),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
                         child: Text(
                           'Chant 📿',
@@ -819,31 +853,23 @@ class _JapCard extends StatelessWidget {
     );
   }
 
-  Widget _buildImage(String path) {
+  Widget _buildImage(String path, {String deityName = ''}) {
+    final fallbackAsset = JapConfig.defaultDeityImage(deityName);
     if (path.isEmpty) {
-      return Container(
-        color: const Color(0xFFFFF0E6),
-        child: const Icon(
-          Icons.image_outlined,
-          color: Color(0xFFC8A882),
-          size: 36,
-        ),
+      return Image.asset(
+        fallbackAsset,
+        fit: BoxFit.cover,
       );
     }
     if (path.startsWith('http')) {
       return Image.network(
         path,
         fit: BoxFit.cover,
-        // Downsample to thumbnail dimensions to avoid decoding full-res images into memory
         cacheWidth: 280,
         cacheHeight: 360,
-        errorBuilder: (_, _, _) => Container(
-          color: const Color(0xFFFFF0E6),
-          child: const Icon(
-            Icons.broken_image_outlined,
-            color: Color(0xFFC8A882),
-            size: 36,
-          ),
+        errorBuilder: (_, _, _) => Image.asset(
+          fallbackAsset,
+          fit: BoxFit.cover,
         ),
       );
     }
@@ -851,27 +877,26 @@ class _JapCard extends StatelessWidget {
       return Image.asset(
         path,
         fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => Container(
-          color: const Color(0xFFFFF0E6),
-          child: const Icon(
-            Icons.broken_image_outlined,
-            color: Color(0xFFC8A882),
-            size: 36,
-          ),
+        errorBuilder: (_, _, _) => Image.asset(
+          fallbackAsset,
+          fit: BoxFit.cover,
         ),
       );
     }
-    return Image.file(
-      File(path),
-      fit: BoxFit.cover,
-      errorBuilder: (_, _, _) => Container(
-        color: const Color(0xFFFFF0E6),
-        child: const Icon(
-          Icons.broken_image_outlined,
-          color: Color(0xFFC8A882),
-          size: 36,
+    final file = File(path);
+    if (file.existsSync()) {
+      return Image.file(
+        file,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Image.asset(
+          fallbackAsset,
+          fit: BoxFit.cover,
         ),
-      ),
+      );
+    }
+    return Image.asset(
+      fallbackAsset,
+      fit: BoxFit.cover,
     );
   }
 }
@@ -911,6 +936,9 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   bool _showContinueButton = false;
   double _buttonScale = 1.0;
 
+  DevotionalAnimationMode _devotionalMode = DevotionalAnimationMode.pushpanjaliPetals;
+  bool _showDevotionalOverlay = false;
+
   DateTime _lastTapTime = DateTime.fromMillisecondsSinceEpoch(0);
   static const Duration _debounceDuration = Duration(milliseconds: 80);
 
@@ -941,11 +969,11 @@ class _JapDetailScreenState extends State<JapDetailScreen>
     final rng = math.Random(widget.entry.name.hashCode ^ (malaSeed + 123));
     List<Offset> points = [];
 
-    final int cols = math.max(1, math.sqrt(_target / 1.875).round());
+    final int cols = math.max(1, math.sqrt(_target / 1.47).round());
     final int rows = (_target / cols).ceil();
 
     final double cellWidth = 353.0 / cols;
-    final double cellHeight = 650.0 / rows;
+    final double cellHeight = 520.0 / rows;
 
     for (int i = 0; i < _target; i++) {
       final col = i % cols;
@@ -954,13 +982,13 @@ class _JapDetailScreenState extends State<JapDetailScreen>
       final cellCenterX = col * cellWidth + (cellWidth / 2.0);
       final cellCenterY = row * cellHeight + (cellHeight / 2.0);
 
-      final dx = (rng.nextDouble() * (cellWidth * 0.4)) - (cellWidth * 0.2);
-      final dy = (rng.nextDouble() * (cellHeight * 0.4)) - (cellHeight * 0.2);
+      final dx = (rng.nextDouble() * (cellWidth * 0.5)) - (cellWidth * 0.25);
+      final dy = (rng.nextDouble() * (cellHeight * 0.5)) - (cellHeight * 0.25);
 
       points.add(
         Offset(
-          (cellCenterX + dx).clamp(10.0, 343.0),
-          (cellCenterY + dy).clamp(10.0, 640.0),
+          (cellCenterX + dx).clamp(25.0, 328.0),
+          (cellCenterY + dy).clamp(30.0, 490.0),
         ),
       );
     }
@@ -1017,7 +1045,121 @@ class _JapDetailScreenState extends State<JapDetailScreen>
       _lifecycle = JapLifecycle.started;
     }
 
+    final n = widget.entry.name.toLowerCase();
+    if (n.contains('ram') || n.contains('raghav') || n.contains('sita')) {
+      _devotionalMode = DevotionalAnimationMode.ramNaamVandana;
+    } else if (n.contains('radha') || n.contains('krishna') || n.contains('kanha')) {
+      _devotionalMode = DevotionalAnimationMode.radhaMorPankh108;
+    } else if (n.contains('shiva') || n.contains('mahadev') || n.contains('shankar')) {
+      _devotionalMode = DevotionalAnimationMode.dhoopSmoke;
+    } else if (n.contains('aarti') || n.contains('diya') || n.contains('temple')) {
+      _devotionalMode = DevotionalAnimationMode.mahaAartiBells;
+    } else {
+      _devotionalMode = DevotionalAnimationMode.pushpanjaliPetals;
+    }
+  }
 
+  void _openDevotionalModePicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF1E1428),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'દિવ્ય એનિમેશન સ્ટાઇલ પસંદ કરો',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 17,
+                      color: const Color(0xFFFFD54F),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ...DevotionalAnimationMode.values.map((mode) {
+                final isSelected = mode == _devotionalMode;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? const Color(0xFFFF9933).withValues(alpha: 0.18)
+                        : Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isSelected
+                          ? const Color(0xFFFF9933)
+                          : Colors.white.withValues(alpha: 0.12),
+                      width: isSelected ? 1.5 : 1.0,
+                    ),
+                  ),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                    leading: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isSelected
+                            ? const Color(0xFFFF9933)
+                            : Colors.white.withValues(alpha: 0.1),
+                      ),
+                      child: Icon(
+                        mode.icon,
+                        color: isSelected ? Colors.white : const Color(0xFFFFB74D),
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(
+                      mode.title,
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                    subtitle: Text(
+                      mode.subtitle,
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        color: Colors.white60,
+                      ),
+                    ),
+                    trailing: isSelected
+                        ? const Icon(Icons.check_circle_rounded, color: Color(0xFFFF9933), size: 22)
+                        : null,
+                    onTap: () {
+                      setState(() {
+                        _devotionalMode = mode;
+                        _showDevotionalOverlay = true;
+                      });
+                      Navigator.pop(ctx);
+                    },
+                  ),
+                );
+              }),
+              const SizedBox(height: 10),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   void _tryUnlockTap() {
@@ -1038,6 +1180,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
         _isAudioPlaying = false;
         _isRevealAnimating = false;
         _showContinueButton = false;
+        _showDevotionalOverlay = false;
         _lifecycle = JapLifecycle.started;
         _shuffledIndices = _buildShuffled(0);
         _jitteredPoints = _generateJitteredPoints(0);
@@ -1144,13 +1287,11 @@ class _JapDetailScreenState extends State<JapDetailScreen>
 
 
 
-    if (isCompleted) {
-      if (_petals.isEmpty) {
-        _initPetals();
-      }
-      for (final petal in _petals) {
-        petal.update(393, 1010);
-      }
+    if (_petals.isEmpty) {
+      _initPetals();
+    }
+    for (final petal in _petals) {
+      petal.update(393, 1010);
     }
   }
 
@@ -1158,17 +1299,23 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_imageProvider == null) {
+      final defaultAsset = JapConfig.defaultDeityImage(widget.entry.name);
       final path = widget.entry.darshanImageUrl.isNotEmpty
           ? widget.entry.darshanImageUrl
-          : widget.entry.thumbnailUrl;
+          : (widget.entry.thumbnailUrl.isNotEmpty
+              ? widget.entry.thumbnailUrl
+              : defaultAsset);
       if (path.startsWith('http')) {
         _imageProvider = NetworkImage(path);
       } else if (path.startsWith('assets/')) {
         _imageProvider = AssetImage(path);
       } else {
-        _imageProvider = FileImage(File(path));
+        final f = File(path);
+        _imageProvider = f.existsSync() ? FileImage(f) : AssetImage(defaultAsset);
       }
-      precacheImage(_imageProvider!, context);
+      try {
+        precacheImage(_imageProvider!, context);
+      } catch (_) {}
     }
   }
 
@@ -1218,381 +1365,14 @@ class _JapDetailScreenState extends State<JapDetailScreen>
       _isAudioPlaying = true;
       _buttonScale = 0.82;
       _revealingTile = tileIdx;
+      _showDevotionalOverlay = true;
 
       _count = math.min(_count + 1, _target);
       _lifecycle = _count >= _target
           ? JapLifecycle.completed
           : JapLifecycle.inProgress;
 
-      if (_count >= _target) {
-        final rng = math.Random();
-        for (int i = 0; i < 12; i++) {
-          final angle =
-              (i / 12.0) * 2 * math.pi + (rng.nextDouble() * 0.4 - 0.2);
-          final speed = rng.nextDouble() * 5.0 + 3.5;
-          final sparkColors = [
-            const Color(0xFFFFD700),
-            const Color(0xFFFF9100),
-            const Color(0xFFFFFFFF),
-            widget.entry.effectPack.primaryColor,
-          ];
-          _tapSparks.add(
-            TapSparkParticle(
-              position: revealPt,
-              vx: math.cos(angle) * speed,
-              vy: math.sin(angle) * speed,
-              maxLife: rng.nextDouble() * 0.35 + 0.35,
-              size: rng.nextDouble() * 4.0 + 3.0,
-              color: sparkColors[i % sparkColors.length],
-            ),
-          );
-        }
-
-        for (int i = 0; i < 8; i++) {
-          final startAngle = (i / 8.0) * 2 * math.pi;
-          _spiralSparks.add(
-            SpiralSparkParticle(
-              center: revealPt,
-              angle: startAngle,
-              speed:
-                  (i % 2 == 0 ? 1.0 : -1.0) * (rng.nextDouble() * 0.18 + 0.12),
-              radialSpeed: rng.nextDouble() * 2.8 + 2.2,
-              maxLife: rng.nextDouble() * 0.35 + 0.40,
-              size: rng.nextDouble() * 3.5 + 2.5,
-              color: i % 2 == 0
-                  ? const Color(0xFFFFD700)
-                  : widget.entry.effectPack.primaryColor,
-            ),
-          );
-        }
-
-        final omTexts = ['ॐ', 'राम', 'जय', 'ॐ', 'हरि', 'नमः'];
-        _floatingOms.add(
-          FloatingOmText(
-            position: revealPt,
-            maxLife: 0.65,
-            text: omTexts[(_count - 1) % omTexts.length],
-          ),
-        );
-
-        _glowRings.add(
-          GlowRing(
-            position: revealPt,
-            maxRadius: 180.0,
-            maxLife: 1.1,
-            color: widget.entry.effectPack.primaryColor,
-          ),
-        );
-      }
     });
-
-  /// Spawn god-category specific particle burst using effectPack.shape (reliable enum)
-  void spawnCategoryParticles(Offset center) {
-    final rng = math.Random();
-    final pack = widget.entry.effectPack;
-    final primary = pack.primaryColor;
-    final secondary = pack.secondaryColor;
-    final accent = pack.accentColor;
-
-    switch (pack.shape) {
-      case ParticleShapeType.flame:
-        // Shiva / fire — blue-white lightning arc sparks
-        final colors = [const Color(0xFF64B5F6), const Color(0xFFB3E5FC), primary, Colors.white];
-        for (int i = 0; i < 12; i++) {
-          final angle = (i / 12.0) * 2 * math.pi;
-          _tapSparks.add(TapSparkParticle(
-            position: center,
-            vx: math.cos(angle) * (rng.nextDouble() * 6 + 4),
-            vy: math.sin(angle) * (rng.nextDouble() * 6 + 4),
-            maxLife: rng.nextDouble() * 0.4 + 0.3,
-            size: rng.nextDouble() * 5 + 2,
-            color: colors[i % colors.length],
-          ));
-        }
-        _glowRings.add(GlowRing(position: center, maxRadius: 95, maxLife: 0.65, color: primary));
-        break;
-
-      case ParticleShapeType.feather:
-        // Ganesha / Krishna — scallop: spiral peacock sparks
-        final colors = [primary, secondary, accent, const Color(0xFF81C784)];
-        for (int i = 0; i < 10; i++) {
-          final startAngle = (i / 10.0) * 2 * math.pi;
-          _spiralSparks.add(SpiralSparkParticle(
-            center: center,
-            angle: startAngle,
-            speed: (i % 2 == 0 ? 1.2 : -1.2) * (rng.nextDouble() * 0.2 + 0.1),
-            radialSpeed: rng.nextDouble() * 3.5 + 2.5,
-            maxLife: rng.nextDouble() * 0.5 + 0.35,
-            size: rng.nextDouble() * 4.5 + 2,
-            color: colors[i % colors.length],
-          ));
-        }
-        _glowRings.add(GlowRing(position: center, maxRadius: 80, maxLife: 0.7, color: primary));
-        break;
-
-      case ParticleShapeType.spark:
-        // Hanuman / Durga — fire burst — fast outward sparks
-        final colors = [primary, secondary, accent, const Color(0xFFFFFFFF)];
-        for (int i = 0; i < 16; i++) {
-          final angle = (i / 16.0) * 2 * math.pi;
-          _tapSparks.add(TapSparkParticle(
-            position: center,
-            vx: math.cos(angle) * (rng.nextDouble() * 9 + 5),
-            vy: math.sin(angle) * (rng.nextDouble() * 9 + 5),
-            maxLife: rng.nextDouble() * 0.3 + 0.2,
-            size: rng.nextDouble() * 6 + 3,
-            color: colors[i % colors.length],
-          ));
-        }
-        // Chakra spin
-        for (int i = 0; i < 6; i++) {
-          _spiralSparks.add(SpiralSparkParticle(
-            center: center,
-            angle: (i / 6.0) * 2 * math.pi,
-            speed: (i.isEven ? 1.8 : -1.8) * (rng.nextDouble() * 0.12 + 0.08),
-            radialSpeed: rng.nextDouble() * 4 + 3,
-            maxLife: rng.nextDouble() * 0.35 + 0.3,
-            size: rng.nextDouble() * 5 + 3,
-            color: i.isEven ? primary : accent,
-          ));
-        }
-        _glowRings.add(GlowRing(position: center, maxRadius: 110, maxLife: 0.55, color: primary));
-        break;
-
-      case ParticleShapeType.leaf:
-        // Vishnu / nature — blue-gold Sudarshana chakra spin
-        final colors = [primary, secondary, accent];
-        for (int i = 0; i < 8; i++) {
-          _spiralSparks.add(SpiralSparkParticle(
-            center: center,
-            angle: (i / 8.0) * 2 * math.pi,
-            speed: (i.isEven ? 1.0 : -1.0) * (rng.nextDouble() * 0.18 + 0.1),
-            radialSpeed: rng.nextDouble() * 3.5 + 2.5,
-            maxLife: rng.nextDouble() * 0.4 + 0.35,
-            size: rng.nextDouble() * 4 + 2.5,
-            color: colors[i % colors.length],
-          ));
-        }
-        _glowRings.add(GlowRing(position: center, maxRadius: 95, maxLife: 0.65, color: primary));
-        break;
-
-      case ParticleShapeType.ash:
-        // Subtle — gentle floating sparkle shower
-        final colors = [primary, secondary, accent];
-        for (int i = 0; i < 10; i++) {
-          final angle = rng.nextDouble() * 2 * math.pi;
-          _tapSparks.add(TapSparkParticle(
-            position: center + Offset((rng.nextDouble() - 0.5) * 24, (rng.nextDouble() - 0.5) * 24),
-            vx: math.cos(angle) * (rng.nextDouble() * 3 + 1),
-            vy: math.sin(angle) * (rng.nextDouble() * 3 + 1) - 2,
-            maxLife: rng.nextDouble() * 0.6 + 0.4,
-            size: rng.nextDouble() * 5 + 3,
-            color: colors[i % colors.length],
-          ));
-        }
-        _glowRings.add(GlowRing(position: center, maxRadius: 70, maxLife: 0.75, color: primary));
-        break;
-
-      case ParticleShapeType.petal:
-      case ParticleShapeType.custom:
-        // Lakshmi / default — golden lotus bloom
-        final colors = [primary, secondary, accent, Colors.white];
-        for (int i = 0; i < 10; i++) {
-          final angle = (i / 10.0) * 2 * math.pi;
-          _tapSparks.add(TapSparkParticle(
-            position: center,
-            vx: math.cos(angle) * (rng.nextDouble() * 5 + 3),
-            vy: math.sin(angle) * (rng.nextDouble() * 5 + 3) - 1,
-            maxLife: rng.nextDouble() * 0.45 + 0.3,
-            size: rng.nextDouble() * 5 + 2,
-            color: colors[i % colors.length],
-          ));
-        }
-        _glowRings.add(GlowRing(position: center, maxRadius: 80, maxLife: 0.65, color: primary));
-        break;
-    }
-
-    // Floating God-Specific Mantra Text on every tap
-    final mantras = pack.tapMantras.isNotEmpty ? pack.tapMantras : ['ॐ', 'जय', 'हरि', 'नमः'];
-    _floatingOms.add(FloatingOmText(
-      position: center,
-      maxLife: 0.85,
-      text: mantras[_count % mantras.length],
-    ));
-
-    // Spawn Divine Symbol (Trishul, Shankh, Flute, Bow, Lotus, Chakra, ॐ)
-    _divineSymbolParticles.add(DivineSymbolParticle(
-      position: center,
-      symbol: pack.divineSymbol,
-      color: pack.primaryColor,
-      maxLife: 0.95,
-      vy: -2.0,
-    ));
-
-    // 10 Random Natural Element Effects (Leaf, Water Ripple, Yajna Fire, Rose Petals, Golden Lotus, Lightning, Star Dust, Cloud Smoke, Peacock Aura, Sunbeams)
-    final naturalEffectType = rng.nextInt(10);
-    switch (naturalEffectType) {
-      case 0:
-        // 🍃 1. Leaf Drift (Tulsi / Bilva Leaves)
-        for (int i = 0; i < 6; i++) {
-          _tapPetals.add(PetalParticle(
-            x: center.dx + (rng.nextDouble() - 0.5) * 30,
-            y: center.dy + (rng.nextDouble() - 0.5) * 30,
-            vy: rng.nextDouble() * 1.5 + 0.8,
-            angle: rng.nextDouble() * 2 * math.pi,
-            rotationSpeed: (rng.nextDouble() * 0.1) - 0.05,
-            size: rng.nextDouble() * 8 + 8,
-            windFreq: rng.nextDouble() * 2 + 1,
-            windAmp: rng.nextDouble() * 3 + 1,
-            color: const Color(0xFF4CAF50), // Bilva leaf green
-            shape: ParticleShapeType.leaf,
-          ));
-        }
-        break;
-
-      case 1:
-        // 💧 2. Water Ripple & Drop
-        for (int i = 0; i < 3; i++) {
-          _glowRings.add(GlowRing(
-            position: center,
-            maxRadius: 60.0 + (i * 35.0),
-            maxLife: 0.8 + (i * 0.2),
-            color: const Color(0xFF29B6F6), // Ganga jal blue
-          ));
-        }
-        break;
-
-      case 2:
-        // 🔥 3. Yajna Fire Embers
-        for (int i = 0; i < 8; i++) {
-          final angle = (i / 8.0) * 2 * math.pi;
-          _tapSparks.add(TapSparkParticle(
-            position: center,
-            vx: math.cos(angle) * (rng.nextDouble() * 4 + 2),
-            vy: math.sin(angle) * (rng.nextDouble() * 4 + 2) - 3,
-            maxLife: rng.nextDouble() * 0.5 + 0.3,
-            size: rng.nextDouble() * 6 + 3,
-            color: i.isEven ? const Color(0xFFFF5722) : const Color(0xFFFFC107),
-          ));
-        }
-        break;
-
-      case 3:
-        // 🌸 4. Rose Petal Shower
-        for (int i = 0; i < 6; i++) {
-          _tapPetals.add(PetalParticle(
-            x: center.dx + (rng.nextDouble() - 0.5) * 30,
-            y: center.dy + (rng.nextDouble() - 0.5) * 30,
-            vy: rng.nextDouble() * 1.6 + 0.9,
-            angle: rng.nextDouble() * 2 * math.pi,
-            rotationSpeed: (rng.nextDouble() * 0.08) - 0.04,
-            size: rng.nextDouble() * 9 + 8,
-            windFreq: rng.nextDouble() * 2 + 1,
-            windAmp: rng.nextDouble() * 2 + 1,
-            color: const Color(0xFFFF1744), // Crimson rose red
-            shape: ParticleShapeType.petal,
-          ));
-        }
-        break;
-
-      case 4:
-        // 🪷 5. Golden Lotus Bloom
-        for (int i = 0; i < 8; i++) {
-          final angle = (i / 8.0) * 2 * math.pi;
-          _tapSparks.add(TapSparkParticle(
-            position: center,
-            vx: math.cos(angle) * (rng.nextDouble() * 5 + 3),
-            vy: math.sin(angle) * (rng.nextDouble() * 5 + 3),
-            maxLife: rng.nextDouble() * 0.45 + 0.3,
-            size: rng.nextDouble() * 6 + 3,
-            color: const Color(0xFFFFD700), // Gold
-          ));
-        }
-        break;
-
-      case 5:
-        // ⚡ 6. Divine Lightning Sparks
-        for (int i = 0; i < 10; i++) {
-          final angle = (i / 10.0) * 2 * math.pi;
-          _tapSparks.add(TapSparkParticle(
-            position: center,
-            vx: math.cos(angle) * (rng.nextDouble() * 8 + 4),
-            vy: math.sin(angle) * (rng.nextDouble() * 8 + 4),
-            maxLife: rng.nextDouble() * 0.3 + 0.2,
-            size: rng.nextDouble() * 5 + 2,
-            color: i.isEven ? Colors.white : const Color(0xFF80DEEA),
-          ));
-        }
-        break;
-
-      case 6:
-        // ✨ 7. Star Dust Shower
-        for (int i = 0; i < 10; i++) {
-          final angle = rng.nextDouble() * 2 * math.pi;
-          _tapSparks.add(TapSparkParticle(
-            position: center + Offset((rng.nextDouble() - 0.5) * 30, (rng.nextDouble() - 0.5) * 30),
-            vx: math.cos(angle) * (rng.nextDouble() * 3 + 1),
-            vy: math.sin(angle) * (rng.nextDouble() * 3 + 1) - 1.5,
-            maxLife: rng.nextDouble() * 0.6 + 0.4,
-            size: rng.nextDouble() * 4 + 2,
-            color: const Color(0xFFFFE082),
-          ));
-        }
-        break;
-
-      case 7:
-        // 🌼 8. Marigold Flower Petals (ગલગોટા પંખુડી)
-        for (int i = 0; i < 6; i++) {
-          _tapPetals.add(PetalParticle(
-            x: center.dx + (rng.nextDouble() - 0.5) * 30,
-            y: center.dy + (rng.nextDouble() - 0.5) * 30,
-            vy: rng.nextDouble() * 1.5 + 0.8,
-            angle: rng.nextDouble() * 2 * math.pi,
-            rotationSpeed: (rng.nextDouble() * 0.1) - 0.05,
-            size: rng.nextDouble() * 9 + 7,
-            windFreq: rng.nextDouble() * 2 + 1,
-            windAmp: rng.nextDouble() * 2.5 + 1,
-            color: i.isEven ? const Color(0xFFFF9800) : const Color(0xFFFFC107), // Marigold gold & orange
-            shape: ParticleShapeType.petal,
-          ));
-        }
-        break;
-
-      case 8:
-        // 🦚 9. Peacock Feather Swirl
-        for (int i = 0; i < 8; i++) {
-          _spiralSparks.add(SpiralSparkParticle(
-            center: center,
-            angle: (i / 8.0) * 2 * math.pi,
-            speed: (i % 2 == 0 ? 1.5 : -1.5) * (rng.nextDouble() * 0.15 + 0.1),
-            radialSpeed: rng.nextDouble() * 3.5 + 2.5,
-            maxLife: rng.nextDouble() * 0.45 + 0.35,
-            size: rng.nextDouble() * 5 + 2.5,
-            color: i.isEven ? const Color(0xFF00E676) : const Color(0xFF29B6F6),
-          ));
-        }
-        break;
-
-      case 9:
-        // ☀️ 10. Surya Sunbeam Burst
-        for (int i = 0; i < 12; i++) {
-          final angle = (i / 12.0) * 2 * math.pi;
-          _tapSparks.add(TapSparkParticle(
-            position: center,
-            vx: math.cos(angle) * (rng.nextDouble() * 7 + 4),
-            vy: math.sin(angle) * (rng.nextDouble() * 7 + 4),
-            maxLife: rng.nextDouble() * 0.4 + 0.25,
-            size: rng.nextDouble() * 5 + 3,
-            color: const Color(0xFFFFB300),
-          ));
-        }
-        _glowRings.add(GlowRing(position: center, maxRadius: 100, maxLife: 0.6, color: const Color(0xFFFF9933)));
-        break;
-    }
-  }
-
-    // 3b. Call category particles after function defined
-    spawnCategoryParticles(revealPt);
 
     // 4. Persistence to local cache
     JapOfflineRepository.saveProgress(
@@ -1809,107 +1589,170 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                             ),
                           ),
                         ),
-                        // Top Bar: Only Reset Button
-                        GestureDetector(
-                          onTap: _resetMala,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: pack.primaryColor,
-                                width: 1.2,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.refresh_rounded,
-                                  size: 15,
-                                  color: pack.primaryColor,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Reset',
-                                  style: GoogleFonts.outfit(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                    color: pack.primaryColor,
+                        // Top Bar: Animation Style & Reset Buttons
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            GestureDetector(
+                              onTap: _openDevotionalModePicker,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFF9933).withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: const Color(0xFFFF9933),
+                                    width: 1.2,
                                   ),
                                 ),
-                              ],
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.auto_awesome_rounded,
+                                      size: 14,
+                                      color: Color(0xFFFF7700),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'એનિમેશન',
+                                      style: GoogleFonts.outfit(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                        color: const Color(0xFFFF7700),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: _resetMala,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: pack.primaryColor,
+                                    width: 1.2,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.refresh_rounded,
+                                      size: 14,
+                                      color: pack.primaryColor,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Reset',
+                                      style: GoogleFonts.outfit(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                        color: pack.primaryColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
 
-                  // Center Darshan Card with Unmasking Canvas
+                  // Center Darshan Card with Unmasking Canvas & Divine Chant Typography Overlay
                   Expanded(
                     child: Center(
-                      child: Container(
-                        width: 353,
-                        height: 520,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(32),
-                          boxShadow: [
-                            BoxShadow(
-                              color: pack.primaryColor.withValues(alpha: 0.15),
-                              blurRadius: 24,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(32),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              // Unmasked Darshan Image
-                              if (_imageProvider != null)
-                                Image(
-                                  image: _imageProvider!,
-                                  fit: BoxFit.cover,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _increment,
+                        child: Container(
+                          width: 353,
+                          height: 520,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(32),
+                            boxShadow: [
+                              BoxShadow(
+                                color: pack.primaryColor.withValues(alpha: 0.15),
+                                blurRadius: 24,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(32),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                // Unmasked Darshan Image
+                                if (_imageProvider != null)
+                                  Image(
+                                    image: _imageProvider!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Image.asset(
+                                      JapConfig.defaultDeityImage(widget.entry.name),
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+
+                                // Interactive Mask & Reveal Painter (Reveals tile-by-tile)
+                                AnimatedBuilder(
+                                  animation: Listenable.merge([
+                                    _revealController,
+                                    _completionController,
+                                    _ambientController,
+                                  ]),
+                                  builder: (ctx, _) {
+                                    return CustomPaint(
+                                      painter: DivineCardPainter(
+                                        jitteredPoints: _jitteredPoints,
+                                        shuffledIndices: _shuffledIndices,
+                                        count: _count,
+                                        target: _target,
+                                        revealingTileIndex: _revealingTile,
+                                        currentRevealProgress:
+                                            _revealController.value,
+                                        completionFadeProgress:
+                                            _completionController.value,
+                                        glowRings: _glowRings,
+                                        tapSparks: _tapSparks,
+                                        spiralSparks: _spiralSparks,
+                                        floatingOms: _floatingOms,
+                                        mistParticles: _mistParticles,
+                                        smokePuffs: _smokePuffs,
+                                        tapPetals: _tapPetals,
+                                        divineSymbolParticles: _divineSymbolParticles,
+                                        timeSeconds:
+                                            _ambientController.value * 10.0,
+                                        isCompleted: isCompleted,
+                                        effectPack: widget.entry.effectPack,
+                                      ),
+                                    );
+                                  },
                                 ),
 
-                              // Interactive Mask & Smoke Painter
-                              AnimatedBuilder(
-                                animation: Listenable.merge([
-                                  _revealController,
-                                  _completionController,
-                                  _ambientController,
-                                ]),
-                                builder: (ctx, _) {
-                                  return CustomPaint(
-                                    painter: DivineCardPainter(
-                                      jitteredPoints: _jitteredPoints,
-                                      shuffledIndices: _shuffledIndices,
-                                      count: _count,
-                                      target: _target,
-                                      revealingTileIndex: _revealingTile,
-                                      currentRevealProgress:
-                                          _revealController.value,
-                                      completionFadeProgress:
-                                          _completionController.value,
-                                      glowRings: _glowRings,
-                                      tapSparks: _tapSparks,
-                                      spiralSparks: _spiralSparks,
-                                      floatingOms: _floatingOms,
-                                      mistParticles: _mistParticles,
-                                      smokePuffs: _smokePuffs,
-                                      tapPetals: _tapPetals,
-                                      divineSymbolParticles: _divineSymbolParticles,
-                                      timeSeconds:
-                                          _ambientController.value * 10.0,
-                                      isCompleted: isCompleted,
-                                      effectPack: widget.entry.effectPack,
+                                // Photorealistic Devotional Chant Overlay
+                                if (_showDevotionalOverlay)
+                                  Positioned.fill(
+                                    child: IgnorePointer(
+                                      child: DevotionalChantOverlay(
+                                        key: ValueKey('dev_${_devotionalMode}_$_count'),
+                                        mode: _devotionalMode,
+                                        tapCount: _count,
+                                        onCompleted: () {
+                                          if (mounted) {
+                                            setState(() => _showDevotionalOverlay = false);
+                                          }
+                                        },
+                                      ),
                                     ),
-                                  );
-                                },
-                              ),
+                                  ),
 
                               // Completion Blessing Banner Overlay
                               if (_showContinueButton)
@@ -1928,12 +1771,12 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                                       ),
                                       borderRadius: BorderRadius.circular(24),
                                       border: Border.all(
-                                        color: pack.primaryColor,
+                                        color: const Color(0xFFFF7700),
                                         width: 1.5,
                                       ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: pack.primaryColor.withValues(
+                                          color: const Color(0xFFFF7700).withValues(
                                             alpha: 0.25,
                                           ),
                                           blurRadius: 18,
@@ -1950,7 +1793,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                                           style: GoogleFonts.outfit(
                                             fontSize: 16,
                                             fontWeight: FontWeight.bold,
-                                            color: pack.primaryColor,
+                                            color: const Color(0xFFFF7700),
                                           ),
                                         ),
                                         const SizedBox(height: 4),
@@ -1991,17 +1834,17 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                                               vertical: 10,
                                             ),
                                             decoration: BoxDecoration(
-                                              gradient: LinearGradient(
+                                              gradient: const LinearGradient(
                                                 colors: [
-                                                  pack.primaryColor,
-                                                  pack.secondaryColor,
+                                                  Color(0xFFFF9933),
+                                                  Color(0xFFFF6600),
                                                 ],
                                               ),
                                               borderRadius:
                                                   BorderRadius.circular(30),
                                               boxShadow: [
                                                 BoxShadow(
-                                                  color: pack.primaryColor
+                                                  color: const Color(0xFFFF7700)
                                                       .withValues(alpha: 0.35),
                                                   blurRadius: 10,
                                                   offset: const Offset(0, 3),
@@ -2030,6 +1873,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                       ),
                     ),
                   ),
+                ),
 
                   // Bottom Chant Controls
                   Padding(
@@ -2065,12 +1909,12 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                                 gradient: RadialGradient(
                                   colors: isBusy
                                       ? [
-                                          pack.primaryColor.withValues(alpha: 0.7),
-                                          pack.accentColor.withValues(alpha: 0.85),
+                                          const Color(0xFFFF7700).withValues(alpha: 0.7),
+                                          const Color(0xFFFF9933).withValues(alpha: 0.85),
                                         ]
-                                      : [
-                                          pack.secondaryColor,
-                                          pack.primaryColor,
+                                      : const [
+                                          Color(0xFFFF9933),
+                                          Color(0xFFFF6600),
                                         ],
                                   center: const Alignment(-0.2, -0.3),
                                 ),
@@ -2082,7 +1926,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                                     : null,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: pack.primaryColor.withValues(
+                                    color: const Color(0xFFFF7700).withValues(
                                       alpha: isBusy ? 0.65 : 0.45,
                                     ),
                                     blurRadius: isBusy ? 24 : 20,
@@ -2150,7 +1994,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                                   fontSize: 13,
                                   fontWeight: isBusy ? FontWeight.bold : FontWeight.w600,
                                   color: isBusy
-                                      ? pack.primaryColor
+                                      ? const Color(0xFFFF7700)
                                       : const Color(0xFF2E2A36).withValues(alpha: 0.7),
                                 ),
                               ),
@@ -2347,37 +2191,48 @@ class DivineCardPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
     final cardRRect = RRect.fromRectAndRadius(rect, const Radius.circular(20));
-    final double defaultEraseRadius = 26.0;
-
     // Clip everything to the card's rounded corners so reveals don't leak outside
     canvas.clipRRect(cardRRect);
 
-    // 1. Draw Divine Veil Overlay using SaveLayer & BlendMode.dstOut
-    final veilPaint = Paint()
-      ..color = const Color(0xFF1A1025).withValues(
-        alpha: ((1.0 - completionFadeProgress) * 0.92).clamp(0.0, 0.92),
-      );
+    // 1. Draw Divine Veil Overlay strictly proportional to completed chant count
+    final veilAlpha = ((1.0 - completionFadeProgress) * 0.94).clamp(0.0, 0.94);
 
-    if (completionFadeProgress < 1.0) {
+    final veilPaint = Paint()
+      ..color = const Color(0xFF140D1F).withValues(alpha: veilAlpha);
+
+    if (completionFadeProgress < 1.0 && veilAlpha > 0.01) {
       canvas.saveLayer(rect, Paint());
       canvas.drawRect(rect, veilPaint);
 
       final erasePaint = Paint()
         ..blendMode = BlendMode.dstOut
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8.0);
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10.0);
+
+      // Proportional radius mathematically sized so target chants reveal exactly 100%
+      final double targetSafe = math.max(1, target).toDouble();
+      final double cellRadius =
+          (math.sqrt((size.width * size.height) / (targetSafe * math.pi)) *
+                  1.35)
+              .clamp(24.0, 38.0);
 
       for (int i = 0; i < count && i < target; i++) {
         final tileIdx = shuffledIndices[i];
         final pt = jitteredPoints[tileIdx];
 
+        // Organic varied radius around the exact cell size (no premature full unmasking)
+        final tileRng = math.Random((tileIdx + 1) * 7919);
+        final baseRadius = cellRadius * (0.92 + tileRng.nextDouble() * 0.22);
+
         double scale = 1.0;
         if (tileIdx == revealingTileIndex) {
-          scale = Curves.easeOutBack.transform(
-            currentRevealProgress.clamp(0.0, 1.0),
-          );
+          scale = 0.35 +
+              Curves.easeOutCubic.transform(
+                    currentRevealProgress.clamp(0.0, 1.0),
+                  ) *
+                  0.65;
         }
-        final r = defaultEraseRadius * scale;
-        _drawRevealShape(canvas, pt, r, erasePaint, i);
+        final r = baseRadius * scale;
+        _drawRevealShape(canvas, pt, r, erasePaint, tileIdx);
       }
 
       canvas.restore();
@@ -2496,26 +2351,16 @@ class DivineCardPainter extends CustomPainter {
     final path = Path();
 
     switch (particle.symbol) {
-      case DivineSymbolType.trishul:
-        // Trishul: center rod + outer curved prongs
-        path.moveTo(0, 15);
-        path.lineTo(0, -20); // Center spear
-        path.moveTo(-12, 0);
-        path.quadraticBezierTo(-12, -18, -12, -18);
-        path.moveTo(12, 0);
-        path.quadraticBezierTo(12, -18, 12, -18);
-        path.moveTo(-15, 0);
-        path.quadraticBezierTo(0, 10, 15, 0);
-        canvas.drawPath(path, paint);
-        break;
-
-      case DivineSymbolType.shankh:
-        // Shankh: Spiral conch shell outline
-        final rect = Rect.fromCenter(center: Offset.zero, width: 22, height: 30);
-        canvas.drawOval(rect, paint);
-        path.moveTo(0, -15);
-        path.quadraticBezierTo(8, 0, 0, 15);
-        canvas.drawPath(path, paint);
+      case DivineSymbolType.lotus:
+        // Lotus: 3 overlapping petals
+        for (int i = -1; i <= 1; i++) {
+          final p = Path();
+          p.moveTo(0, 10);
+          p.quadraticBezierTo(i * 12.0, -5, i * 6.0, -18);
+          p.quadraticBezierTo(0, -10, 0, 10);
+          canvas.drawPath(p, fillPaint);
+          canvas.drawPath(p, paint);
+        }
         break;
 
       case DivineSymbolType.flute:
@@ -2532,37 +2377,99 @@ class DivineCardPainter extends CustomPainter {
         }
         break;
 
-      case DivineSymbolType.bowArrow:
-        // Bow & Arrow: Arc + Arrow line
-        path.addArc(Rect.fromCenter(center: Offset.zero, width: 26, height: 32), -1.5, 3.0);
-        path.moveTo(-12, 0);
-        path.lineTo(16, 0); // Arrow shaft
-        path.moveTo(10, -5);
-        path.lineTo(16, 0);
-        path.lineTo(10, 5); // Arrowhead
-        canvas.drawPath(path, paint);
-        break;
+      case DivineSymbolType.trishul:
+        // Sacred Golden Trishul with Mahadev's crescent halo
+        final haloPaint = Paint()
+          ..color = const Color(0xFF00E5FF).withValues(alpha: (particle.alpha * 0.4).clamp(0.0, 1.0))
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6.0);
+        canvas.drawCircle(const Offset(0, -5), 14.0, haloPaint);
 
-      case DivineSymbolType.lotus:
-        // Lotus: 3 overlapping petals
-        for (int i = -1; i <= 1; i++) {
-          final p = Path();
-          p.moveTo(0, 10);
-          p.quadraticBezierTo(i * 15.0 + 8, -5, 0, -16);
-          p.quadraticBezierTo(i * 15.0 - 8, -5, 0, 10);
-          canvas.drawPath(p, fillPaint);
-          canvas.drawPath(p, paint);
-        }
+        final goldTrishulPaint = Paint()
+          ..color = const Color(0xFFFFD700).withValues(alpha: particle.alpha)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.4
+          ..strokeCap = StrokeCap.round;
+
+        path.moveTo(0, 16);
+        path.lineTo(0, -22); // Central spear tip
+        path.moveTo(-11, 2);
+        path.cubicTo(-13, -12, -7, -18, -10, -20);
+        path.moveTo(11, 2);
+        path.cubicTo(13, -12, 7, -18, 10, -20);
+        path.moveTo(-11, 2);
+        path.quadraticBezierTo(0, 8, 11, 2);
+        canvas.drawPath(path, goldTrishulPaint);
+        // Damru knot
+        canvas.drawCircle(const Offset(0, 4), 2.5, Paint()..color = const Color(0xFFFF3D00));
         break;
 
       case DivineSymbolType.chakra:
-        // Sudarshana Chakra: Spinning circle with spokes
+        // Luminous Sudarshana Chakra with radiant flaming teeth
         canvas.rotate(particle.rotation);
-        canvas.drawCircle(Offset.zero, 14, paint);
+        final aura = Paint()
+          ..color = const Color(0xFFFFB300).withValues(alpha: (particle.alpha * 0.45).clamp(0.0, 1.0))
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.0);
+        canvas.drawCircle(Offset.zero, 16.0, aura);
+
+        final rimPaint = Paint()
+          ..color = const Color(0xFFFFD700).withValues(alpha: particle.alpha)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.0;
+        canvas.drawCircle(Offset.zero, 13, rimPaint);
+        canvas.drawCircle(Offset.zero, 6, rimPaint);
+
+        final spokePaint = Paint()
+          ..color = const Color(0xFFFFF9C4).withValues(alpha: particle.alpha)
+          ..strokeWidth = 1.6;
         for (int i = 0; i < 8; i++) {
           final ang = (i / 8.0) * 2 * math.pi;
-          canvas.drawLine(Offset.zero, Offset(math.cos(ang) * 14, math.sin(ang) * 14), paint);
+          canvas.drawLine(
+            Offset(math.cos(ang) * 6, math.sin(ang) * 6),
+            Offset(math.cos(ang) * 15, math.sin(ang) * 15),
+            spokePaint,
+          );
         }
+        break;
+
+      case DivineSymbolType.shankh:
+        // Sacred Panchajanya Conch Shell with golden spiral
+        final shankhPaint = Paint()
+          ..color = const Color(0xFFFFFDE7).withValues(alpha: particle.alpha)
+          ..style = PaintingStyle.fill;
+        final shankhRim = Paint()
+          ..color = const Color(0xFFFFD700).withValues(alpha: particle.alpha)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.8;
+        final sRect = Rect.fromCenter(center: Offset.zero, width: 22, height: 28);
+        canvas.drawOval(sRect, shankhPaint);
+        canvas.drawOval(sRect, shankhRim);
+        path.moveTo(0, -14);
+        path.cubicTo(10, -4, 4, 10, -2, 14);
+        canvas.drawPath(path, shankhRim);
+        break;
+
+      case DivineSymbolType.bowArrow:
+        // Divine Kodanda Bow with golden arrowhead
+        final bowPaint = Paint()
+          ..color = const Color(0xFFFFD700).withValues(alpha: particle.alpha)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.2
+          ..strokeCap = StrokeCap.round;
+        path.addArc(Rect.fromCenter(center: Offset.zero, width: 28, height: 34), -1.5, 3.0);
+        path.moveTo(-14, 0);
+        path.lineTo(18, 0); // Arrow
+        path.moveTo(11, -5);
+        path.lineTo(18, 0);
+        path.lineTo(11, 5);
+        canvas.drawPath(path, bowPaint);
+        // Glowing arrow tip
+        canvas.drawCircle(
+          const Offset(18, 0),
+          3.0,
+          Paint()
+            ..color = const Color(0xFFFFEA00).withValues(alpha: particle.alpha)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0),
+        );
         break;
 
       case DivineSymbolType.om:
@@ -2575,7 +2482,7 @@ class DivineCardPainter extends CustomPainter {
     canvas.restore();
   }
 
-  /// Draw reveal hole using smooth organic round blobs (no sharp eye shapes)
+  /// Draw reveal hole using smooth organic cloud shapes (no box, no circle, random sizes & contours)
   void _drawRevealShape(
     Canvas canvas,
     Offset center,
@@ -2587,21 +2494,24 @@ class DivineCardPainter extends CustomPainter {
     canvas.translate(center.dx, center.dy);
 
     final path = Path();
-    _buildOrganicRoundPath(path, radius, index);
+    _buildOrganicCloudPath(path, radius, index);
 
     canvas.drawPath(path, erasePaint);
     canvas.restore();
   }
 
-  /// Smooth organic rounded blob with subtle random radius jitter per tile
-  void _buildOrganicRoundPath(Path path, double r, int index) {
-    final rng = math.Random(index * 7919);
-    const int points = 6;
+  /// Organic asymmetrical cloud silhouette with 9 Bézier lobes and random variation
+  void _buildOrganicCloudPath(Path path, double r, int index) {
+    final rng = math.Random((index + 1) * 7919);
+    const int points = 9;
     final List<Offset> pts = [];
     for (int k = 0; k < points; k++) {
-      final angle = (k * 2 * math.pi / points);
-      final jitterR = r * (0.92 + (rng.nextDouble() * 0.18));
-      pts.add(Offset(jitterR * math.cos(angle), jitterR * math.sin(angle)));
+      final baseAngle = (k * 2 * math.pi / points);
+      final angleJitter = (rng.nextDouble() - 0.5) * 0.35;
+      final angle = baseAngle + angleJitter;
+      final lobeFactor = 0.70 + (rng.nextDouble() * 0.60);
+      final curR = r * lobeFactor;
+      pts.add(Offset(curR * math.cos(angle), curR * math.sin(angle)));
     }
     path.moveTo((pts[0].dx + pts[points - 1].dx) / 2, (pts[0].dy + pts[points - 1].dy) / 2);
     for (int k = 0; k < points; k++) {
@@ -2727,9 +2637,5 @@ class DivineOverlayPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant DivineOverlayPainter oldDelegate) {
-    // Repaint only when completion state or petal count changes
-    return oldDelegate.isCompleted != isCompleted ||
-        oldDelegate.petals.length != petals.length;
-  }
+  bool shouldRepaint(covariant DivineOverlayPainter oldDelegate) => true;
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -73,32 +74,41 @@ class _BhajanScreenState extends State<BhajanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFF6EE),
-      body: SafeArea(
-        top: true,
-        child: RefreshIndicator(
-          onRefresh: _loadCategories,
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
-            children: [
-              _buildHeader(),
-              const SizedBox(height: 10),
-              _buildHeaderCard(),
-              const SizedBox(height: 16),
-              if (_isLoading)
-                const Padding(
-                  padding: EdgeInsets.only(top: 80),
-                  child: Center(child: CircularProgressIndicator(color: Color(0xFFFF7700))),
-                )
-              else if (_error.isNotEmpty)
-                _buildErrorCard()
-              else if (_categories.isEmpty)
-                _buildEmptyCard()
-              else
-                ..._categories.map(_buildCategoryCard),
-            ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+        systemNavigationBarColor: Color(0xFFFFE8D6),
+        systemNavigationBarIconBrightness: Brightness.dark,
+      ),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFFE8D6),
+        body: SafeArea(
+          top: true,
+          child: RefreshIndicator(
+            onRefresh: _loadCategories,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+              children: [
+                _buildHeader(),
+                const SizedBox(height: 10),
+                _buildHeaderCard(),
+                const SizedBox(height: 16),
+                if (_isLoading)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 80),
+                    child: Center(child: CircularProgressIndicator(color: Color(0xFFFF7700))),
+                  )
+                else if (_error.isNotEmpty)
+                  _buildErrorCard()
+                else if (_categories.isEmpty)
+                  _buildEmptyCard()
+                else
+                  ..._categories.map(_buildCategoryCard),
+              ],
+            ),
           ),
         ),
       ),

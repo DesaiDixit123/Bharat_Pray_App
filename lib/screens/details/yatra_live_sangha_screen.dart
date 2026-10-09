@@ -1316,7 +1316,7 @@ class _TravelerStrip extends StatelessWidget {
             const Icon(Icons.people_outline_rounded, color: Color(0xFFFF9B20), size: 18),
             const SizedBox(width: 8),
             Text(
-              'No other pilgrims currently live on this route',
+              'No other Yatris currently live on this route',
               style: GoogleFonts.outfit(
                 color: Colors.white.withOpacity(0.85),
                 fontSize: 13,

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:page_flip/page_flip.dart';
 
@@ -44,19 +45,52 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
         if (pages.isNotEmpty) {
           for (final page in pages) {
             final pageMap = Map<String, dynamic>.from(page as Map);
-            final pageContent = (pageMap['content'] ?? pageMap['description'] ?? '').toString().trim();
-            final pageTitle = (pageMap['title'] ?? 'Page ${pageMap['pageNumber'] ?? 1}').toString();
-            final sanskrit = (pageMap['sanskrit'] ?? widget.chapter['sanskritName'] ?? widget.chapter['name'] ?? pageTitle).toString();
-            final transliteration = (pageMap['transliteration'] ?? '').toString();
-            final english = pageContent.isNotEmpty
-                ? pageContent
-                : 'Sacred text and translation for $pageTitle will be updated soon.';
+            final pageId = (pageMap['_id'] ?? pageMap['id'] ?? '').toString();
 
-            parsedVerses.add({
-              'sanskrit': sanskrit,
-              'transliteration': transliteration,
-              'english': english,
-            });
+            List<dynamic> shlokas = [];
+            if (pageMap['shlokas'] is List && (pageMap['shlokas'] as List).isNotEmpty) {
+              shlokas = pageMap['shlokas'] as List;
+            } else if (pageId.isNotEmpty) {
+              try {
+                shlokas = await ApiService.getShlokasByPage(pageId);
+              } catch (_) {}
+            }
+
+            if (shlokas.isNotEmpty) {
+              for (final shloka in shlokas) {
+                if (shloka is Map) {
+                  final sMap = Map<String, dynamic>.from(shloka);
+                  final sanskrit = (sMap['sanskritText'] ?? sMap['sanskrit'] ?? sMap['shloka'] ?? '').toString().trim();
+                  final transliteration = (sMap['transliteration'] ?? sMap['transliterate'] ?? '').toString().trim();
+                  final english = (sMap['englishMeaning'] ?? sMap['englishTranslation'] ?? sMap['english'] ?? sMap['content'] ?? '').toString().trim();
+                  final hindi = (sMap['hindiMeaning'] ?? sMap['hindiTranslation'] ?? sMap['hindi'] ?? '').toString().trim();
+
+                  if (sanskrit.isNotEmpty || english.isNotEmpty || hindi.isNotEmpty) {
+                    parsedVerses.add({
+                      'sanskrit': sanskrit,
+                      'transliteration': transliteration,
+                      'english': english,
+                      'hindi': hindi,
+                    });
+                  }
+                }
+              }
+            } else {
+              final pageContent = (pageMap['content'] ?? pageMap['description'] ?? '').toString().trim();
+              final sanskrit = (pageMap['sanskrit'] ?? pageMap['sanskritText'] ?? '').toString().trim();
+              final transliteration = (pageMap['transliteration'] ?? '').toString().trim();
+              final english = (pageMap['english'] ?? pageMap['englishTranslation'] ?? pageMap['englishMeaning'] ?? pageContent).toString().trim();
+              final hindi = (pageMap['hindi'] ?? pageMap['hindiTranslation'] ?? pageMap['hindiMeaning'] ?? '').toString().trim();
+
+              if (sanskrit.isNotEmpty || english.isNotEmpty || hindi.isNotEmpty) {
+                parsedVerses.add({
+                  'sanskrit': sanskrit.isNotEmpty ? sanskrit : (widget.chapter['sanskritName'] ?? widget.chapter['name'] ?? '').toString(),
+                  'transliteration': transliteration,
+                  'english': english,
+                  'hindi': hindi,
+                });
+              }
+            }
           }
         }
       } catch (_) {}
@@ -76,6 +110,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
               'sanskrit': item.toString(),
               'transliteration': '',
               'english': '',
+              'hindi': '',
             });
           }
         }
@@ -88,19 +123,21 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       final content = (widget.chapter['content'] ?? '').toString().trim();
 
       String bodyText = '';
-      if (desc.isNotEmpty) bodyText = desc;
-      else if (trans.isNotEmpty) bodyText = trans;
+      if (trans.isNotEmpty) bodyText = trans;
       else if (content.isNotEmpty) bodyText = content;
-      else bodyText = 'Sacred text and translation for this chapter will be updated soon.';
+      else if (desc.isNotEmpty) bodyText = desc;
 
-      final sanskritText = (widget.chapter['sanskritName'] ?? widget.chapter['sanskrit'] ?? widget.chapter['name'] ?? widget.chapter['title'] ?? 'Chapter').toString();
-      parsedVerses = [
-        {
-          'sanskrit': sanskritText,
-          'transliteration': (widget.chapter['transliteration'] ?? '').toString(),
-          'english': bodyText,
-        }
-      ];
+      final sanskritText = (widget.chapter['sanskritName'] ?? widget.chapter['sanskrit'] ?? widget.chapter['name'] ?? widget.chapter['title'] ?? '').toString();
+      if (sanskritText.isNotEmpty || bodyText.isNotEmpty) {
+        parsedVerses = [
+          {
+            'sanskrit': sanskritText,
+            'transliteration': (widget.chapter['transliteration'] ?? '').toString(),
+            'english': bodyText,
+            'hindi': '',
+          }
+        ];
+      }
     }
 
     if (mounted) {
@@ -130,72 +167,77 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final backgroundTop = _sepiaMode ? const Color(0xFF2C180C) : const Color(0xFF141414);
-    final backgroundBottom = _sepiaMode ? const Color(0xFF140A04) : const Color(0xFF090909);
-
     final granthTitle = (widget.granth['name'] ?? widget.granth['title'] ?? 'Granth').toString();
     final chapterTitle = (widget.chapter['title'] ?? widget.chapter['name'] ?? 'Chapter').toString();
 
-    return Scaffold(
-      backgroundColor: backgroundBottom,
-      appBar: AppBar(
-        backgroundColor: backgroundTop,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          '$granthTitle - $chapterTitle',
-          style: GoogleFonts.outfit(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-            fontSize: 17,
-          ),
-        ),
-        actions: [
-          IconButton(
-            onPressed: () {
-              setState(() {
-                _sepiaMode = !_sepiaMode;
-              });
-            },
-            icon: const Icon(Icons.palette_outlined, color: Colors.white),
-            tooltip: 'Toggle Parchment Theme',
-          ),
-        ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+        systemNavigationBarColor: Color(0xFFFFE8D6),
+        systemNavigationBarIconBrightness: Brightness.dark,
       ),
-      body: SafeArea(
-        top: false,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [backgroundTop, backgroundBottom],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFFE8D6),
+        appBar: AppBar(
+          systemOverlayStyle: const SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.dark,
+            statusBarBrightness: Brightness.light,
+          ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF2E2A36)),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Text(
+            '$granthTitle - $chapterTitle',
+            style: GoogleFonts.outfit(
+              color: const Color(0xFF2E2A36),
+              fontWeight: FontWeight.w700,
+              fontSize: 17,
             ),
           ),
-          child: _isLoadingPages
-              ? const Center(
-                  child: CircularProgressIndicator(color: Color(0xFFFF8C1A)),
-                )
-              : Column(
-                  children: [
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: _buildBookContainer(context),
+          actions: [
+            IconButton(
+              onPressed: () {
+                setState(() {
+                  _sepiaMode = !_sepiaMode;
+                });
+              },
+              icon: const Icon(Icons.palette_outlined, color: Color(0xFF2E2A36)),
+              tooltip: 'Toggle Parchment Theme',
+            ),
+          ],
+        ),
+        body: SafeArea(
+          top: false,
+          child: Container(
+            color: const Color(0xFFFFE8D6),
+            child: _isLoadingPages
+                ? const Center(
+                    child: CircularProgressIndicator(color: Color(0xFFFF8C1A)),
+                  )
+                : Column(
+                    children: [
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: _buildBookContainer(context),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 18),
-                      child: _buildPlaybackControls(),
-                    ),
-                  ],
-                ),
+                      const SizedBox(height: 12),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        child: _buildPlaybackControls(),
+                      ),
+                    ],
+                  ),
+          ),
         ),
       ),
     );
@@ -230,15 +272,16 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
         border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.8), width: 2.0),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.8),
-            blurRadius: 38,
-            spreadRadius: 4,
-            offset: const Offset(0, 18),
+            color: const Color(0xFF6B3A14).withValues(alpha: 0.22),
+            blurRadius: 28,
+            spreadRadius: 2,
+            offset: const Offset(0, 10),
           ),
           BoxShadow(
-            color: const Color(0xFFFF8C1A).withValues(alpha: 0.15),
-            blurRadius: 24,
-            spreadRadius: 2,
+            color: const Color(0xFFFF7700).withValues(alpha: 0.12),
+            blurRadius: 18,
+            spreadRadius: 1,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -512,9 +555,22 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   Widget _buildVersePage(Map<String, String> verse, int verseIndex) {
     final bodyColor = _sepiaMode ? const Color(0xFF332014) : const Color(0xFF261910);
     final paperBg = _sepiaMode ? const Color(0xFFF9F4E8) : const Color(0xFFF3EFE6);
-    final sanskritText = verse['sanskrit'] ?? '';
-    final transliterationText = verse['transliteration'] ?? '';
-    final englishText = verse['english'] ?? '';
+    final sanskritText = (verse['sanskrit'] ?? '').trim();
+    final transliterationText = (verse['transliteration'] ?? '').trim();
+    String rawEnglish = (verse['english'] ?? '').trim();
+    String rawHindi = (verse['hindi'] ?? '').trim();
+
+    // If hindi was not passed separately, check if rawEnglish has both Hindi & English separated
+    if (rawHindi.isEmpty && rawEnglish.contains('\n\n')) {
+      final parts = rawEnglish.split('\n\n');
+      if (parts.length >= 2) {
+        final hasDevanagari = RegExp(r'[\u0900-\u097F]').hasMatch(parts[0]);
+        if (hasDevanagari) {
+          rawHindi = parts[0].trim();
+          rawEnglish = parts.sublist(1).join('\n\n').trim();
+        }
+      }
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -588,39 +644,56 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
                   ),
                   const SizedBox(height: 16),
                 ],
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(width: 40, height: 1.2, color: const Color(0xFFC59239).withValues(alpha: 0.6)),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: Text('❖', style: GoogleFonts.outfit(color: const Color(0xFFC59239), fontSize: 9)),
+                if (rawHindi.isNotEmpty) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(width: 32, height: 1.0, color: const Color(0xFFC59239).withValues(alpha: 0.5)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Text('भावार्थ', style: GoogleFonts.notoSerifDevanagari(fontSize: 13, color: const Color(0xFF5C1405), fontWeight: FontWeight.bold)),
+                      ),
+                      Container(width: 32, height: 1.0, color: const Color(0xFFC59239).withValues(alpha: 0.5)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    rawHindi,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.notoSerifDevanagari(
+                      fontSize: _readerFontSize + 0.5,
+                      height: 1.7,
+                      color: bodyColor.withValues(alpha: 0.95),
+                      fontWeight: FontWeight.w500,
                     ),
-                    Container(width: 40, height: 1.2, color: const Color(0xFFC59239).withValues(alpha: 0.6)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'English Translation',
-                  style: GoogleFonts.outfit(
-                    fontSize: _readerFontSize + 0.5,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF5C1405),
-                    letterSpacing: 0.3,
                   ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  englishText,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.outfit(
-                    fontSize: _readerFontSize,
-                    height: 1.7,
-                    color: bodyColor.withValues(alpha: 0.92),
-                    fontWeight: FontWeight.w500,
+                  const SizedBox(height: 16),
+                ],
+                if (rawEnglish.isNotEmpty) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(width: 32, height: 1.0, color: const Color(0xFFC59239).withValues(alpha: 0.5)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Text('English Translation', style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF5C1405), fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                      ),
+                      Container(width: 32, height: 1.0, color: const Color(0xFFC59239).withValues(alpha: 0.5)),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 10),
+                  Text(
+                    rawEnglish,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(
+                      fontSize: _readerFontSize,
+                      height: 1.65,
+                      color: bodyColor.withValues(alpha: 0.92),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
               ],
             ),
           ),
@@ -699,7 +772,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
             activeTrackColor: const Color(0xFFFF8C1A),
-            inactiveTrackColor: Colors.white.withValues(alpha: 0.18),
+            inactiveTrackColor: const Color(0xFF2E2A36).withValues(alpha: 0.18),
             thumbColor: const Color(0xFFFF8C1A),
             overlayColor: const Color(0xFFFF8C1A).withValues(alpha: 0.14),
             trackHeight: 3.5,
@@ -721,13 +794,21 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
           children: [
             IconButton(
               onPressed: _currentPageIndex > 0 ? () => _goToPage(_currentPageIndex - 1) : null,
-              icon: const Icon(Icons.skip_previous_rounded, color: Colors.white, size: 34),
+              icon: const Icon(Icons.skip_previous_rounded, color: Color(0xFF2E2A36), size: 34),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.14),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: const Color(0xFFF3E4D6)),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFF7700).withValues(alpha: 0.08),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: Text(
                 _currentPageIndex == 0
@@ -736,7 +817,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
                         ? 'Back Cover'
                         : 'Page $_currentPageIndex / ${_verses.length}',
                 style: GoogleFonts.outfit(
-                  color: Colors.white,
+                  color: const Color(0xFF2E2A36),
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                 ),
@@ -744,7 +825,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
             ),
             IconButton(
               onPressed: _currentPageIndex < pageCount - 1 ? () => _goToPage(_currentPageIndex + 1) : null,
-              icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 34),
+              icon: const Icon(Icons.skip_next_rounded, color: Color(0xFF2E2A36), size: 34),
             ),
           ],
         ),

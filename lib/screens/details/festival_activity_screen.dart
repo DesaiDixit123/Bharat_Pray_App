@@ -1,162 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:share_plus/share_plus.dart';
+import '../../services/saved_items_service.dart';
+import '../../services/utsav_service.dart';
 import 'mandal_profile_screen.dart';
-
-// ─── Mock data for search (mandals + reels) ────────────────────────────────
-
-const List<Map<String, dynamic>> _kSearchMandals = [
-  {
-    'name': 'Lalbaugcha Raja Yuva Mandal',
-    'location': 'Mumbai, Maharashtra',
-    'area': 'mumbai',
-    'avatarUrl': 'assets/images/new_year_card.png',
-    'coverUrl': 'assets/images/diwali_card.png',
-    'followers': '12.4k',
-    'type': 'mandal',
-  },
-  {
-    'name': 'Shree Ganesh Yuvak Mandal',
-    'location': 'Ahmedabad, Gujarat',
-    'area': 'ahmedabad',
-    'avatarUrl': 'assets/images/diwali_card.png',
-    'coverUrl': 'assets/images/new_year_card.png',
-    'followers': '9.8k',
-    'type': 'mandal',
-  },
-  {
-    'name': 'Surat Sarvajanik Garba Mandal',
-    'location': 'Surat, Gujarat',
-    'area': 'surat',
-    'avatarUrl': 'assets/images/dhanteras_card.png',
-    'coverUrl': 'assets/images/bhaiduj_card.png',
-    'followers': '8.6k',
-    'type': 'mandal',
-  },
-  {
-    'name': 'Maa Durga Mahotsav Samiti',
-    'location': 'Vadodara, Gujarat',
-    'area': 'vadodara',
-    'avatarUrl': 'assets/images/bhaiduj_card.png',
-    'coverUrl': 'assets/images/dhanteras_card.png',
-    'followers': '7.1k',
-    'type': 'mandal',
-  },
-  {
-    'name': 'Kashi Vishwanath Bhakta Mandal',
-    'location': 'Varanasi, Uttar Pradesh',
-    'area': 'varanasi',
-    'avatarUrl': 'assets/images/new_year_card.png',
-    'coverUrl': 'assets/images/diwali_card.png',
-    'followers': '6.4k',
-    'type': 'mandal',
-  },
-  {
-    'name': 'Pune Ganesh Utsav Mandal',
-    'location': 'Pune, Maharashtra',
-    'area': 'pune',
-    'avatarUrl': 'assets/images/diwali_card.png',
-    'coverUrl': 'assets/images/new_year_card.png',
-    'followers': '5.9k',
-    'type': 'mandal',
-  },
-  {
-    'name': 'Rajkot Shree Ram Mandal',
-    'location': 'Rajkot, Gujarat',
-    'area': 'rajkot',
-    'avatarUrl': 'assets/images/dhanteras_card.png',
-    'coverUrl': 'assets/images/bhaiduj_card.png',
-    'followers': '4.2k',
-    'type': 'mandal',
-  },
-];
-
-const List<Map<String, String>> _kPopularReels = [
-  {
-    'mandalName': 'Lalbaugcha Raja Yuva Mandal',
-    'area': 'mumbai',
-    'image': 'assets/images/new_year_card.png',
-    'caption': 'Bappa Aagman 2026 🙏 #BappaMorya',
-    'likes': '12.4k',
-  },
-  {
-    'mandalName': 'Shree Ganesh Yuvak Mandal',
-    'area': 'ahmedabad',
-    'image': 'assets/images/diwali_card.png',
-    'caption': 'Navratri Garba Night ✨ #NavratriVibes',
-    'likes': '9.8k',
-  },
-  {
-    'mandalName': 'Surat Sarvajanik Garba Mandal',
-    'area': 'surat',
-    'image': 'assets/images/dhanteras_card.png',
-    'caption': 'Incredible setup this year 🎉 #Utsav2026',
-    'likes': '8.1k',
-  },
-  {
-    'mandalName': 'Maa Durga Mahotsav Samiti',
-    'area': 'vadodara',
-    'image': 'assets/images/bhaiduj_card.png',
-    'caption': 'Maa ki Aarti 🪔 #MaaDurga #DeviBhakti',
-    'likes': '7.3k',
-  },
-  {
-    'mandalName': 'Pune Ganesh Utsav Mandal',
-    'area': 'pune',
-    'image': 'assets/images/new_year_card.png',
-    'caption': 'Grand procession 2026 🥁 #PuneGanesh',
-    'likes': '5.9k',
-  },
-];
-
-const List<Map<String, dynamic>> _kPopularPosts = [
-  {
-    'mandalName': 'Lalbaugcha Raja Yuva Mandal',
-    'area': 'mumbai',
-    'avatarUrl': 'assets/images/new_year_card.png',
-    'image': 'assets/images/diwali_card.png',
-    'caption': 'Bappa is here! 🙏 Join us in the celebration.\n#GaneshChaturthi2026 #BappaMorya',
-    'likes': 1240,
-    'time': '2h ago',
-  },
-  {
-    'mandalName': 'Shree Ganesh Yuvak Mandal',
-    'area': 'ahmedabad',
-    'avatarUrl': 'assets/images/diwali_card.png',
-    'image': 'assets/images/dhanteras_card.png',
-    'caption': 'Decoration in progress ✨ Stay tuned!\n#Navratri2026 #GarbaVibes',
-    'likes': 890,
-    'time': '5h ago',
-  },
-  {
-    'mandalName': 'Surat Sarvajanik Garba Mandal',
-    'area': 'surat',
-    'avatarUrl': 'assets/images/dhanteras_card.png',
-    'image': 'assets/images/bhaiduj_card.png',
-    'caption': 'Our theme this year is divine & spectacular 🌟\n#SuratGarba #Utsav2026',
-    'likes': 670,
-    'time': '1d ago',
-  },
-  {
-    'mandalName': 'Maa Durga Mahotsav Samiti',
-    'area': 'vadodara',
-    'avatarUrl': 'assets/images/bhaiduj_card.png',
-    'image': 'assets/images/new_year_card.png',
-    'caption': 'Maa Durga pandal setup complete 🪔🙏\n#MaaDurga #DeviBhakti',
-    'likes': 540,
-    'time': '2d ago',
-  },
-];
 
 // ─── Festival Activity Screen ──────────────────────────────────────────────────
 
 class FestivalActivityScreen extends StatefulWidget {
   final String festivalName;
   final String imageUrl;
+  final Map<String, dynamic>? festivalData;
 
   const FestivalActivityScreen({
     super.key,
     required this.festivalName,
     required this.imageUrl,
+    this.festivalData,
   });
 
   @override
@@ -169,12 +30,56 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
   bool _isSearchFocused = false;
   final FocusNode _focusNode = FocusNode();
 
+  final Map<String, bool> _likedPosts = {};
+  final Map<String, int> _likeCounts = {};
+  final Map<String, bool> _savedPosts = {};
+  String? _heartAnimatedPostId;
+
+  List<Map<String, dynamic>> _mandals = [];
+  List<Map<String, dynamic>> _posts = [];
+  List<Map<String, String>> _reels = [];
+  bool _isLoading = true;
+
+  void _triggerHeartAnimation(String postId, Map<String, dynamic> post) {
+    setState(() {
+      _heartAnimatedPostId = postId;
+      if (!(_likedPosts[postId] ?? false)) {
+        _likedPosts[postId] = true;
+        _likeCounts[postId] = (_likeCounts[postId] ?? (post['likes'] as int? ?? 0)) + 1;
+      }
+    });
+    Future.delayed(const Duration(milliseconds: 700), () {
+      if (mounted) {
+        setState(() => _heartAnimatedPostId = null);
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     _focusNode.addListener(() {
       setState(() => _isSearchFocused = _focusNode.hasFocus);
     });
+    _loadActivityData();
+  }
+
+  Future<void> _loadActivityData() async {
+    try {
+      final list = await UtsavService.getMandals();
+      if (mounted) {
+        setState(() {
+          _mandals = list;
+          _reels = [];
+          _posts = [];
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override
@@ -184,13 +89,17 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
     super.dispose();
   }
 
+  List<Map<String, dynamic>> get _currentMandals => _mandals;
+  List<Map<String, String>> get _currentReels => _reels;
+  List<Map<String, dynamic>> get _currentPosts => _posts;
+
   List<Map<String, dynamic>> get _filteredMandals {
     if (_query.isEmpty) return [];
     final q = _query.toLowerCase().trim();
-    return _kSearchMandals.where((m) {
-      final name = (m['name'] as String).toLowerCase();
-      final area = (m['area'] as String).toLowerCase();
-      final location = (m['location'] as String).toLowerCase();
+    return _currentMandals.where((m) {
+      final name = (m['name'] ?? '').toString().toLowerCase();
+      final area = (m['city'] ?? m['area'] ?? '').toString().toLowerCase();
+      final location = (m['location'] ?? '').toString().toLowerCase();
       return name.contains(q) || area.contains(q) || location.contains(q);
     }).toList();
   }
@@ -198,7 +107,7 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
   List<Map<String, String>> get _filteredReels {
     if (_query.isEmpty) return [];
     final q = _query.toLowerCase().trim();
-    return _kPopularReels.where((r) {
+    return _currentReels.where((r) {
       final mn = (r['mandalName'] ?? '').toLowerCase();
       final area = (r['area'] ?? '').toLowerCase();
       return mn.contains(q) || area.contains(q);
@@ -208,9 +117,9 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
   List<Map<String, dynamic>> get _filteredPosts {
     if (_query.isEmpty) return [];
     final q = _query.toLowerCase().trim();
-    return _kPopularPosts.where((p) {
-      final mn = (p['mandalName'] as String).toLowerCase();
-      final area = (p['area'] as String).toLowerCase();
+    return _currentPosts.where((p) {
+      final mn = (p['mandalName'] ?? '').toString().toLowerCase();
+      final area = (p['area'] ?? '').toString().toLowerCase();
       return mn.contains(q) || area.contains(q);
     }).toList();
   }
@@ -219,11 +128,22 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
   Widget build(BuildContext context) {
     final bool hasQuery = _query.trim().isNotEmpty;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFE8D6),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+      ),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFFE8D6),
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          systemOverlayStyle: const SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.dark,
+            statusBarBrightness: Brightness.light,
+          ),
         leading: IconButton(
           icon: Container(
             width: 38,
@@ -309,12 +229,57 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  // ── Default Feed: Popular Reels + Popular Posts ────────────────────────────
+    ),
+  );
+}
 
   Widget _buildDefaultFeed() {
+    final reels = _currentReels;
+    final posts = _currentPosts;
+
+    if (reels.isEmpty && posts.isEmpty) {
+      return Center(
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFEAD8),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFFFF7700).withValues(alpha: 0.25), width: 2),
+                ),
+                child: const Icon(Icons.video_library_outlined, size: 44, color: Color(0xFFFF7700)),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'No Reels or Posts Yet',
+                style: GoogleFonts.outfit(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF2E2A36),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Devotees and Mandals can share their Reels and Posts once the festival begins.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 13.5,
+                  color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
+                  height: 1.45,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return ListView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 24),
@@ -323,7 +288,7 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
           child: Text(
-            '🎬  Popular Reels',
+            'Popular Reels',
             style: GoogleFonts.outfit(
               fontSize: 17,
               fontWeight: FontWeight.bold,
@@ -337,8 +302,8 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _kPopularReels.length,
-            itemBuilder: (context, index) => _buildReelThumbnail(_kPopularReels[index]),
+            itemCount: reels.length,
+            itemBuilder: (context, index) => _buildReelThumbnail(reels[index], index, reels),
           ),
         ),
 
@@ -348,7 +313,7 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
           child: Text(
-            '📸  Popular Posts',
+            'Popular Posts',
             style: GoogleFonts.outfit(
               fontSize: 17,
               fontWeight: FontWeight.bold,
@@ -357,10 +322,10 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
           ),
         ),
         ...List.generate(
-          _kPopularPosts.length,
+          posts.length,
           (i) => Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-            child: _buildPostCard(_kPopularPosts[i]),
+            child: _buildPostCard(posts[i]),
           ),
         ),
       ],
@@ -409,7 +374,7 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
       children: [
         // ── Mandal results
         if (mandals.isNotEmpty) ...[
-          _buildSectionHeader('🏛  Mandals', mandals.length),
+          _buildSectionHeader('Mandals', mandals.length),
           const SizedBox(height: 8),
           ...mandals.map((m) => _buildMandalSearchCard(m)),
           const SizedBox(height: 16),
@@ -417,7 +382,7 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
 
         // ── Reel results
         if (reels.isNotEmpty) ...[
-          _buildSectionHeader('🎬  Reels', reels.length),
+          _buildSectionHeader('Reels', reels.length),
           const SizedBox(height: 8),
           SizedBox(
             height: 210,
@@ -425,7 +390,7 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
               itemCount: reels.length,
-              itemBuilder: (context, index) => _buildReelThumbnail(reels[index]),
+              itemBuilder: (context, index) => _buildReelThumbnail(reels[index], index, reels),
             ),
           ),
           const SizedBox(height: 16),
@@ -433,7 +398,7 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
 
         // ── Post results
         if (posts.isNotEmpty) ...[
-          _buildSectionHeader('📸  Posts', posts.length),
+          _buildSectionHeader('Posts', posts.length),
           const SizedBox(height: 8),
           ...posts.map((p) => Padding(
                 padding: const EdgeInsets.only(bottom: 14),
@@ -452,24 +417,31 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
         Text(
           title,
           style: GoogleFonts.outfit(
-            fontSize: 16,
+            fontSize: 16.5,
             fontWeight: FontWeight.bold,
             color: const Color(0xFF2E2A36),
           ),
         ),
         const SizedBox(width: 8),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2.5),
           decoration: BoxDecoration(
-            color: const Color(0xFFFF7700).withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
+            color: const Color(0xFFFF7700),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFF7700).withValues(alpha: 0.35),
+                blurRadius: 5,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Text(
             '$count',
             style: GoogleFonts.outfit(
               fontSize: 12,
               fontWeight: FontWeight.bold,
-              color: const Color(0xFFFF7700),
+              color: Colors.white,
             ),
           ),
         ),
@@ -589,21 +561,44 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
     );
   }
 
-  Widget _buildReelThumbnail(Map<String, String> reel) {
+  Widget _buildReelThumbnail(Map<String, String> reel, [int index = 0, List<Map<String, String>>? sourceList]) {
+    final list = sourceList ?? _reels;
     return GestureDetector(
       onTap: () {
         // find matching mandal
-        final mandal = _kSearchMandals.firstWhere(
+        final mandal = _mandals.firstWhere(
           (m) => m['name'] == reel['mandalName'],
-          orElse: () => _kSearchMandals.first,
+          orElse: () => <String, dynamic>{},
         );
+
+        final videoAssets = [
+          'assets/images/1st_Scene.mp4',
+          'assets/images/2nd_Scene.mp4',
+          'assets/images/3rd_Scene.mp4',
+        ];
+
+        final convertedReels = list.asMap().entries.map((entry) {
+          final r = entry.value;
+          final i = entry.key;
+          return ReelItem(
+            id: 'reel_${r['mandalName']}_$i',
+            thumbnailUrl: r['image'] ?? 'assets/images/ram_bhajan.png',
+            videoUrl: videoAssets[i % videoAssets.length],
+            title: r['caption'] ?? 'Divine Mandal Aarti Clip',
+            audioTrack: 'Original Mandal Audio • Sacred Chants',
+            views: r['likes'] ?? '0',
+            likes: int.tryParse(r['likes']?.replaceAll(RegExp(r'[^0-9]'), '') ?? '0') ?? 0,
+          );
+        }).toList();
+
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => FullscreenReelViewer(
-              startIndex: 0,
-              mandalName: reel['mandalName'] ?? '',
-              avatarUrl: mandal['avatarUrl'] as String,
+              startIndex: index,
+              reels: convertedReels,
+              mandalName: reel['mandalName'] ?? 'Mandal',
+              avatarUrl: (mandal['avatarUrl'] ?? mandal['imageUrl'] ?? 'assets/images/ram_bhajan.png').toString(),
             ),
           ),
         );
@@ -685,53 +680,76 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
   }
 
   Widget _buildPostCard(Map<String, dynamic> post) {
+    final postId = '${post['mandalName']}_${post['time']}';
+    final isLiked = _likedPosts[postId] ?? false;
+    final currentLikes = _likeCounts[postId] ?? (post['likes'] as int? ?? 0);
+    final isSaved = _savedPosts[postId] ?? false;
+
+    // find matching mandal
+    final mandal = _mandals.firstWhere(
+      (m) => m['name'] == post['mandalName'],
+      orElse: () => {
+        'name': post['mandalName'] as String? ?? 'Mandal',
+        'location': 'Gujarat, India',
+        'avatarUrl': post['avatarUrl'] as String? ?? 'assets/images/new_year_card.png',
+        'coverUrl': 'assets/images/somnath_hero.png',
+      },
+    );
+    final mandalLocation = (mandal['location'] as String?) ?? 'Gujarat, India';
+    final avatarUrl = (post['avatarUrl'] ?? mandal['avatarUrl'] ?? 'assets/images/new_year_card.png') as String;
+    final postImage = (post['image'] ?? 'assets/images/diwali_card.png') as String;
+    final caption = (post['caption'] ?? '') as String;
+    final timeAgo = (post['time'] ?? 'Recently') as String;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFF3E4D6)),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFEFE6DB)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: () {
-          final mandal = _kSearchMandals.firstWhere(
-            (m) => m['name'] == post['mandalName'],
-            orElse: () => _kSearchMandals.first,
-          );
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => MandalProfileScreen(
-                mandalName: mandal['name'] as String,
-                location: mandal['location'] as String,
-                avatarUrl: mandal['avatarUrl'] as String,
-                coverUrl: mandal['coverUrl'] as String,
-              ),
-            ),
-          );
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. Post Header - Click to Open Mandal Profile Directly
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MandalProfileScreen(
+                      mandalName: mandal['name'] as String,
+                      location: mandal['location'] as String,
+                      avatarUrl: mandal['avatarUrl'] as String,
+                      coverUrl: (mandal['coverUrl'] as String?) ?? 'assets/images/somnath_hero.png',
+                    ),
+                  ),
+                );
+              },
               child: Row(
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(18),
-                    child: Image.asset(
-                      post['avatarUrl'] as String,
-                      width: 36,
-                      height: 36,
-                      fit: BoxFit.cover,
+                  Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [Color(0xFFFF9500), Color(0xFFFF5500)],
+                      ),
+                    ),
+                    child: CircleAvatar(
+                      radius: 18,
+                      backgroundImage: avatarUrl.startsWith('http')
+                          ? NetworkImage(avatarUrl) as ImageProvider
+                          : AssetImage(avatarUrl),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -739,15 +757,42 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          post['mandalName'] as String,
-                          style: GoogleFonts.outfit(fontSize: 13.5, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                post['mandalName'] as String,
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14.5,
+                                  color: const Color(0xFF2E2A36),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.verified_rounded, color: Color(0xFFFF7700), size: 15),
+                          ],
                         ),
-                        Text(
-                          post['time'] as String,
-                          style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF2E2A36).withValues(alpha: 0.45)),
+                        const SizedBox(height: 1),
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on_rounded, size: 11, color: Color(0xFFFF7700)),
+                            const SizedBox(width: 2),
+                            Flexible(
+                              child: Text(
+                                "$mandalLocation • ",
+                                style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF7A757F)),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Text(
+                              timeAgo,
+                              style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF7A757F)),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -755,53 +800,164 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
                 ],
               ),
             ),
-            // Caption
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-              child: Text(
-                post['caption'] as String,
-                style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF2E2A36), height: 1.4),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            // Image
-            ClipRRect(
-              child: Image.asset(
-                post['image'] as String,
-                width: double.infinity,
-                height: 200,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => Container(
-                  height: 200,
-                  color: const Color(0xFFFFF1E5),
-                  child: const Icon(Icons.image_rounded, color: Color(0xFFFF8C1A), size: 48),
+          ),
+
+          // 2. Post Image (Clean, Full-width, Double-tap to Like)
+          GestureDetector(
+            onDoubleTap: () => _triggerHeartAnimation(postId, post),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: double.infinity,
+                  constraints: const BoxConstraints(minHeight: 220, maxHeight: 420),
+                  color: const Color(0xFFF7F2EB),
+                  child: buildSmartImage(postImage, fit: BoxFit.cover),
                 ),
-              ),
-            ),
-            // Engagement
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Row(
-                children: [
-                  const Icon(Icons.favorite_border_rounded, size: 20, color: Color(0xFF2E2A36)),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${post['likes']}',
-                    style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
+                if (_heartAnimatedPostId == postId)
+                  TweenAnimationBuilder<double>(
+                    duration: const Duration(milliseconds: 400),
+                    tween: Tween(begin: 0.4, end: 1.2),
+                    builder: (context, scale, child) {
+                      return Transform.scale(
+                        scale: scale,
+                        child: const Icon(
+                          Icons.favorite_rounded,
+                          color: Colors.white,
+                          size: 90,
+                          shadows: [
+                            BoxShadow(
+                              color: Colors.black45,
+                              blurRadius: 14,
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
-                  const SizedBox(width: 18),
-                  const Icon(Icons.share_rounded, size: 18, color: Color(0xFF2E2A36)),
-                  const SizedBox(width: 6),
+              ],
+            ),
+          ),
+
+          // 3. Action Buttons Row (Like, Share, Save)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: Icon(
+                    isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                    color: isLiked ? Colors.redAccent : const Color(0xFF2E2A36),
+                    size: 24,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      final nowLiked = !isLiked;
+                      _likedPosts[postId] = nowLiked;
+                      _likeCounts[postId] = currentLikes + (nowLiked ? 1 : -1);
+                    });
+                  },
+                ),
+                Text(
+                  "$currentLikes",
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13.5, color: const Color(0xFF2E2A36)),
+                ),
+                const SizedBox(width: 12),
+                IconButton(
+                  icon: const Icon(Icons.send_rounded, color: Color(0xFF2E2A36), size: 22),
+                  onPressed: () {
+                    Share.share(
+                      "🚩 Check out this post by ${post['mandalName']} on Bharat Pray!\n\n$caption\n\nDownload App: https://bharatpray.app",
+                      subject: "Bharat Pray Mandal Post",
+                    );
+                  },
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: Icon(
+                    isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                    color: isSaved ? const Color(0xFFFF7700) : const Color(0xFF2E2A36),
+                    size: 24,
+                  ),
+                  onPressed: () async {
+                    final isNowSaved = await SavedItemsService.toggleSavePost(
+                      {
+                        'id': postId,
+                        'content': caption,
+                        'image': postImage,
+                        'likes': currentLikes,
+                        'time': timeAgo,
+                        'location': mandalLocation,
+                      },
+                      post['mandalName'] as String,
+                      avatarUrl,
+                    );
+                    setState(() {
+                      _savedPosts[postId] = isNowSaved;
+                    });
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(isNowSaved ? "Saved to Library! 🔖" : "Removed from Saved Items"),
+                          duration: const Duration(seconds: 1),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          // 4. Festival Tag Chip
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF7700).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFF7700).withOpacity(0.25)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text("🛕", style: TextStyle(fontSize: 11)),
+                  const SizedBox(width: 5),
                   Text(
-                    'Share',
-                    style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF2E2A36)),
+                    widget.festivalName,
+                    style: GoogleFonts.outfit(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFFFF7700),
+                    ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+
+          // 5. Post Caption (Clear, Dark Text, High Contrast)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 6, 14, 16),
+            child: RichText(
+              text: TextSpan(
+                style: GoogleFonts.outfit(
+                  fontSize: 13.5,
+                  color: const Color(0xFF2E2A36),
+                  height: 1.35,
+                ),
+                children: [
+                  TextSpan(
+                    text: "${post['mandalName']} ",
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  TextSpan(text: caption),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

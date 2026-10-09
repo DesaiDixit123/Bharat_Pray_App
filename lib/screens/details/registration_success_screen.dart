@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class RegistrationSuccessScreen extends StatelessWidget {
@@ -11,7 +12,29 @@ class RegistrationSuccessScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        automaticallyImplyLeading: false, // No back button as per mockup screenshot
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+          statusBarBrightness: Brightness.light,
+        ),
+        leading: Center(
+          child: GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFC8A882), width: 1.0),
+              ),
+              child: const Center(
+                child: Icon(Icons.arrow_back_ios_new_rounded, size: 16, color: Color(0xFF8E5A2A)),
+              ),
+            ),
+          ),
+        ),
+        automaticallyImplyLeading: false,
         title: Text(
           'Registration Status',
           style: GoogleFonts.outfit(
@@ -94,33 +117,56 @@ class RegistrationSuccessScreen extends StatelessWidget {
                 ),
               ),
 
-              // 5. Go to Home Button
+              // 5. Action Buttons (Back to Festival & Go to Home)
               Padding(
                 padding: const EdgeInsets.only(bottom: 20.0),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF7700),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF7700),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          elevation: 0,
+                        ),
+                        onPressed: () {
+                          Navigator.pop(context);
+                        },
+                        child: Text(
+                          'Back to Festival Details',
+                          style: GoogleFonts.outfit(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
-                      elevation: 0,
                     ),
-                    onPressed: () {
-                      // Navigate back to the home screen (pop all details screen tabs)
-                      Navigator.of(context).popUntil((route) => route.isFirst);
-                    },
-                    child: Text(
-                      'Go to Home',
-                      style: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 44,
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFF8E5A2A),
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).popUntil((route) => route.isFirst);
+                        },
+                        child: Text(
+                          'Go to Home',
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ],

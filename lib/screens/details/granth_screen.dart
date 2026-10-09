@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'granth_list_by_category_screen.dart';
@@ -83,86 +84,100 @@ class _GranthScreenState extends State<GranthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFF6EE),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: Color(0xFF2E2A36),
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          'Granth',
-          style: GoogleFonts.outfit(
-            color: const Color(0xFF2E2A36),
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+        systemNavigationBarColor: Color(0xFFFFE8D6),
+        systemNavigationBarIconBrightness: Brightness.dark,
       ),
-      body: SafeArea(
-        top: false,
-        child: RefreshIndicator(
-          onRefresh: _fetchCategories,
-          color: const Color(0xFFFF7700),
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF7700)))
-              : _error.isNotEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFFE8D6),
+        appBar: AppBar(
+          systemOverlayStyle: const SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.dark,
+            statusBarBrightness: Brightness.light,
+          ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(
+              Icons.arrow_back_ios_new_rounded,
+              color: Color(0xFF2E2A36),
+            ),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Text(
+            'Granth',
+            style: GoogleFonts.outfit(
+              color: const Color(0xFF2E2A36),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        body: SafeArea(
+          top: false,
+          child: RefreshIndicator(
+            onRefresh: _fetchCategories,
+            color: const Color(0xFFFF7700),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF7700)))
+                : _error.isNotEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(_error, style: GoogleFonts.outfit(fontSize: 16, color: const Color(0xFF2E2A36))),
+                            const SizedBox(height: 12),
+                            ElevatedButton(
+                              onPressed: _fetchCategories,
+                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF7700)),
+                              child: Text('Retry', style: GoogleFonts.outfit(color: Colors.white)),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView(
+                        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                         children: [
-                          Text(_error, style: GoogleFonts.outfit(fontSize: 16, color: const Color(0xFF2E2A36))),
-                          const SizedBox(height: 12),
-                          ElevatedButton(
-                            onPressed: _fetchCategories,
-                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF7700)),
-                            child: Text('Retry', style: GoogleFonts.outfit(color: Colors.white)),
+                          Text(
+                            'Select Granth Category',
+                            style: GoogleFonts.outfit(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF2E2A36),
+                            ),
                           ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Choose a category to explore sacred texts',
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF2E2A36).withValues(alpha: 0.58),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          ..._categories.map((category) {
+                            return _CategoryCard(
+                              category: category,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => GranthListByCategoryScreen(category: category),
+                                  ),
+                                );
+                              },
+                            );
+                          }),
                         ],
                       ),
-                    )
-                  : ListView(
-                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                      children: [
-                        Text(
-                          'Select Granth Category',
-                          style: GoogleFonts.outfit(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF2E2A36),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Choose a category to explore sacred texts',
-                          style: GoogleFonts.outfit(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF2E2A36).withValues(alpha: 0.58),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        ..._categories.map((category) {
-                          return _CategoryCard(
-                            category: category,
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => GranthListByCategoryScreen(category: category),
-                                ),
-                              );
-                            },
-                          );
-                        }),
-                      ],
-                    ),
+          ),
         ),
       ),
     );

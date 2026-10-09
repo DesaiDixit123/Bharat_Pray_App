@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../services/utsav_service.dart';
 import 'mandal_profile_screen.dart';
 
 class CreateMandalReelScreen extends StatefulWidget {
   final String mandalName;
-  const CreateMandalReelScreen({super.key, this.mandalName = "Shree Ram Yuvak Mandal"});
+  final String? festivalName;
+  const CreateMandalReelScreen({
+    super.key,
+    this.mandalName = "Shree Ram Yuvak Mandal",
+    this.festivalName,
+  });
 
   @override
   State<CreateMandalReelScreen> createState() => _CreateMandalReelScreenState();
@@ -13,20 +19,33 @@ class CreateMandalReelScreen extends StatefulWidget {
 
 class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
   final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _audioController = TextEditingController(text: "Ram Siya Ram • Mandal Dhun");
+  final TextEditingController _audioController = TextEditingController(text: "Mandal Bhajan & Aarti Track");
   final ImagePicker _picker = ImagePicker();
 
-  String _selectedFestival = "🛕 Somnath Maha Shivratri Mahotsav";
+  String _festivalName = "Maha Navratri Garba Utsav 2026";
   String? _selectedVideoPath;
 
-  final List<String> _festivalList = [
-    "🛕 Somnath Maha Shivratri Mahotsav",
-    "🚩 Shree Ram Navami Mahotsav",
-    "✨ Shri Krishna Janmashtami Utsav",
-    "🪔 Diwali Deepotsav Mahotsav",
-    "💃 Navratri Garba Mahotsav",
-    "🌸 Hanuman Jayanti Utsav",
-  ];
+  @override
+  void initState() {
+    super.initState();
+    if (widget.festivalName != null && widget.festivalName!.isNotEmpty) {
+      _festivalName = widget.festivalName!;
+    }
+    _loadMandalRegistration();
+  }
+
+  Future<void> _loadMandalRegistration() async {
+    try {
+      final reg = await UtsavService.getMyMandalRegistration();
+      if (reg != null && mounted) {
+        setState(() {
+          if (reg['festival'] != null && reg['festival'].toString().trim().isNotEmpty) {
+            _festivalName = reg['festival'].toString().trim();
+          }
+        });
+      }
+    } catch (_) {}
+  }
 
   void _showMediaSourceDialog() {
     showModalBottomSheet(
@@ -286,34 +305,53 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
 
             const SizedBox(height: 18),
 
-            Text(
-              "Festival Name:",
-              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF2E2A36)),
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: _selectedFestival,
-              dropdownColor: Colors.white,
-              iconEnabledColor: const Color(0xFFFF7700),
-              style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            // AUTO-LINKED FESTIVAL BADGE
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFFF7700).withOpacity(0.2)),
               ),
-              items: _festivalList.map((fest) {
-                return DropdownMenuItem(
-                  value: fest,
-                  child: Text(
-                    fest,
-                    style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF7700).withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.festival_rounded, color: Color(0xFFFF7700), size: 16),
                   ),
-                );
-              }).toList(),
-              onChanged: (val) {
-                if (val != null) setState(() => _selectedFestival = val);
-              },
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Registered Festival",
+                          style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                        ),
+                        Text(
+                          _festivalName,
+                          style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8F5E9),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      "Auto-Linked",
+                      style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF2E7D32)),
+                    ),
+                  ),
+                ],
+              ),
             ),
 
             const SizedBox(height: 32),
@@ -333,7 +371,20 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
                   "Publish Reel to Mandal Profile",
                   style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-                onPressed: () {
+                onPressed: () async {
+                  final check = await UtsavService.checkFestivalStartedForMandal(
+                    festivalName: _festivalName,
+                    mandalName: widget.mandalName,
+                  );
+                  if (check['isStarted'] != true) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text("તહેવાર શરૂ થયા પછી જ Reel પબ્લિશ કરી શકાશે (${check['formattedDate']})."),
+                        backgroundColor: const Color(0xFFD32F2F),
+                      ),
+                    );
+                    return;
+                  }
                   if (_titleController.text.trim().isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text("Please enter a reel title")),
@@ -345,12 +396,15 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
                     thumbnailUrl: _selectedVideoPath ?? "assets/images/ram_bhajan.png",
                     title: _titleController.text.trim(),
                     audioTrack: _audioController.text.trim(),
-                    festivalName: _selectedFestival,
-                    views: "1.0k",
-                    likes: 1,
-                    isLiked: true,
+                    festivalName: _festivalName,
+                    views: "0",
+                    likes: 0,
+                    isLiked: false,
                   );
-                  Navigator.pop(context, newReel);
+                  await UtsavService.saveMandalReel(widget.mandalName ?? _festivalName, newReel.toJson());
+                  if (mounted) {
+                    Navigator.pop(context, newReel);
+                  }
                 },
               ),
             ),

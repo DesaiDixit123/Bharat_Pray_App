@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/api_service.dart';
@@ -97,33 +98,47 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFF6EE),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: Color(0xFF2E2A36),
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          (widget.granth['name'] ?? widget.granth['title'] ?? 'Granth').toString(),
-          style: GoogleFonts.outfit(
-            color: const Color(0xFF2E2A36),
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+        systemNavigationBarColor: Color(0xFFFFE8D6),
+        systemNavigationBarIconBrightness: Brightness.dark,
       ),
-      body: SafeArea(
-        top: false,
-        child: RefreshIndicator(
-          onRefresh: _loadChapters,
-          color: const Color(0xFFFF7700),
-          child: _buildBody(),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFFE8D6),
+        appBar: AppBar(
+          systemOverlayStyle: const SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.dark,
+            statusBarBrightness: Brightness.light,
+          ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(
+              Icons.arrow_back_ios_new_rounded,
+              color: Color(0xFF2E2A36),
+            ),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Text(
+            (widget.granth['name'] ?? widget.granth['title'] ?? 'Granth').toString(),
+            style: GoogleFonts.outfit(
+              color: const Color(0xFF2E2A36),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        body: SafeArea(
+          top: false,
+          child: RefreshIndicator(
+            onRefresh: _loadChapters,
+            color: const Color(0xFFFF7700),
+            child: _buildBody(),
+          ),
         ),
       ),
     );

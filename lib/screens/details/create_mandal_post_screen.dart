@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../services/utsav_service.dart';
 import 'mandal_profile_screen.dart';
 
 class CreateMandalPostScreen extends StatefulWidget {
   final String mandalName;
-  const CreateMandalPostScreen({super.key, this.mandalName = "Shree Ram Yuvak Mandal"});
+  final String? festivalName;
+  final String? location;
+  const CreateMandalPostScreen({
+    super.key,
+    this.mandalName = "Shree Ram Yuvak Mandal",
+    this.festivalName,
+    this.location,
+  });
 
   @override
   State<CreateMandalPostScreen> createState() => _CreateMandalPostScreenState();
@@ -13,25 +21,39 @@ class CreateMandalPostScreen extends StatefulWidget {
 
 class _CreateMandalPostScreenState extends State<CreateMandalPostScreen> {
   final TextEditingController _captionController = TextEditingController();
-  final TextEditingController _locationController = TextEditingController(text: "Ahmedabad, Gujarat");
   final ImagePicker _picker = ImagePicker();
 
-  String _selectedFestival = "🛕 Somnath Maha Shivratri Mahotsav";
+  String _festivalName = "Maha Navratri Garba Utsav 2026";
+  String _mandalLocation = "Gujarat, India";
   String? _selectedImagePath;
-
-  final List<String> _festivalList = [
-    "🛕 Somnath Maha Shivratri Mahotsav",
-    "🚩 Shree Ram Navami Mahotsav",
-    "✨ Shri Krishna Janmashtami Utsav",
-    "🪔 Diwali Deepotsav Mahotsav",
-    "💃 Navratri Garba Mahotsav",
-    "🌸 Hanuman Jayanti Utsav",
-  ];
 
   @override
   void initState() {
     super.initState();
+    if (widget.festivalName != null && widget.festivalName!.isNotEmpty) {
+      _festivalName = widget.festivalName!;
+    }
+    if (widget.location != null && widget.location!.isNotEmpty) {
+      _mandalLocation = widget.location!;
+    }
+    _loadMandalRegistration();
     _checkLostData();
+  }
+
+  Future<void> _loadMandalRegistration() async {
+    try {
+      final reg = await UtsavService.getMyMandalRegistration();
+      if (reg != null && mounted) {
+        setState(() {
+          if (reg['festival'] != null && reg['festival'].toString().trim().isNotEmpty) {
+            _festivalName = reg['festival'].toString().trim();
+          }
+          if (reg['address'] != null && reg['address'].toString().trim().isNotEmpty) {
+            _mandalLocation = reg['address'].toString().trim();
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   // RECOVER IMAGE IF ANDROID KILLS ACTIVITY ON CAMERA INTENT
@@ -312,52 +334,88 @@ class _CreateMandalPostScreenState extends State<CreateMandalPostScreen> {
 
             const SizedBox(height: 18),
 
-            Text(
-              "Festival Name:",
-              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF2E2A36)),
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: _selectedFestival,
-              dropdownColor: Colors.white,
-              iconEnabledColor: const Color(0xFFFF7700),
-              style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            // AUTO-LINKED MANDAL INFO (Registered Festival & Location)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFFF7700).withOpacity(0.2)),
               ),
-              items: _festivalList.map((fest) {
-                return DropdownMenuItem(
-                  value: fest,
-                  child: Text(
-                    fest,
-                    style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF7700).withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.festival_rounded, color: Color(0xFFFF7700), size: 16),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Registered Festival",
+                              style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                            ),
+                            Text(
+                              _festivalName,
+                              style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F5E9),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          "Auto-Linked",
+                          style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF2E7D32)),
+                        ),
+                      ),
+                    ],
                   ),
-                );
-              }).toList(),
-              onChanged: (val) {
-                if (val != null) setState(() => _selectedFestival = val);
-              },
-            ),
-
-            const SizedBox(height: 18),
-
-            Text(
-              "Mandal Location:",
-              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF2E2A36)),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _locationController,
-              style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF2E2A36)),
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.location_on_rounded, color: Color(0xFFFF7700), size: 22),
-                hintText: "Add Location",
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Divider(color: Color(0xFFF5EDE4), height: 1),
+                  ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF7700).withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.location_on_rounded, color: Color(0xFFFF7700), size: 16),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Mandal Location",
+                              style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                            ),
+                            Text(
+                              _mandalLocation,
+                              style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
 
@@ -378,7 +436,20 @@ class _CreateMandalPostScreenState extends State<CreateMandalPostScreen> {
                   "Share Post to Mandal Feed",
                   style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-                onPressed: () {
+                onPressed: () async {
+                  final check = await UtsavService.checkFestivalStartedForMandal(
+                    festivalName: _festivalName,
+                    mandalName: widget.mandalName,
+                  );
+                  if (check['isStarted'] != true) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text("તહેવાર શરૂ થયા પછી જ Post કરી શકાશે (${check['formattedDate']})."),
+                        backgroundColor: const Color(0xFFD32F2F),
+                      ),
+                    );
+                    return;
+                  }
                   if (_captionController.text.trim().isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text("Please enter a caption")),
@@ -389,13 +460,16 @@ class _CreateMandalPostScreenState extends State<CreateMandalPostScreen> {
                     id: DateTime.now().millisecondsSinceEpoch.toString(),
                     imageUrl: _selectedImagePath ?? "assets/images/ram_bhajan.png",
                     caption: _captionController.text.trim(),
-                    festivalName: _selectedFestival,
-                    location: _locationController.text.trim(),
+                    festivalName: _festivalName,
+                    location: _mandalLocation,
                     timeAgo: "Just now",
-                    likes: 1,
-                    isLiked: true,
+                    likes: 0,
+                    isLiked: false,
                   );
-                  Navigator.pop(context, newPost);
+                  await UtsavService.saveMandalPost(widget.mandalName ?? _festivalName, newPost.toJson());
+                  if (mounted) {
+                    Navigator.pop(context, newPost);
+                  }
                 },
               ),
             ),

@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../../services/api_service.dart';
+import '../../services/utsav_service.dart';
 import 'live_darshan_screen.dart';
 
 class LiveDarshanDashboardScreen extends StatefulWidget {
@@ -14,7 +13,6 @@ class LiveDarshanDashboardScreen extends StatefulWidget {
 
 class _LiveDarshanDashboardScreenState extends State<LiveDarshanDashboardScreen> {
   int _activeSegment = 0; // 0 = Watch Live, 1 = Go Live
-  String _token = '';
   List<dynamic> _apiDarshans = [];
   bool _isLoading = false;
   bool _isMandalLeader = false;
@@ -22,41 +20,6 @@ class _LiveDarshanDashboardScreenState extends State<LiveDarshanDashboardScreen>
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _categoryController = TextEditingController();
 
-  // Premium fallback mock streams
-  final List<Map<String, dynamic>> _mockStreams = [
-    {
-      '_id': 'mock_1',
-      'name': 'Shree Somnath Mahadev Live Aarti',
-      'temple': {'name': 'Somnath Temple, Gujarat'},
-      'imageUrl': 'assets/images/somnath_temple.png',
-      'viewers': '12.4K',
-      'category': 'Shiva',
-    },
-    {
-      '_id': 'mock_2',
-      'name': 'Siddhivinayak Ganpati Evening Darshan',
-      'temple': {'name': 'Siddhivinayak Temple, Mumbai'},
-      'imageUrl': 'assets/images/utsav_card.png',
-      'viewers': '8.2K',
-      'category': 'Ganesha',
-    },
-    {
-      '_id': 'mock_3',
-      'name': 'Kashi Vishwanath Mangala Aarti',
-      'temple': {'name': 'Kashi Vishwanath, Varanasi'},
-      'imageUrl': 'assets/images/somnath_hero.png',
-      'viewers': '5.9K',
-      'category': 'Shiva',
-    },
-    {
-      '_id': 'mock_4',
-      'name': 'Dwarkadhish Temple Shringar Darshan',
-      'temple': {'name': 'Dwarkadhish Temple, Gujarat'},
-      'imageUrl': 'assets/images/new_year_card.png',
-      'viewers': '15.1K',
-      'category': 'Krishna',
-    }
-  ];
 
   @override
   void initState() {
@@ -65,29 +28,33 @@ class _LiveDarshanDashboardScreenState extends State<LiveDarshanDashboardScreen>
   }
 
   Future<void> _loadData() async {
-    final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('auth_token') ?? '';
+    final reg = await UtsavService.getMyMandalRegistration();
+    final isRegActive = await UtsavService.isRegistrationActive(reg);
+    final isApproved = reg != null &&
+        (reg['status']?.toString().toLowerCase() == 'approved') &&
+        isRegActive;
     if (mounted) {
       setState(() {
-        _isMandalLeader = prefs.getBool('is_mandal_leader') ?? false;
+        _isMandalLeader = isApproved;
+        if (!_isMandalLeader) {
+          _activeSegment = 0;
+        }
       });
     }
     _fetchLiveStreams();
   }
 
   Future<void> _fetchLiveStreams() async {
-    if (_token.isEmpty) return;
     setState(() => _isLoading = true);
     try {
-      final res = await ApiService.getDarshansList(token: _token, limit: 20);
-      final docs = res['docs'] as List<dynamic>? ?? [];
+      final list = await UtsavService.getLiveMandals();
       if (mounted) {
         setState(() {
-          _apiDarshans = docs;
+          _apiDarshans = list;
         });
       }
     } catch (e) {
-      debugPrint("Error fetching API live streams: $e");
+      debugPrint("Error fetching mandal live streams: $e");
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -99,30 +66,31 @@ class _LiveDarshanDashboardScreenState extends State<LiveDarshanDashboardScreen>
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // 1. Existing segment style tab selection at the top (with spacing removed)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-          child: Container(
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFC8A882).withValues(alpha: 0.4)),
-            ),
-            child: Row(
-              children: [
-                _buildSegmentTab("Live Darshans", 0),
-                _buildSegmentTab("Go Live", 1),
-              ],
+        // Show Go Live tab ONLY if mandal profile is approved
+        if (_isMandalLeader)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+            child: Container(
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFC8A882).withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: [
+                  _buildSegmentTab("Live Darshans", 0),
+                  _buildSegmentTab("Go Live", 1),
+                ],
+              ),
             ),
           ),
-        ),
 
         // 2. Tab Contents
         Expanded(
-          child: _activeSegment == 0
-              ? _buildWatchLiveList()
-              : _buildGoLiveSetup(),
+          child: (_isMandalLeader && _activeSegment == 1)
+              ? _buildGoLiveSetup()
+              : _buildWatchLiveList(),
         ),
       ],
     );
@@ -165,12 +133,101 @@ class _LiveDarshanDashboardScreenState extends State<LiveDarshanDashboardScreen>
   // ─── Watch Live Stream List View ───────────────────────────────────────────
 
   Widget _buildWatchLiveList() {
+    final bottomInset = 90.0 + MediaQuery.of(context).padding.bottom;
+
     if (_isLoading && _apiDarshans.isEmpty) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFFFF7700)),
+      return Padding(
+        padding: EdgeInsets.only(bottom: bottomInset),
+        child: const Center(
+          child: CircularProgressIndicator(color: Color(0xFFFF7700)),
+        ),
       );
     }
-    final list = _apiDarshans.isNotEmpty ? _apiDarshans : _mockStreams;
+
+    if (_apiDarshans.isEmpty) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight,
+              ),
+              child: Padding(
+                padding: EdgeInsets.only(bottom: bottomInset, left: 28.0, right: 28.0),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 88,
+                        height: 88,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFEAD8),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: const Color(0xFFFF7700).withValues(alpha: 0.25), width: 2),
+                        ),
+                        child: const Icon(
+                          Icons.sensors_off_rounded,
+                          color: Color(0xFFFF7700),
+                          size: 44,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        "No Mandal Live Right Now",
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.outfit(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF2E2A36),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        "Live darshan streams will be available when an active festival begins (Maha Navratri starts on 11 Oct 2026). Registered mandals can broadcast live darshans.",
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13.5,
+                          color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
+                          height: 1.45,
+                        ),
+                      ),
+                      if (_isMandalLeader) ...[
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          height: 44,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFF7700),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 0,
+                            ),
+                            icon: const Icon(Icons.videocam_rounded),
+                            label: Text(
+                              "Go Live Now",
+                              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: () {
+                              setState(() => _activeSegment = 1);
+                            },
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    final list = _apiDarshans;
 
     return RefreshIndicator(
       onRefresh: _fetchLiveStreams,
@@ -181,24 +238,35 @@ class _LiveDarshanDashboardScreenState extends State<LiveDarshanDashboardScreen>
         itemCount: list.length,
         itemBuilder: (context, index) {
           final stream = list[index];
-          final String name = stream['name'] ?? 'Live Darshan';
-          final String temple = stream['temple']?['name'] ?? stream['temple_details']?['name'] ?? 'Temple';
+          final String mandal = stream['mandalName'] ?? stream['name'] ?? 'Mandal Darshan';
+          final String title = stream['name'] ?? 'Live Aarti & Darshan';
+          final String location = stream['location'] ?? 'Gujarat, India';
           final String image = stream['imageUrl'] ?? 'assets/images/somnath_temple.png';
-          final String viewers = stream['viewers']?.toString() ?? '2.1K';
+          final String viewers = (stream['viewersCount'] ?? stream['viewers'] ?? '1').toString();
           final String id = stream['_id']?.toString() ?? '';
 
           return GestureDetector(
-            onTap: () {
-              Navigator.push(
+            onTap: () async {
+              if (id.isNotEmpty) {
+                await UtsavService.joinLiveStream(id);
+              }
+              if (!context.mounted) return;
+              await Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => LiveDarshanScreen(
                     darshanId: id,
-                    templeName: temple,
+                    templeName: mandal,
                     imageUrl: image,
                   ),
                 ),
               );
+              if (id.isNotEmpty) {
+                await UtsavService.leaveLiveStream(id);
+              }
+              if (mounted) {
+                _fetchLiveStreams();
+              }
             },
             child: Container(
               margin: const EdgeInsets.only(bottom: 16),
@@ -302,7 +370,7 @@ class _LiveDarshanDashboardScreenState extends State<LiveDarshanDashboardScreen>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                name,
+                                mandal,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.outfit(
@@ -313,7 +381,7 @@ class _LiveDarshanDashboardScreenState extends State<LiveDarshanDashboardScreen>
                               ),
                               const SizedBox(height: 3),
                               Text(
-                                temple,
+                                "$title • $location",
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.outfit(
@@ -342,11 +410,9 @@ class _LiveDarshanDashboardScreenState extends State<LiveDarshanDashboardScreen>
     );
   }
 
-  // ─── Go Live Stream Creation View ──────────────────────────────────────────
-
   Widget _buildGoLiveSetup() {
     if (!_isMandalLeader) {
-      return _buildRestrictedGoLive();
+      return const SizedBox.shrink();
     }
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -426,7 +492,7 @@ class _LiveDarshanDashboardScreenState extends State<LiveDarshanDashboardScreen>
             controller: _categoryController,
             style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF2E2A36)),
             decoration: InputDecoration(
-              hintText: "e.g., Shree Ganesh Yuva Mandal, Ahmedabad",
+              hintText: "e.g., Navdurga Garba Mandal, Vadodara",
               hintStyle: GoogleFonts.outfit(color: const Color(0xFFC8A882).withValues(alpha: 0.6)),
               fillColor: Colors.white,
               filled: true,
@@ -456,7 +522,7 @@ class _LiveDarshanDashboardScreenState extends State<LiveDarshanDashboardScreen>
                 ),
                 elevation: 0,
               ),
-              onPressed: () {
+              onPressed: () async {
                 final title = _titleController.text.trim();
                 final location = _categoryController.text.trim();
                 if (title.isEmpty || location.isEmpty) {
@@ -472,16 +538,25 @@ class _LiveDarshanDashboardScreenState extends State<LiveDarshanDashboardScreen>
                   return;
                 }
 
-                // Push camera streaming view
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => MockCameraStreamingScreen(
-                      streamTitle: title,
-                      location: location,
-                    ),
-                  ),
+                // Register and start mandal live broadcast
+                await UtsavService.goLiveMandal(
+                  mandalName: location,
+                  streamTitle: title,
+                  location: location,
                 );
+
+                if (mounted) {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => MockCameraStreamingScreen(
+                        streamTitle: title,
+                        location: location,
+                      ),
+                    ),
+                  );
+                  _fetchLiveStreams();
+                }
               },
               child: Text(
                 'Start Live Darshan',
@@ -490,91 +565,6 @@ class _LiveDarshanDashboardScreenState extends State<LiveDarshanDashboardScreen>
                   fontWeight: FontWeight.bold,
                 ),
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRestrictedGoLive() {
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const SizedBox(height: 40),
-          // Lock Icon
-          Container(
-            width: 80,
-            height: 80,
-            decoration: const BoxDecoration(
-              color: Color(0xFFFFEAD8),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.lock_person_rounded,
-              color: Color(0xFFFF7700),
-              size: 40,
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Title
-          Text(
-            "Mandal Leader Access Only",
-            textAlign: TextAlign.center,
-            style: GoogleFonts.outfit(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF2E2A36),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Description
-          Text(
-            "Starting a live broadcast is restricted to authorized Mandal Leaders. Please register your mandal or contact the admin team for leader access.",
-            textAlign: TextAlign.center,
-            style: GoogleFonts.outfit(
-              fontSize: 13,
-              color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 32),
-
-          // Simulate leader role switch for easy local testing
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFC8A882).withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  "Simulate Mandal Leader Role",
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF8E5A2A),
-                  ),
-                ),
-                Switch(
-                  value: _isMandalLeader,
-                  activeThumbColor: const Color(0xFFFF7700),
-                  onChanged: (val) {
-                    setState(() {
-                      _isMandalLeader = val;
-                    });
-                  },
-                ),
-              ],
             ),
           ),
         ],
@@ -600,9 +590,9 @@ class MockCameraStreamingScreen extends StatefulWidget {
 }
 
 class _MockCameraStreamingScreenState extends State<MockCameraStreamingScreen> {
-  int _viewers = 12;
-  int _likes = 4;
-  final List<String> _comments = ["Har Har Mahadev! 🙏", "Jai Shree Ganesh", "Jai Mata Di! ✨"];
+  int _viewers = 1;
+  int _likes = 0;
+  final List<String> _comments = ["Har Har Mahadev! 🙏", "Jai Mata Di! ✨", "Shubh Navratri! 🪔"];
   final List<String> _userNames = ["Rajesh Kumar", "Priya Sharma", "Aarav Gupta"];
   
   Timer? _statsTimer;
@@ -617,8 +607,8 @@ class _MockCameraStreamingScreenState extends State<MockCameraStreamingScreen> {
     _statsTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (mounted) {
         setState(() {
-          _viewers += (3 + timer.tick % 5);
-          _likes += (2 + timer.tick % 4);
+          _viewers += (1 + (timer.tick % 2).toInt());
+          _likes += (1 + (timer.tick % 3).toInt());
         });
       }
     });
@@ -652,7 +642,7 @@ class _MockCameraStreamingScreenState extends State<MockCameraStreamingScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. Mock Camera Feed Background (Representing camera recording Ganesha)
+          // 1. Camera Feed Background
           Image.asset(
             'assets/images/new_year_card.png',
             fit: BoxFit.cover,
