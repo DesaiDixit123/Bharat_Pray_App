@@ -23,7 +23,7 @@ class _CreateMandalPostScreenState extends State<CreateMandalPostScreen> {
   final TextEditingController _captionController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
 
-  String _festivalName = "Maha Navratri Garba Utsav 2026";
+  String _festivalName = "Pre Navratri";
   String _mandalLocation = "Gujarat, India";
   String? _selectedImagePath;
 
@@ -45,10 +45,12 @@ class _CreateMandalPostScreenState extends State<CreateMandalPostScreen> {
       final reg = await UtsavService.getMyMandalRegistration();
       if (reg != null && mounted) {
         setState(() {
-          if (reg['festival'] != null && reg['festival'].toString().trim().isNotEmpty) {
+          if ((widget.festivalName == null || widget.festivalName!.isEmpty) &&
+              reg['festival'] != null && reg['festival'].toString().trim().isNotEmpty) {
             _festivalName = reg['festival'].toString().trim();
           }
-          if (reg['address'] != null && reg['address'].toString().trim().isNotEmpty) {
+          if ((widget.location == null || widget.location!.isEmpty) &&
+              reg['address'] != null && reg['address'].toString().trim().isNotEmpty) {
             _mandalLocation = reg['address'].toString().trim();
           }
         });
@@ -466,7 +468,7 @@ class _CreateMandalPostScreenState extends State<CreateMandalPostScreen> {
                     likes: 0,
                     isLiked: false,
                   );
-                  await UtsavService.saveMandalPost(widget.mandalName ?? _festivalName, newPost.toJson());
+                  await UtsavService.saveMandalPost(widget.mandalName.isNotEmpty ? widget.mandalName : _festivalName, newPost.toJson());
                   if (mounted) {
                     Navigator.pop(context, newPost);
                   }

@@ -60,27 +60,38 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
 
   Future<void> _loadUtsavData() async {
     try {
-      final active = await UtsavService.getFestivals(status: 'Active');
-      final upcoming = await UtsavService.getFestivals(status: 'Upcoming');
+      final all = await UtsavService.getFestivals(status: 'ALL');
+      final active = all.where((f) => (f['status'] ?? '').toString().toLowerCase() == 'active').toList();
+      final upcoming = all.where((f) => (f['status'] ?? '').toString().toLowerCase() == 'upcoming').toList();
       final mandals = await UtsavService.getMandals();
-      final myReg = await UtsavService.getMyMandalRegistration();
-      final isRegActive = await UtsavService.isRegistrationActive(myReg);
+      
+      Map<String, dynamic>? myReg;
+      bool hasRegistered = false;
+      try {
+        myReg = await UtsavService.getMyMandalRegistration();
+        final isRegActive = await UtsavService.isRegistrationActive(myReg);
+        hasRegistered = myReg != null && isRegActive && (myReg['mandalName']?.toString().trim().isNotEmpty ?? false);
+      } catch (_) {}
+
       if (mounted) {
         setState(() {
           _activeFestivals = active;
           _upcomingFestivals = upcoming;
           _topMandals = mandals;
           _myRegistration = myReg;
-          _hasRegisteredMandal = myReg != null && isRegActive && (myReg['mandalName']?.toString().trim().isNotEmpty ?? false);
+          _hasRegisteredMandal = hasRegistered;
           _isLoading = false;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[UtsavHome] Error loading utsav data: $e');
+      final fallbackFestivals = await UtsavService.getFestivals(status: 'ALL');
+      final fallbackMandals = await UtsavService.getMandals();
       if (mounted) {
         setState(() {
-          _activeFestivals = [];
-          _upcomingFestivals = [];
-          _topMandals = [];
+          _activeFestivals = fallbackFestivals.where((f) => (f['status'] ?? '').toString().toLowerCase() == 'active').toList();
+          _upcomingFestivals = fallbackFestivals.where((f) => (f['status'] ?? '').toString().toLowerCase() == 'upcoming').toList();
+          _topMandals = fallbackMandals;
           _isLoading = false;
         });
       }

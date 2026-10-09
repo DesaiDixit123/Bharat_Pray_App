@@ -289,7 +289,12 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
   }
 
   Future<void> _loadMandalData() async {
-    final name = widget.mandalName ?? _mandalName;
+    final myReg = await UtsavService.getMyMandalRegistration();
+    String name = widget.mandalName ?? _mandalName;
+    if ((name.isEmpty || name == 'Mandal') && myReg != null && myReg['mandalName'] != null) {
+      name = myReg['mandalName'].toString();
+    }
+    _mandalName = name;
 
     // Check if the festival associated with this mandal has started
     final festInfo = await UtsavService.checkFestivalStartedForMandal(mandalName: name);
@@ -301,7 +306,6 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
       });
     }
 
-    final myReg = await UtsavService.getMyMandalRegistration();
     final isMyMandal = widget.isOwnProfile ||
         (myReg != null && (
           (name.isNotEmpty && myReg['mandalName']?.toString().toLowerCase().trim() == name.toLowerCase().trim()) ||
@@ -312,11 +316,13 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
     if (isMyMandal && myReg != null && mounted) {
       final months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
       setState(() {
-        if (_avatarUrl == null || _avatarUrl!.isEmpty) {
-          _avatarUrl = (myReg['logo'] ?? myReg['avatar'] ?? myReg['logoUrl'])?.toString();
+        final regLogo = (myReg['logo'] ?? myReg['avatar'] ?? myReg['logoUrl'])?.toString();
+        if (regLogo != null && regLogo.isNotEmpty) {
+          _avatarUrl = regLogo;
         }
-        if (_coverUrl == null || _coverUrl!.isEmpty) {
-          _coverUrl = (myReg['cover'] ?? myReg['coverUrl'] ?? myReg['imageUrl'])?.toString();
+        final regCover = (myReg['cover'] ?? myReg['coverUrl'] ?? myReg['imageUrl'])?.toString();
+        if (regCover != null && regCover.isNotEmpty) {
+          _coverUrl = regCover;
         }
         if (myReg['mandalName'] != null && myReg['mandalName'].toString().isNotEmpty) {
           _mandalName = myReg['mandalName'].toString();
@@ -360,69 +366,68 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
           }
         }
       });
-      return;
-    }
-
-    final m = await UtsavService.getMandalByName(name);
-    if (m != null && mounted) {
-      final months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-      setState(() {
-        _mandalName = (m['name'] ?? _mandalName).toString();
-        final city = (m['city'] ?? widget.location ?? _location).toString();
-        _location = city;
-        final est = m['establishedYear'] != null ? ' • Est. ${m['establishedYear']}' : '';
-        _mandalTag = "Official Spiritual Organisation • $city$est";
-        if (m['regNo'] != null) _regNumber = m['regNo'].toString();
-        if (m['bio'] != null && m['bio'].toString().isNotEmpty) {
-          _bio = m['bio'].toString();
-        } else if (m['description'] != null && m['description'].toString().isNotEmpty) {
-          _bio = m['description'].toString();
-        }
-        if (_avatarUrl == null || _avatarUrl!.isEmpty) {
-          _avatarUrl = (m['logo'] ?? m['imageUrl'])?.toString();
-        }
-        if (_coverUrl == null || _coverUrl!.isEmpty) {
-          _coverUrl = (m['imageUrl'] ?? m['cover'] ?? m['banner'])?.toString();
-        }
-
-        // Leader details from mandal object
-        if (m['leader'] is Map) {
-          final l = m['leader'] as Map;
-          if (l['name'] != null && l['name'].toString().isNotEmpty) {
-            _presidentName = l['name'].toString();
+    } else {
+      final m = await UtsavService.getMandalByName(name);
+      if (m != null && mounted) {
+        final months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        setState(() {
+          _mandalName = (m['name'] ?? _mandalName).toString();
+          final city = (m['city'] ?? widget.location ?? _location).toString();
+          _location = city;
+          final est = m['establishedYear'] != null ? ' • Est. ${m['establishedYear']}' : '';
+          _mandalTag = "Official Spiritual Organisation • $city$est";
+          if (m['regNo'] != null) _regNumber = m['regNo'].toString();
+          if (m['bio'] != null && m['bio'].toString().isNotEmpty) {
+            _bio = m['bio'].toString();
+          } else if (m['description'] != null && m['description'].toString().isNotEmpty) {
+            _bio = m['description'].toString();
           }
-          if (l['phone'] != null && l['phone'].toString().isNotEmpty) {
-            _officialPhone = l['phone'].toString();
+          if (_avatarUrl == null || _avatarUrl!.isEmpty) {
+            _avatarUrl = (m['logo'] ?? m['imageUrl'])?.toString();
           }
-        } else if (m['leaderName'] != null && m['leaderName'].toString().isNotEmpty) {
-          _presidentName = m['leaderName'].toString();
-        }
-
-        if (m['phone'] != null && m['phone'].toString().isNotEmpty && _officialPhone.isEmpty) {
-          _officialPhone = m['phone'].toString();
-        }
-
-        final status = (m['status'] ?? 'Approved').toString();
-        if (status.toLowerCase() == 'pending') {
-          _statusText = "Pending Verification ⏳";
-        } else if (status.toLowerCase() == 'rejected') {
-          _statusText = "Rejected by Bharat Pray Admin ❌";
-        } else {
-          _statusText = "Approved by Bharat Pray Admin ✅";
-        }
-
-        if (m['updatedAt'] != null || m['createdAt'] != null) {
-          final dtStr = (m['updatedAt'] ?? m['createdAt']).toString();
-          final dt = DateTime.tryParse(dtStr);
-          if (dt != null) {
-            _approvedDate = "${dt.day} ${months[dt.month - 1]} ${dt.year}";
+          if (_coverUrl == null || _coverUrl!.isEmpty) {
+            _coverUrl = (m['imageUrl'] ?? m['cover'] ?? m['banner'])?.toString();
           }
-        } else if (m['requestDate'] != null) {
-          _approvedDate = m['requestDate'].toString();
-        } else if (m['establishedYear'] != null) {
-          _approvedDate = "Est. ${m['establishedYear']}";
-        }
-      });
+
+          // Leader details from mandal object
+          if (m['leader'] is Map) {
+            final l = m['leader'] as Map;
+            if (l['name'] != null && l['name'].toString().isNotEmpty) {
+              _presidentName = l['name'].toString();
+            }
+            if (l['phone'] != null && l['phone'].toString().isNotEmpty) {
+              _officialPhone = l['phone'].toString();
+            }
+          } else if (m['leaderName'] != null && m['leaderName'].toString().isNotEmpty) {
+            _presidentName = m['leaderName'].toString();
+          }
+
+          if (m['phone'] != null && m['phone'].toString().isNotEmpty && _officialPhone.isEmpty) {
+            _officialPhone = m['phone'].toString();
+          }
+
+          final status = (m['status'] ?? 'Approved').toString();
+          if (status.toLowerCase() == 'pending') {
+            _statusText = "Pending Verification ⏳";
+          } else if (status.toLowerCase() == 'rejected') {
+            _statusText = "Rejected by Bharat Pray Admin ❌";
+          } else {
+            _statusText = "Approved by Bharat Pray Admin ✅";
+          }
+
+          if (m['updatedAt'] != null || m['createdAt'] != null) {
+            final dtStr = (m['updatedAt'] ?? m['createdAt']).toString();
+            final dt = DateTime.tryParse(dtStr);
+            if (dt != null) {
+              _approvedDate = "${dt.day} ${months[dt.month - 1]} ${dt.year}";
+            }
+          } else if (m['requestDate'] != null) {
+            _approvedDate = m['requestDate'].toString();
+          } else if (m['establishedYear'] != null) {
+            _approvedDate = "Est. ${m['establishedYear']}";
+          }
+        });
+      }
     }
 
     // Load persisted posts, reels, and live events
@@ -697,12 +702,17 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
     final result = await Navigator.push<PostItem>(
       context,
       MaterialPageRoute(
-        builder: (context) => CreateMandalPostScreen(mandalName: _mandalName),
+        builder: (context) => CreateMandalPostScreen(
+          mandalName: _mandalName,
+          festivalName: _associatedFestivalName,
+          location: _location,
+        ),
       ),
     );
     if (result != null) {
       await UtsavService.saveMandalPost(_mandalName, result.toJson());
       setState(() {
+        _posts.removeWhere((p) => p.id == result.id);
         _posts.insert(0, result);
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -722,12 +732,16 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
     final result = await Navigator.push<ReelItem>(
       context,
       MaterialPageRoute(
-        builder: (context) => CreateMandalReelScreen(mandalName: _mandalName),
+        builder: (context) => CreateMandalReelScreen(
+          mandalName: _mandalName,
+          festivalName: _associatedFestivalName,
+        ),
       ),
     );
     if (result != null) {
       await UtsavService.saveMandalReel(_mandalName, result.toJson());
       setState(() {
+        _reels.removeWhere((r) => r.id == result.id);
         _reels.insert(0, result);
       });
       ScaffoldMessenger.of(context).showSnackBar(

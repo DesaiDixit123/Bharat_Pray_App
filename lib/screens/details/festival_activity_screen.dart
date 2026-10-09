@@ -66,12 +66,41 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
 
   Future<void> _loadActivityData() async {
     try {
-      final list = await UtsavService.getMandals();
+      final festId = widget.festivalData?['_id'] ?? widget.festivalData?['customId'];
+      final list = await UtsavService.getMandals(festivalId: festId?.toString());
+      final List<Map<String, dynamic>> allPosts = [];
+      final List<Map<String, String>> allReels = [];
+
+      for (final m in list) {
+        final mName = (m['name'] ?? '').toString();
+        final pList = await UtsavService.getMandalPosts(mName);
+        for (final p in pList) {
+          allPosts.add({
+            ...p,
+            'mandalName': mName,
+            'logo': m['logo'] ?? m['imageUrl'],
+            'area': m['city'] ?? '',
+          });
+        }
+        final rList = await UtsavService.getMandalReels(mName);
+        for (final r in rList) {
+          allReels.add({
+            'id': r['id']?.toString() ?? '',
+            'title': r['title']?.toString() ?? '',
+            'mandalName': mName,
+            'thumbnailUrl': (r['thumbnailUrl'] ?? r['imageUrl'] ?? 'assets/images/devotional/navratri_garba_festival.jpg').toString(),
+            'videoUrl': r['videoUrl']?.toString() ?? '',
+            'area': m['city']?.toString() ?? '',
+            'views': r['views']?.toString() ?? '1.2K',
+          });
+        }
+      }
+
       if (mounted) {
         setState(() {
           _mandals = list;
-          _reels = [];
-          _posts = [];
+          _reels = allReels;
+          _posts = allPosts;
           _isLoading = false;
         });
       }

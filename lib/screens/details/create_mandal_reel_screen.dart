@@ -22,7 +22,7 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
   final TextEditingController _audioController = TextEditingController(text: "Mandal Bhajan & Aarti Track");
   final ImagePicker _picker = ImagePicker();
 
-  String _festivalName = "Maha Navratri Garba Utsav 2026";
+  String _festivalName = "Pre Navratri";
   String? _selectedVideoPath;
 
   @override
@@ -39,7 +39,8 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
       final reg = await UtsavService.getMyMandalRegistration();
       if (reg != null && mounted) {
         setState(() {
-          if (reg['festival'] != null && reg['festival'].toString().trim().isNotEmpty) {
+          if ((widget.festivalName == null || widget.festivalName!.isEmpty) &&
+              reg['festival'] != null && reg['festival'].toString().trim().isNotEmpty) {
             _festivalName = reg['festival'].toString().trim();
           }
         });
@@ -401,7 +402,7 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
                     likes: 0,
                     isLiked: false,
                   );
-                  await UtsavService.saveMandalReel(widget.mandalName ?? _festivalName, newReel.toJson());
+                  await UtsavService.saveMandalReel(widget.mandalName.isNotEmpty ? widget.mandalName : _festivalName, newReel.toJson());
                   if (mounted) {
                     Navigator.pop(context, newReel);
                   }

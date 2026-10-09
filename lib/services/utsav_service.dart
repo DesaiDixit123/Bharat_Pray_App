@@ -8,6 +8,30 @@ class UtsavService {
   // Shared Admin Utsav Initial Data
   static const List<Map<String, dynamic>> _kInitialFestivals = [
     {
+      '_id': 'fest-pre-navratri',
+      'name': 'Pre Navratri',
+      'slogan': 'Pre Navratri Raas Garba Mahotsav 2026',
+      'banner': 'assets/images/devotional/pre_navratri_banner.jpg',
+      'isDateRange': true,
+      'startDate': '2026-10-05',
+      'endDate': '2026-10-10',
+      'formattedDate': '05 Oct 2026 - 10 Oct 2026',
+      'regStartDate': '2026-09-15',
+      'regEndDate': '2026-10-04',
+      'formattedRegDate': '15 Sep 2026 - 04 Oct 2026',
+      'status': 'Active',
+      'isPopular': true,
+      'description': 'Grand 5-day Pre Navratri celebration and garba competition before Navratri starts.',
+      'timing': 'Daily Raas Garba: 8:00 PM - 12:00 AM',
+      'rewards': {
+        'first': 'Pre-Navratri Championship Trophy & Golden Certificate',
+        'second': 'Silver Shield & Runner-up Certificate',
+        'third': 'Bronze Medal & Excellence Certificate',
+      },
+      'participantCount': 3,
+      'totalVotes': 0,
+    },
+    {
       '_id': 'fest-002',
       'name': 'Maha Navratri Garba Utsav 2026',
       'slogan': '9 Divine Nights of Mataji Bhakti & Raas Garba Mandal Competition',
@@ -81,6 +105,87 @@ class UtsavService {
     }
   ];
 
+  static const List<Map<String, dynamic>> _kInitialMandals = [
+    {
+      '_id': 'mandal-pre-1',
+      'name': 'Khodal Dham',
+      'festivalId': 'fest-pre-navratri',
+      'festival': 'Pre Navratri',
+      'city': 'Rajkot, Gujarat',
+      'regNo': 'REG-2026-KD01',
+      'rank': 1,
+      'votes': 0,
+      'likes': '0',
+      'shares': '0',
+      'views': 0,
+      'postsCount': 0,
+      'status': 'Approved',
+      'imageUrl': 'assets/images/devotional/khodal_dham_logo.jpg',
+      'logo': 'assets/images/devotional/khodal_dham_logo.jpg',
+      'description': 'Official Khodal Dham Garba Mandal, Rajkot.',
+      'leader': {
+        'name': 'Ayush',
+        'role': 'Mandal Leader',
+        'phone': '8128753230',
+        'avatar': 'assets/images/devotional/khodal_dham_logo.jpg',
+      },
+      'leaderName': 'Ayush',
+      'phone': '8128753230',
+    },
+    {
+      '_id': 'mandal-pre-2',
+      'name': 'Vasani',
+      'festivalId': 'fest-pre-navratri',
+      'festival': 'Pre Navratri',
+      'city': 'Ahmedabad, Gujarat',
+      'regNo': 'REG-2026-VS02',
+      'rank': 2,
+      'votes': 0,
+      'likes': '0',
+      'shares': '0',
+      'views': 0,
+      'postsCount': 0,
+      'status': 'Approved',
+      'imageUrl': 'assets/images/devotional/vasani_logo.jpg',
+      'logo': 'assets/images/devotional/vasani_logo.jpg',
+      'description': 'Vasani Group Garba Mandal, Ahmedabad.',
+      'leader': {
+        'name': 'Krish',
+        'role': 'Mandal Leader',
+        'phone': '8238917405',
+        'avatar': 'assets/images/devotional/vasani_logo.jpg',
+      },
+      'leaderName': 'Krish',
+      'phone': '8238917405',
+    },
+    {
+      '_id': 'mandal-pre-3',
+      'name': 'Ras Rangat',
+      'festivalId': 'fest-pre-navratri',
+      'festival': 'Pre Navratri',
+      'city': 'Surat, Gujarat',
+      'regNo': 'REG-2026-RR03',
+      'rank': 3,
+      'votes': 0,
+      'likes': '0',
+      'shares': '0',
+      'views': 0,
+      'postsCount': 0,
+      'status': 'Approved',
+      'imageUrl': 'assets/images/devotional/ras_rangat_logo.jpg',
+      'logo': 'assets/images/devotional/ras_rangat_logo.jpg',
+      'description': 'Ras Rangat Garba Mandal, Surat.',
+      'leader': {
+        'name': 'Dixit',
+        'role': 'Mandal Leader',
+        'phone': '9737080195',
+        'avatar': 'assets/images/devotional/ras_rangat_logo.jpg',
+      },
+      'leaderName': 'Dixit',
+      'phone': '9737080195',
+    },
+  ];
+
   // ─── Dynamic Date Calculation ──────────────────────────────────────────────
 
   static DateTime? _parseDate(String? str) {
@@ -118,6 +223,13 @@ class UtsavService {
       if (nameLower.contains('ganesh') || nameLower.contains('chaturthi')) {
         return 'Completed';
       }
+      if (nameLower.contains('pre') && nameLower.contains('navratri')) {
+        return 'Active';
+      }
+    }
+
+    if (fallbackStatus.toLowerCase() == 'active') {
+      return 'Active';
     }
 
     final now = DateTime.now();
@@ -249,35 +361,35 @@ class UtsavService {
   // ─── Festivals ─────────────────────────────────────────────────────────────
 
   static Future<List<Map<String, dynamic>>> getFestivals({String status = 'ALL'}) async {
-    try {
-      final uri = Uri.parse('${ApiService.baseUrl}/api/utsav/festivals?status=$status');
-      final response = await http.get(uri).timeout(const Duration(seconds: 4));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['IsSuccess'] == true && data['Data'] is List) {
-          final list = (data['Data'] as List).cast<Map<String, dynamic>>();
-          final clean = list.where((f) => !(f['name'] ?? '').toString().toLowerCase().contains('ganesh')).toList();
-          final computed = clean.map(_withDynamicStatus).toList();
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('utsav_cached_festivals', jsonEncode(clean));
-          if (status == 'ALL') return computed;
-          return computed.where((f) => (f['status'] ?? '').toString().toLowerCase() == status.toLowerCase()).toList();
+    for (final host in _backendHosts) {
+      try {
+        final uri = Uri.parse('$host/api/utsav/festivals?status=ALL');
+        final response = await http.get(uri).timeout(const Duration(seconds: 4));
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          if (data['IsSuccess'] == true && data['Data'] is List) {
+            final list = (data['Data'] as List).cast<Map<String, dynamic>>();
+            if (list.isNotEmpty) {
+              final computed = list.map(_withDynamicStatus).toList();
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString('utsav_cached_festivals', jsonEncode(list));
+              if (status == 'ALL') return computed;
+              return computed.where((f) => (f['status'] ?? '').toString().toLowerCase() == status.toLowerCase()).toList();
+            }
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
 
-    // Fallback to unified data
+    // Fallback to cached data
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString('utsav_cached_festivals');
     List<Map<String, dynamic>> all = _kInitialFestivals;
     if (saved != null) {
       try {
         final decoded = jsonDecode(saved) as List;
-        final list = decoded
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .where((f) => !(f['name'] ?? '').toString().toLowerCase().contains('ganesh'))
-            .toList();
-        if (list.isNotEmpty) {
+        final list = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        if (list.isNotEmpty && list.any((f) => (f['name'] ?? '').toString().toLowerCase().contains('pre'))) {
           all = list;
         }
       } catch (_) {}
@@ -342,15 +454,23 @@ class UtsavService {
       } catch (_) {}
     }
 
+    // If no mandals in cache, load initial mandals
+    if (all.isEmpty) {
+      all = List<Map<String, dynamic>>.from(_kInitialMandals);
+    }
+
     // Always include the user's registered mandal if available
     final myReg = await getMyMandalRegistration();
     if (myReg != null && (myReg['mandalName']?.toString().trim().isNotEmpty ?? false)) {
       final myMandalName = myReg['mandalName'].toString().trim();
+      final isKhodalDham = myMandalName.toLowerCase().contains('khodal');
+      final defaultFestId = isKhodalDham ? 'fest-pre-navratri' : 'fest-002';
       if (!all.any((m) => (m['name'] ?? '').toString().trim().toLowerCase() == myMandalName.toLowerCase())) {
         all.add({
           '_id': 'mandal_my_${myReg['registrationId'] ?? 'user'}',
           'registrationId': myReg['registrationId'],
-          'festivalId': myReg['festivalId'] ?? 'fest-002',
+          'festivalId': myReg['festivalId'] ?? defaultFestId,
+          'festival': myReg['festival'] ?? (isKhodalDham ? 'Pre Navratri' : 'Maha Navratri Garba Utsav 2026'),
           'name': myMandalName,
           'city': myReg['address'] ?? myReg['city'] ?? 'Gujarat, India',
           'regNo': myReg['registrationId'] ?? 'REG-001',
@@ -361,16 +481,16 @@ class UtsavService {
           'views': 0,
           'postsCount': 0,
           'status': myReg['status'] ?? 'Approved',
-          'imageUrl': myReg['cover'] ?? myReg['coverUrl'] ?? myReg['logo'] ?? myReg['logoUrl'] ?? 'assets/images/devotional/navratri_garba_festival.jpg',
-          'logo': myReg['logo'] ?? myReg['logoUrl'] ?? 'assets/images/devotional/navratri_garba_festival.jpg',
+          'imageUrl': myReg['cover'] ?? myReg['coverUrl'] ?? myReg['logo'] ?? myReg['logoUrl'] ?? 'assets/images/devotional/khodal_dham_logo.jpg',
+          'logo': myReg['logo'] ?? myReg['logoUrl'] ?? 'assets/images/devotional/khodal_dham_logo.jpg',
           'description': 'Devotional Mandal in ${myReg['address'] ?? 'Gujarat'}.',
           'leader': {
-            'name': myReg['leaderName'] ?? '',
+            'name': myReg['leaderName'] ?? 'Ayush',
             'role': 'Leader',
-            'phone': myReg['mobile'] ?? '',
+            'phone': myReg['mobile'] ?? '8128753230',
           },
-          'leaderName': myReg['leaderName'] ?? '',
-          'phone': myReg['mobile'] ?? '',
+          'leaderName': myReg['leaderName'] ?? 'Ayush',
+          'phone': myReg['mobile'] ?? '8128753230',
           'createdAt': myReg['createdAt'] ?? myReg['updatedAt'],
           'updatedAt': myReg['updatedAt'] ?? myReg['createdAt'],
         });
@@ -437,6 +557,15 @@ class UtsavService {
     String targetFestName = festivalName ?? '';
     String targetFestId = festivalId ?? '';
 
+    // Direct Pre Navratri match for the 3 registered mandals
+    if (mandalName != null && mandalName.trim().isNotEmpty) {
+      final clean = mandalName.trim().toLowerCase();
+      if (clean.contains('khodal') || clean.contains('vasani') || clean.contains('ras rangat')) {
+        targetFestId = 'fest-pre-navratri';
+        targetFestName = 'Pre Navratri';
+      }
+    }
+
     if (targetFestName.isEmpty && targetFestId.isEmpty) {
       if (mandalName != null && mandalName.isNotEmpty) {
         final m = await getMandalByName(mandalName);
@@ -450,8 +579,14 @@ class UtsavService {
     if (targetFestName.isEmpty && targetFestId.isEmpty) {
       final myReg = await getMyMandalRegistration();
       if (myReg != null) {
-        targetFestId = (myReg['festivalId'] ?? '').toString();
-        targetFestName = (myReg['festival'] ?? myReg['festivalName'] ?? myReg['category'] ?? '').toString();
+        final rName = (myReg['mandalName'] ?? '').toString().toLowerCase();
+        if (rName.contains('khodal') || rName.contains('vasani') || rName.contains('ras rangat')) {
+          targetFestId = 'fest-pre-navratri';
+          targetFestName = 'Pre Navratri';
+        } else {
+          targetFestId = (myReg['festivalId'] ?? '').toString();
+          targetFestName = (myReg['festival'] ?? myReg['festivalName'] ?? myReg['category'] ?? '').toString();
+        }
       }
     }
 
@@ -704,8 +839,11 @@ class UtsavService {
 
   // ─── Backend Connectivity Helpers ─────────────────────────────────────────
 
-  static final List<String> _backendHosts = [
+  static List<String> get _backendHosts => [
     ApiService.baseUrl,
+    'http://127.0.0.1:3020',
+    'http://192.168.29.73:3020',
+    'http://10.0.2.2:3020',
   ];
 
   static String resolveImageUrl(String? url, {String fallback = 'assets/images/devotional/navratri_garba_festival.jpg'}) {
@@ -956,27 +1094,13 @@ class UtsavService {
               return null;
             }
           }
-          // Merge local data to preserve local picked image file paths
+          // If remote server has logo or cover, strictly prioritize the server image!
           if (localData != null) {
             if ((remoteData['logo'] == null || remoteData['logo'].toString().isEmpty) && localData['logo'] != null) {
               remoteData['logo'] = localData['logo'];
-            } else if (localData['logo'] != null && localData['logo'].toString().isNotEmpty) {
-              // Store remote as logoUrl and keep local if file exists
-              remoteData['logoUrl'] = remoteData['logo'];
-              final localFile = File(localData['logo'].toString());
-              if (localFile.existsSync()) {
-                remoteData['logo'] = localData['logo'];
-              }
             }
-
             if ((remoteData['cover'] == null || remoteData['cover'].toString().isEmpty) && localData['cover'] != null) {
               remoteData['cover'] = localData['cover'];
-            } else if (localData['cover'] != null && localData['cover'].toString().isNotEmpty) {
-              remoteData['coverUrl'] = remoteData['cover'];
-              final localFile = File(localData['cover'].toString());
-              if (localFile.existsSync()) {
-                remoteData['cover'] = localData['cover'];
-              }
             }
             if (localData['status'] == 'Pending' && remoteData['status'] == 'Rejected') {
               final localDate = DateTime.tryParse(localData['createdAt']?.toString() ?? '');
@@ -1160,17 +1284,32 @@ class UtsavService {
     if (raw != null && raw.isNotEmpty) {
       try {
         final decoded = jsonDecode(raw) as List;
-        return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        final list = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        if (list.isNotEmpty) return list;
       } catch (_) {}
     }
+
     final myReg = await getMyMandalRegistration();
-    if (myReg != null && (myReg['mandalName']?.toString().toLowerCase().trim() == mandalName.toLowerCase().trim())) {
+    final regName = (myReg?['mandalName'] ?? '').toString().trim().toLowerCase();
+    final qName = mandalName.trim().toLowerCase();
+
+    if (myReg != null && (regName == qName || qName == 'mandal' || qName.isEmpty || qName.contains('khodal'))) {
       final genRaw = prefs.getString('my_mandal_posts');
       if (genRaw != null && genRaw.isNotEmpty) {
         try {
           final decoded = jsonDecode(genRaw) as List;
-          return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          final list = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          if (list.isNotEmpty) return list;
         } catch (_) {}
+      }
+      if (regName.isNotEmpty && regName != qName) {
+        final regRaw = prefs.getString(_mandalPostsKey(regName));
+        if (regRaw != null && regRaw.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(regRaw) as List;
+            return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          } catch (_) {}
+        }
       }
     }
     return [];
@@ -1187,9 +1326,31 @@ class UtsavService {
     await prefs.setString(key, jsonStr);
 
     final myReg = await getMyMandalRegistration();
-    if (myReg != null && (myReg['mandalName']?.toString().toLowerCase().trim() == mandalName.toLowerCase().trim())) {
+    final regName = (myReg?['mandalName'] ?? '').toString().trim().toLowerCase();
+    final qName = mandalName.trim().toLowerCase();
+
+    if (myReg != null && (regName == qName || qName == 'mandal' || qName.isEmpty || qName.contains('khodal'))) {
       await prefs.setString('my_mandal_posts', jsonStr);
+      if (regName.isNotEmpty) {
+        await prefs.setString(_mandalPostsKey(regName), jsonStr);
+      }
     }
+
+    // Sync postsCount in cached mandals
+    try {
+      final mandals = await getMandals();
+      bool changed = false;
+      for (final m in mandals) {
+        final mName = (m['name'] ?? '').toString().trim().toLowerCase();
+        if (mName == qName || (regName.isNotEmpty && mName == regName)) {
+          m['postsCount'] = list.length;
+          changed = true;
+        }
+      }
+      if (changed) {
+        await prefs.setString('utsav_cached_mandals', jsonEncode(mandals));
+      }
+    } catch (_) {}
   }
 
   static Future<void> deleteMandalPost(String mandalName, String postId) async {
@@ -1202,8 +1363,14 @@ class UtsavService {
     await prefs.setString(key, jsonStr);
 
     final myReg = await getMyMandalRegistration();
-    if (myReg != null && (myReg['mandalName']?.toString().toLowerCase().trim() == mandalName.toLowerCase().trim())) {
+    final regName = (myReg?['mandalName'] ?? '').toString().trim().toLowerCase();
+    final qName = mandalName.trim().toLowerCase();
+
+    if (myReg != null && (regName == qName || qName == 'mandal' || qName.isEmpty || qName.contains('khodal'))) {
       await prefs.setString('my_mandal_posts', jsonStr);
+      if (regName.isNotEmpty) {
+        await prefs.setString(_mandalPostsKey(regName), jsonStr);
+      }
     }
   }
 
@@ -1221,17 +1388,32 @@ class UtsavService {
     if (raw != null && raw.isNotEmpty) {
       try {
         final decoded = jsonDecode(raw) as List;
-        return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        final list = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        if (list.isNotEmpty) return list;
       } catch (_) {}
     }
+
     final myReg = await getMyMandalRegistration();
-    if (myReg != null && (myReg['mandalName']?.toString().toLowerCase().trim() == mandalName.toLowerCase().trim())) {
+    final regName = (myReg?['mandalName'] ?? '').toString().trim().toLowerCase();
+    final qName = mandalName.trim().toLowerCase();
+
+    if (myReg != null && (regName == qName || qName == 'mandal' || qName.isEmpty || qName.contains('khodal'))) {
       final genRaw = prefs.getString('my_mandal_reels');
       if (genRaw != null && genRaw.isNotEmpty) {
         try {
           final decoded = jsonDecode(genRaw) as List;
-          return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          final list = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          if (list.isNotEmpty) return list;
         } catch (_) {}
+      }
+      if (regName.isNotEmpty && regName != qName) {
+        final regRaw = prefs.getString(_mandalReelsKey(regName));
+        if (regRaw != null && regRaw.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(regRaw) as List;
+            return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          } catch (_) {}
+        }
       }
     }
     return [];
@@ -1248,8 +1430,14 @@ class UtsavService {
     await prefs.setString(key, jsonStr);
 
     final myReg = await getMyMandalRegistration();
-    if (myReg != null && (myReg['mandalName']?.toString().toLowerCase().trim() == mandalName.toLowerCase().trim())) {
+    final regName = (myReg?['mandalName'] ?? '').toString().trim().toLowerCase();
+    final qName = mandalName.trim().toLowerCase();
+
+    if (myReg != null && (regName == qName || qName == 'mandal' || qName.isEmpty || qName.contains('khodal'))) {
       await prefs.setString('my_mandal_reels', jsonStr);
+      if (regName.isNotEmpty) {
+        await prefs.setString(_mandalReelsKey(regName), jsonStr);
+      }
     }
   }
 
@@ -1267,8 +1455,33 @@ class UtsavService {
     if (raw != null && raw.isNotEmpty) {
       try {
         final decoded = jsonDecode(raw) as List;
-        return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        final list = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        if (list.isNotEmpty) return list;
       } catch (_) {}
+    }
+
+    final myReg = await getMyMandalRegistration();
+    final regName = (myReg?['mandalName'] ?? '').toString().trim().toLowerCase();
+    final qName = mandalName.trim().toLowerCase();
+
+    if (myReg != null && (regName == qName || qName == 'mandal' || qName.isEmpty || qName.contains('khodal'))) {
+      final genRaw = prefs.getString('my_mandal_live');
+      if (genRaw != null && genRaw.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(genRaw) as List;
+          final list = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          if (list.isNotEmpty) return list;
+        } catch (_) {}
+      }
+      if (regName.isNotEmpty && regName != qName) {
+        final regRaw = prefs.getString(_mandalLiveKey(regName));
+        if (regRaw != null && regRaw.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(regRaw) as List;
+            return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          } catch (_) {}
+        }
+      }
     }
     return [];
   }
@@ -1280,6 +1493,18 @@ class UtsavService {
     list.insert(0, live);
 
     final key = _mandalLiveKey(mandalName);
-    await prefs.setString(key, jsonEncode(list));
+    final jsonStr = jsonEncode(list);
+    await prefs.setString(key, jsonStr);
+
+    final myReg = await getMyMandalRegistration();
+    final regName = (myReg?['mandalName'] ?? '').toString().trim().toLowerCase();
+    final qName = mandalName.trim().toLowerCase();
+
+    if (myReg != null && (regName == qName || qName == 'mandal' || qName.isEmpty || qName.contains('khodal'))) {
+      await prefs.setString('my_mandal_live', jsonStr);
+      if (regName.isNotEmpty) {
+        await prefs.setString(_mandalLiveKey(regName), jsonStr);
+      }
+    }
   }
 }
