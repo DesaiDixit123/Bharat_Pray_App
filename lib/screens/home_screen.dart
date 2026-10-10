@@ -44,32 +44,22 @@ class _HomeScreenState extends State<HomeScreen> {
   int _notificationCount = 2;
   int _messageCount = 0;
 
-  final List<Map<String, String>> _heroBanners = [
-    {
-      'title': 'Somnath Jyotirlinga',
-      'desc': 'Start your divine darshan and get blessings from the temple of the Moon God.',
-      'views': '100K',
-      'image': 'assets/images/somnath_hero.png',
-    },
-    {
-      'title': 'Kedarnath Dham',
-      'desc': 'Experience the spiritual essence of the mighty Himalayas and Lord Shiva.',
-      'views': '250K',
-      'image': 'assets/images/somnath_hero.png',
-    },
-    {
-      'title': 'Kashi Vishwanath',
-      'desc': 'Connect to Kashi Live Aarti and feel the vibration of eternal chants.',
-      'views': '85K',
-      'image': 'assets/images/somnath_hero.png',
-    },
-  ];
+  List<Map<String, dynamic>> _liveDarshanBanners = [];
+  bool _isLoadingLiveDarshans = true;
+
+  static const String _radioSignalSvg = '''<svg width="20" height="14" viewBox="0 0 20 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M13.5399 10.9905C13.3432 10.9899 13.1511 10.9341 12.9875 10.83C12.824 10.726 12.6963 10.5784 12.6204 10.4056C12.5446 10.2328 12.5239 10.0425 12.5609 9.85856C12.598 9.67462 12.6912 9.50517 12.8289 9.37142C13.5789 8.65361 13.9999 7.68217 13.9999 6.66952C13.9999 5.65688 13.5789 4.68544 12.8289 3.96763C12.6475 3.78708 12.5479 3.54588 12.5515 3.29603C12.5551 3.04617 12.6617 2.80769 12.8483 2.63201C13.0349 2.45632 13.2865 2.35751 13.5488 2.35687C13.8112 2.35623 14.0633 2.45382 14.2509 2.62859C15.3712 3.70283 15.9999 5.15545 15.9999 6.66952C15.9999 8.18359 15.3712 9.63622 14.2509 10.7105C14.1576 10.7995 14.0468 10.8701 13.9248 10.9182C13.8027 10.9662 13.6719 10.9908 13.5399 10.9905ZM7.16288 10.7152C7.35142 10.5376 7.45818 10.296 7.45968 10.0435C7.46118 9.79093 7.3573 9.54816 7.17088 9.36856C6.42088 8.65076 5.99984 7.67931 5.99984 6.66667C5.99984 5.65402 6.42088 4.68258 7.17088 3.96478C7.26573 3.87638 7.34114 3.77088 7.39274 3.65444C7.44434 3.538 7.47109 3.41295 7.47143 3.28656C7.47177 3.16018 7.4457 3.03499 7.39472 2.9183C7.34375 2.80162 7.2689 2.69576 7.17453 2.60689C7.08017 2.51803 6.96817 2.44795 6.84508 2.40073C6.72199 2.3535 6.59026 2.33009 6.45757 2.33184C6.32488 2.33359 6.19388 2.36048 6.07221 2.41094C5.95054 2.4614 5.84063 2.53441 5.74889 2.62573C4.62858 3.69997 3.99983 5.1526 3.99983 6.66667C3.99983 8.18074 4.62858 9.63336 5.74889 10.7076C5.93536 10.8872 6.18907 10.9888 6.45423 10.9903C6.7194 10.9917 6.9743 10.8928 7.16288 10.7152ZM17.4318 13.02C19.0847 11.2783 19.9997 9.01428 19.9997 6.66667C19.9997 4.31906 19.0847 2.05504 17.4318 0.313363C17.2539 0.126071 17.0051 0.0137769 16.7402 0.00118524C16.4753 -0.0114064 16.216 0.0767356 16.0193 0.246221C15.8227 0.415706 15.7048 0.652651 15.6916 0.904931C15.6783 1.15721 15.7709 1.40416 15.9488 1.59145C17.2689 2.98289 17.9997 4.79141 17.9997 6.66667C17.9997 8.54192 17.2689 10.3504 15.9488 11.7419C15.7709 11.9292 15.6783 12.1761 15.6916 12.4284C15.7048 12.6807 15.8227 12.9176 16.0193 13.0871C16.216 13.2566 16.4753 13.3447 16.7402 13.3321C17.0051 13.3196 17.2539 13.2073 17.4318 13.02ZM3.9799 13.0866C4.17648 12.9172 4.29439 12.6804 4.30771 12.4283C4.32102 12.1761 4.22865 11.9292 4.0509 11.7419C2.73087 10.3504 2.00008 8.54192 2.00008 6.66667C2.00008 4.79141 2.73087 2.98289 4.0509 1.59145C4.13902 1.49871 4.20709 1.39036 4.25124 1.27256C4.29538 1.15477 4.31473 1.02985 4.30819 0.904931C4.30164 0.780015 4.26932 0.657549 4.21308 0.544528C4.15684 0.431506 4.07777 0.330141 3.9804 0.246221C3.88303 0.1623 3.76925 0.0974673 3.64556 0.0554241C3.52188 0.0133808 3.39071 -0.00504952 3.25955 0.00118524C2.99466 0.0137769 2.74587 0.126071 2.56791 0.313363C0.915082 2.05504 0 4.31906 0 6.66667C0 9.01428 0.915082 11.2783 2.56791 13.02C2.74591 13.2071 2.99464 13.3192 3.25941 13.3317C3.52419 13.3442 3.78334 13.256 3.9799 13.0866ZM9.99987 5.2381C9.7032 5.2381 9.41319 5.32189 9.16652 5.47886C8.91985 5.63583 8.72759 5.85894 8.61406 6.11998C8.50053 6.38102 8.47082 6.66825 8.5287 6.94537C8.58658 7.22248 8.72944 7.47703 8.93922 7.67681C9.14899 7.8766 9.41627 8.01266 9.70724 8.06778C9.99821 8.1229 10.2998 8.09461 10.5739 7.98649C10.848 7.87836 11.0822 7.69526 11.2471 7.46033C11.4119 7.22541 11.4999 6.94921 11.4999 6.66667C11.4999 6.28779 11.3418 5.92443 11.0605 5.65652C10.7792 5.38861 10.3977 5.2381 9.99987 5.2381Z" fill="white"/>
+</svg>''';
+
+  static const String _eyeIconSvg = '''<svg width="22" height="14" viewBox="0 0 22 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M21.8602 6.25978C21.6637 6.00412 16.9808 0 10.9999 0C5.01902 0 0.335926 6.00413 0.139602 6.25953C0.0488853 6.37771 0 6.52023 0 6.66654C0 6.81285 0.0488853 6.95538 0.139602 7.07356C0.335926 7.32921 5.01902 13.3333 10.9999 13.3333C16.9808 13.3333 21.6637 7.32917 21.8602 7.07376C21.951 6.95564 22 6.8131 22 6.66677C22 6.52044 21.951 6.3779 21.8602 6.25978ZM10.9999 11.954C6.59434 11.954 2.77866 7.96897 1.64914 6.6662C2.7772 5.36228 6.58489 1.3793 10.9999 1.3793C15.4052 1.3793 19.2207 5.36367 20.3507 6.66714C19.2226 7.97101 15.4149 11.954 10.9999 11.954Z" fill="white"/>
+<path d="M10.9997 2.52869C8.60028 2.52869 6.64807 4.38501 6.64807 6.66664C6.64807 8.94826 8.60028 10.8046 10.9997 10.8046C13.3992 10.8046 15.3514 8.94826 15.3514 6.66664C15.3514 4.38501 13.3992 2.52869 10.9997 2.52869ZM10.9997 9.42524C9.40001 9.42524 8.09866 8.18776 8.09866 6.66664C8.09866 5.14551 9.40006 3.90803 10.9997 3.90803C12.5994 3.90803 13.9008 5.14551 13.9008 6.66664C13.9008 8.18776 12.5995 9.42524 10.9997 9.42524Z" fill="white"/>
+</svg>''';
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: 0);
-    _startCarouselTimer();
     _loadProfileName();
   }
 
@@ -116,20 +106,187 @@ class _HomeScreenState extends State<HomeScreen> {
       final token = prefs.getString('auth_token') ?? '';
       debugPrint('🔑 Retrieved Auth Token from storage: $token');
       if (token.isNotEmpty) {
-        final homeData = await ApiService.getDarshanHome(token);
+        final results = await Future.wait([
+          ApiService.getDarshanHome(token).catchError((e) {
+            debugPrint('Error getDarshanHome: $e');
+            return <String, dynamic>{};
+          }),
+          ApiService.getDarshansList(token: token, limit: 10).catchError((e) {
+            debugPrint('Error getDarshansList: $e');
+            return <String, dynamic>{};
+          }),
+        ]);
+
+        final homeData = results[0];
+        final darshanListData = results[1];
+
         if (mounted) {
-          debugPrint('👤 Home Screen User Data (ID): ${homeData['user']}');
+          if (homeData.isNotEmpty && homeData['user'] != null) {
+            debugPrint('👤 Home Screen User Data (ID): ${homeData['user']}');
+            setState(() {
+              _profileName = homeData['user']['name'] ?? 'User';
+              _profilePic = homeData['user']['profile_pic'] ?? '';
+              _notificationCount = homeData['notificationCount'] ?? 2;
+              _messageCount = YatraPersonalChatService().unreadMessageCount.value;
+            });
+          }
+
+          _processLiveDarshans(darshanListData, homeData);
+        }
+      } else {
+        if (mounted) {
           setState(() {
-            _profileName = homeData['user']['name'] ?? 'User';
-            _profilePic = homeData['user']['profile_pic'] ?? '';
-            _notificationCount = homeData['notificationCount'] ?? 2;
-            _messageCount = YatraPersonalChatService().unreadMessageCount.value;
+            _isLoadingLiveDarshans = false;
+            _liveDarshanBanners = [];
           });
         }
       }
     } catch (e) {
       debugPrint('Error fetching dashboard: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingLiveDarshans = false;
+        });
+      }
     }
+  }
+
+  void _processLiveDarshans(Map<String, dynamic> darshanListData, Map<String, dynamic> homeData) {
+    final List<Map<String, dynamic>> banners = [];
+
+    // 1. Process docs from /user/darshan/list (active streams)
+    final docs = darshanListData['docs'] as List<dynamic>? ?? [];
+    for (final item in docs) {
+      if (item is Map) {
+        final bool isLive = item['is_live_status'] == true ||
+            (item['live_stream_url'] != null && item['live_stream_url'].toString().trim().isNotEmpty) ||
+            (item['youtube_video_id'] != null && item['youtube_video_id'].toString().trim().isNotEmpty) ||
+            (item['yt_info'] != null && (item['yt_info']['isLiveStatus'] == true || 
+                (item['yt_info']['youtubeVideoId'] != null && item['yt_info']['youtubeVideoId'].toString().trim().isNotEmpty)));
+
+        if (isLive) {
+          final String darshanId = (item['darshan_id'] ?? item['_id'])?.toString() ?? '';
+          final String title = (item['name'] ?? item['temple']?['name'] ?? 'Sacred Darshan').toString();
+
+          String desc = (item['short_desc'] ?? item['description'] ?? '').toString();
+          if (desc.isEmpty && item['temple'] != null) {
+            final city = item['temple']['city']?.toString() ?? '';
+            final state = item['temple']['state']?.toString() ?? '';
+            if (city.isNotEmpty || state.isNotEmpty) {
+              desc = 'Live Aarti and divine blessings from $city${city.isNotEmpty && state.isNotEmpty ? ', ' : ''}$state.';
+            }
+          }
+          if (desc.isEmpty) {
+            desc = 'Join live aarti and seek divine blessings.';
+          }
+
+          // Dynamic viewer calculation
+          final dynamic liveInfo = item['live_darshan_info'];
+          dynamic viewersRaw;
+          if (liveInfo is Map) {
+            viewersRaw = liveInfo['current_viewers'] ?? liveInfo['total_viewers'] ?? liveInfo['peak_viewers'];
+          }
+          viewersRaw ??= item['current_viewers'] ?? item['views'] ?? item['viewers'];
+
+          final String viewsFormatted = _formatViewerCount(viewersRaw);
+          final String rawImg = (item['image'] ?? item['temple']?['bannerImage'] ?? item['temple']?['thumbnailImage'] ?? '').toString();
+          final String resolvedImage = ApiService.resolveImageUrl(rawImg);
+
+          banners.add({
+            'id': darshanId,
+            'title': title,
+            'desc': desc,
+            'views': viewsFormatted,
+            'image': resolvedImage,
+            'raw': item,
+          });
+        }
+      }
+    }
+
+    // 2. Also check featuredDarshans from /user/darshan/home if any are explicitly live
+    if (homeData['featuredDarshans'] is List) {
+      for (final item in homeData['featuredDarshans']) {
+        if (item is Map) {
+          final bool isLive = item['is_live_status'] == true ||
+              (item['live_stream_url'] != null && item['live_stream_url'].toString().trim().isNotEmpty) ||
+              (item['type'] != null && item['type'].toString().toLowerCase() == 'live');
+
+          if (isLive) {
+            final String darshanId = (item['darshan_id'] ?? item['_id'])?.toString() ?? '';
+            final alreadyAdded = banners.any((b) => b['id'] == darshanId);
+            if (!alreadyAdded) {
+              final String title = (item['name'] ?? item['temple_id']?['name'] ?? 'Sacred Darshan').toString();
+              String desc = (item['short_desc'] ?? item['description'] ?? '').toString();
+              if (desc.isEmpty && item['temple_id'] != null) {
+                final city = item['temple_id']['city']?.toString() ?? '';
+                final state = item['temple_id']['state']?.toString() ?? '';
+                if (city.isNotEmpty || state.isNotEmpty) {
+                  desc = 'Live Aarti and divine blessings from $city${city.isNotEmpty && state.isNotEmpty ? ', ' : ''}$state.';
+                }
+              }
+              if (desc.isEmpty) {
+                desc = 'Join live aarti and seek divine blessings.';
+              }
+              final String viewsFormatted = _formatViewerCount(item['current_viewers'] ?? item['views']);
+              final String rawImg = (item['image'] ?? item['temple_id']?['thumbnailImage'] ?? '').toString();
+              final String resolvedImage = ApiService.resolveImageUrl(rawImg);
+
+              banners.add({
+                'id': darshanId,
+                'title': title,
+                'desc': desc,
+                'views': viewsFormatted,
+                'image': resolvedImage,
+                'raw': item,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    setState(() {
+      _liveDarshanBanners = banners;
+      _isLoadingLiveDarshans = false;
+      _currentPage = 0;
+    });
+
+    if (banners.length > 1) {
+      _startCarouselTimer();
+    } else {
+      _carouselTimer?.cancel();
+    }
+  }
+
+  String _formatViewerCount(dynamic count) {
+    if (count == null) return 'Live';
+    if (count is String) {
+      final trimmed = count.trim();
+      if (trimmed.isEmpty || trimmed == '0') return 'Live';
+      if (trimmed.toUpperCase().contains('K') || trimmed.toUpperCase().contains('M')) {
+        return trimmed.toUpperCase();
+      }
+      final parsed = num.tryParse(trimmed);
+      if (parsed == null || parsed <= 0) return 'Live';
+      return _formatNumber(parsed);
+    }
+    if (count is num) {
+      if (count <= 0) return 'Live';
+      return _formatNumber(count);
+    }
+    return 'Live';
+  }
+
+  String _formatNumber(num number) {
+    if (number >= 1000000) {
+      final val = number / 1000000;
+      return '${val.toStringAsFixed(val >= 10 ? 0 : 1).replaceAll('.0', '')}M';
+    } else if (number >= 1000) {
+      final val = number / 1000;
+      return '${val.toStringAsFixed(val >= 10 ? 0 : 1).replaceAll('.0', '')}K';
+    }
+    return number.toInt().toString();
   }
 
   String _getGreeting() {
@@ -318,9 +475,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _startCarouselTimer() {
     _carouselTimer?.cancel();
+    if (_liveDarshanBanners.length <= 1) return;
     _carouselTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
-      if (mounted && _pageController.hasClients) {
-        int nextPage = (_currentPage + 1) % _heroBanners.length;
+      if (mounted && _pageController.hasClients && _liveDarshanBanners.isNotEmpty) {
+        int nextPage = (_currentPage + 1) % _liveDarshanBanners.length;
         _pageController.animateToPage(
           nextPage,
           duration: const Duration(milliseconds: 800),
@@ -418,21 +576,7 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.symmetric(vertical: 14.0),
               child: SizedBox(
                 height: 353,
-                child: PageView.builder(
-                  controller: _pageController,
-                  physics: const BouncingScrollPhysics(),
-                  onPageChanged: (index) {
-                    setState(() {
-                      _currentPage = index;
-                    });
-                    _startCarouselTimer(); // Reset timer on manual swipe
-                  },
-                  itemCount: _heroBanners.length,
-                  itemBuilder: (context, index) {
-                    final banner = _heroBanners[index];
-                    return _buildHeroCard(banner);
-                  },
-                ),
+                child: _buildHeroSection(),
               ),
             ),
 
@@ -785,8 +929,356 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ─── Hero Section (Dynamic Live Darshan Carousel & Offline Fallback) ───────
+
+  Widget _buildHeroSection() {
+    if (_isLoadingLiveDarshans) {
+      return _buildHeroLoadingCard();
+    }
+    if (_liveDarshanBanners.isEmpty) {
+      return _buildNoLiveDarshanCard();
+    }
+    return PageView.builder(
+      controller: _pageController,
+      physics: const BouncingScrollPhysics(),
+      onPageChanged: (index) {
+        setState(() {
+          _currentPage = index;
+        });
+        _startCarouselTimer();
+      },
+      itemCount: _liveDarshanBanners.length,
+      itemBuilder: (context, index) {
+        final banner = _liveDarshanBanners[index];
+        return _buildHeroCard(banner);
+      },
+    );
+  }
+
+  Widget _buildHeroLoadingCard() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+      child: Container(
+        width: 353,
+        height: 353,
+        decoration: BoxDecoration(
+          color: const Color(0xFF2E241E),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 15,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(
+                color: Color(0xFFFF7700),
+                strokeWidth: 2.5,
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Checking Live Streams...',
+                style: GoogleFonts.outfit(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Displayed when no live streams are currently running
+  Widget _buildNoLiveDarshanCard() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+      child: SizedBox(
+        width: 353,
+        height: 353,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Stack(
+              children: [
+                // Background image
+                Positioned.fill(
+                  child: Image.asset(
+                    'assets/images/somnath_hero.png',
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                // Deep spiritual gradient
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.55),
+                          Colors.black.withValues(alpha: 0.88),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Top Status Badges (Offline & Next Aarti Soon)
+                Positioned(
+                  top: 15,
+                  right: 15,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Offline badge
+                      Container(
+                        height: 38,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2A2A2A).withValues(alpha: 0.82),
+                          borderRadius: BorderRadius.circular(9999),
+                          border: Border.all(
+                            color: const Color(0x66FFFFFF),
+                            width: 1.0,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFFFA000),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Offline',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Aarti Soon badge
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(47),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 4.6, sigmaY: 4.6),
+                          child: Container(
+                            height: 38,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2A).withValues(alpha: 0.72),
+                              borderRadius: BorderRadius.circular(47),
+                              border: Border.all(
+                                color: const Color(0x66FFFFFF),
+                                width: 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.schedule_rounded, color: Color(0xFFFF9B38), size: 16),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Aarti Soon',
+                                  style: GoogleFonts.outfit(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Bottom Content
+                Positioned(
+                  left: 20,
+                  right: 20,
+                  bottom: 20,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF7700).withValues(alpha: 0.22),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0xFFFF9B38).withValues(alpha: 0.5),
+                            width: 1.2,
+                          ),
+                        ),
+                        child: const Center(
+                          child: Icon(
+                            Icons.temple_hindu_rounded,
+                            color: Color(0xFFFF9B38),
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'No Live Darshan Right Now',
+                        style: GoogleFonts.outfit(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'All temple streams are currently off-air. Live Darshan & Aarti will resume during scheduled prayer timings.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w400,
+                          color: Colors.white.withValues(alpha: 0.7),
+                          height: 1.35,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          SizedBox(
+                            height: 38,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFFF7A00),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(horizontal: 18),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                              ),
+                              icon: const Icon(Icons.explore_rounded, size: 16),
+                              label: Text(
+                                'Explore Temples',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              onPressed: () {
+                                setState(() => _currentTab = 1);
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            height: 38,
+                            width: 38,
+                            child: IconButton(
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.white.withValues(alpha: 0.15),
+                                padding: EdgeInsets.zero,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(19),
+                                ),
+                              ),
+                              icon: const Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
+                              onPressed: () {
+                                setState(() => _isLoadingLiveDarshans = true);
+                                _fetchDashboardData();
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeroBannerImage(String imagePath) {
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return Image.network(
+        imagePath,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Image.asset(
+            'assets/images/somnath_hero.png',
+            fit: BoxFit.cover,
+          );
+        },
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Container(
+            color: const Color(0xFF1E1712),
+            child: const Center(
+              child: CircularProgressIndicator(color: Color(0xFFFF7700), strokeWidth: 2),
+            ),
+          );
+        },
+      );
+    } else if (imagePath.isNotEmpty) {
+      return Image.asset(
+        imagePath,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Image.asset(
+            'assets/images/somnath_hero.png',
+            fit: BoxFit.cover,
+          );
+        },
+      );
+    } else {
+      return Image.asset(
+        'assets/images/somnath_hero.png',
+        fit: BoxFit.cover,
+      );
+    }
+  }
+
   // Helper: Swipable Hero Card for PageView
-  Widget _buildHeroCard(Map<String, String> banner) {
+  Widget _buildHeroCard(Map<String, dynamic> banner) {
+    final String title = banner['title']?.toString() ?? 'Live Darshan';
+    final String desc = banner['desc']?.toString() ?? 'Seek divine blessings.';
+    final String views = banner['views']?.toString() ?? 'Live';
+    final String image = banner['image']?.toString() ?? '';
+    final String darshanId = (banner['id'] ?? banner['darshan_id'] ?? '').toString();
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0),
       child: SizedBox(
@@ -809,10 +1301,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 // Background image
                 Positioned.fill(
-                  child: Image.asset(
-                    banner['image']!,
-                    fit: BoxFit.cover,
-                  ),
+                  child: _buildHeroBannerImage(image),
                 ),
                 // Gradient shader to darken bottom for text contrast
                 Positioned.fill(
@@ -823,118 +1312,93 @@ class _HomeScreenState extends State<HomeScreen> {
                         end: Alignment.bottomCenter,
                         colors: [
                           Colors.black.withValues(alpha: 0.1),
-                          Colors.black.withValues(alpha: 0.75),
+                          Colors.black.withValues(alpha: 0.78),
                         ],
                       ),
                     ),
                   ),
                 ),
 
-                // 1. LIVE Overlay Badge (Figma: width 80, height 40, top 15, left 161, radius 9999)
+                // Top-right Badges (Live & Active Viewers)
                 Positioned(
                   top: 15,
-                  left: 161,
-                  width: 80,
-                  height: 40,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFF3B42),
-                      borderRadius: BorderRadius.circular(9999),
-                    ),
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        // Radio signal SVG icon: top:13.33, left:14, width:20, height:13.33
-                        Positioned(
-                          top: 13.33,
-                          left: 14,
-                          width: 20,
-                          height: 13.33,
-                          child: SvgPicture.string(
-                            '''<svg width="20" height="14" viewBox="0 0 20 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M13.5399 10.9905C13.3432 10.9899 13.1511 10.9341 12.9875 10.83C12.824 10.726 12.6963 10.5784 12.6204 10.4056C12.5446 10.2328 12.5239 10.0425 12.5609 9.85856C12.598 9.67462 12.6912 9.50517 12.8289 9.37142C13.5789 8.65361 13.9999 7.68217 13.9999 6.66952C13.9999 5.65688 13.5789 4.68544 12.8289 3.96763C12.6475 3.78708 12.5479 3.54588 12.5515 3.29603C12.5551 3.04617 12.6617 2.80769 12.8483 2.63201C13.0349 2.45632 13.2865 2.35751 13.5488 2.35687C13.8112 2.35623 14.0633 2.45382 14.2509 2.62859C15.3712 3.70283 15.9999 5.15545 15.9999 6.66952C15.9999 8.18359 15.3712 9.63622 14.2509 10.7105C14.1576 10.7995 14.0468 10.8701 13.9248 10.9182C13.8027 10.9662 13.6719 10.9908 13.5399 10.9905ZM7.16288 10.7152C7.35142 10.5376 7.45818 10.296 7.45968 10.0435C7.46118 9.79093 7.3573 9.54816 7.17088 9.36856C6.42088 8.65076 5.99984 7.67931 5.99984 6.66667C5.99984 5.65402 6.42088 4.68258 7.17088 3.96478C7.26573 3.87638 7.34114 3.77088 7.39274 3.65444C7.44434 3.538 7.47109 3.41295 7.47143 3.28656C7.47177 3.16018 7.4457 3.03499 7.39472 2.9183C7.34375 2.80162 7.2689 2.69576 7.17453 2.60689C7.08017 2.51803 6.96817 2.44795 6.84508 2.40073C6.72199 2.3535 6.59026 2.33009 6.45757 2.33184C6.32488 2.33359 6.19388 2.36048 6.07221 2.41094C5.95054 2.4614 5.84063 2.53441 5.74889 2.62573C4.62858 3.69997 3.99983 5.1526 3.99983 6.66667C3.99983 8.18074 4.62858 9.63336 5.74889 10.7076C5.93536 10.8872 6.18907 10.9888 6.45423 10.9903C6.7194 10.9917 6.9743 10.8928 7.16288 10.7152ZM17.4318 13.02C19.0847 11.2783 19.9997 9.01428 19.9997 6.66667C19.9997 4.31906 19.0847 2.05504 17.4318 0.313363C17.2539 0.126071 17.0051 0.0137769 16.7402 0.00118524C16.4753 -0.0114064 16.216 0.0767356 16.0193 0.246221C15.8227 0.415706 15.7048 0.652651 15.6916 0.904931C15.6783 1.15721 15.7709 1.40416 15.9488 1.59145C17.2689 2.98289 17.9997 4.79141 17.9997 6.66667C17.9997 8.54192 17.2689 10.3504 15.9488 11.7419C15.7709 11.9292 15.6783 12.1761 15.6916 12.4284C15.7048 12.6807 15.8227 12.9176 16.0193 13.0871C16.216 13.2566 16.4753 13.3447 16.7402 13.3321C17.0051 13.3196 17.2539 13.2073 17.4318 13.02ZM3.9799 13.0866C4.17648 12.9172 4.29439 12.6804 4.30771 12.4283C4.32102 12.1761 4.22865 11.9292 4.0509 11.7419C2.73087 10.3504 2.00008 8.54192 2.00008 6.66667C2.00008 4.79141 2.73087 2.98289 4.0509 1.59145C4.13902 1.49871 4.20709 1.39036 4.25124 1.27256C4.29538 1.15477 4.31473 1.02985 4.30819 0.904931C4.30164 0.780015 4.26932 0.657549 4.21308 0.544528C4.15684 0.431506 4.07777 0.330141 3.9804 0.246221C3.88303 0.1623 3.76925 0.0974673 3.64556 0.0554241C3.52188 0.0133808 3.39071 -0.00504952 3.25955 0.00118524C2.99466 0.0137769 2.74587 0.126071 2.56791 0.313363C0.915082 2.05504 0 4.31906 0 6.66667C0 9.01428 0.915082 11.2783 2.56791 13.02C2.74591 13.2071 2.99464 13.3192 3.25941 13.3317C3.52419 13.3442 3.78334 13.256 3.9799 13.0866ZM9.99987 5.2381C9.7032 5.2381 9.41319 5.32189 9.16652 5.47886C8.91985 5.63583 8.72759 5.85894 8.61406 6.11998C8.50053 6.38102 8.47082 6.66825 8.5287 6.94537C8.58658 7.22248 8.72944 7.47703 8.93922 7.67681C9.14899 7.8766 9.41627 8.01266 9.70724 8.06778C9.99821 8.1229 10.2998 8.09461 10.5739 7.98649C10.848 7.87836 11.0822 7.69526 11.2471 7.46033C11.4119 7.22541 11.4999 6.94921 11.4999 6.66667C11.4999 6.28779 11.3418 5.92443 11.0605 5.65652C10.7792 5.38861 10.3977 5.2381 9.99987 5.2381Z" fill="white"/>
-</svg>''',
-                            width: 20,
-                            height: 13.33,
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                        // "Live" text: positioned after icon (left: 14+20+4=38)
-                        Positioned(
-                          top: 12,
-                          left: 38,
-                          child: Text(
-                            'Live',
-                            style: GoogleFonts.outfit(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              height: 1.2,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                
-                // 2. Active Viewers Badge (Figma: dark gray pill, width 87, height 40, top 15, left 251, radius 47)
-                Positioned(
-                  top: 15,
-                  left: 251,
-                  width: 87,
-                  height: 40,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(47),
-                    child: BackdropFilter(
-                      // backdrop-filter: blur(4.599999904632568px) as per Figma
-                      filter: ImageFilter.blur(sigmaX: 4.6, sigmaY: 4.6),
-                      child: Container(
+                  right: 15,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 1. LIVE Overlay Badge
+                      Container(
+                        height: 40,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF2A2A2A).withValues(alpha: 0.72),
-                          borderRadius: BorderRadius.circular(47),
-                          border: Border.all(
-                            color: const Color(0x66FFFFFF), // #FFFFFF66
-                            width: 1.0,
-                          ),
+                          color: const Color(0xFFFF3B42),
+                          borderRadius: BorderRadius.circular(9999),
                         ),
-                        child: Stack(
-                          clipBehavior: Clip.none,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            // Eye SVG icon: top:13.33, left:14, width:22, height:13.33
-                            Positioned(
-                              top: 13.33,
-                              left: 14,
-                              width: 22,
+                            SvgPicture.string(
+                              _radioSignalSvg,
+                              width: 20,
                               height: 13.33,
-                              child: SvgPicture.string(
-                                '''<svg width="22" height="14" viewBox="0 0 22 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M21.8602 6.25978C21.6637 6.00412 16.9808 0 10.9999 0C5.01902 0 0.335926 6.00413 0.139602 6.25953C0.0488853 6.37771 0 6.52023 0 6.66654C0 6.81285 0.0488853 6.95538 0.139602 7.07356C0.335926 7.32921 5.01902 13.3333 10.9999 13.3333C16.9808 13.3333 21.6637 7.32917 21.8602 7.07376C21.951 6.95564 22 6.8131 22 6.66677C22 6.52044 21.951 6.3779 21.8602 6.25978ZM10.9999 11.954C6.59434 11.954 2.77866 7.96897 1.64914 6.6662C2.7772 5.36228 6.58489 1.3793 10.9999 1.3793C15.4052 1.3793 19.2207 5.36367 20.3507 6.66714C19.2226 7.97101 15.4149 11.954 10.9999 11.954Z" fill="white"/>
-<path d="M10.9997 2.52869C8.60028 2.52869 6.64807 4.38501 6.64807 6.66664C6.64807 8.94826 8.60028 10.8046 10.9997 10.8046C13.3992 10.8046 15.3514 8.94826 15.3514 6.66664C15.3514 4.38501 13.3992 2.52869 10.9997 2.52869ZM10.9997 9.42524C9.40001 9.42524 8.09866 8.18776 8.09866 6.66664C8.09866 5.14551 9.40006 3.90803 10.9997 3.90803C12.5994 3.90803 13.9008 5.14551 13.9008 6.66664C13.9008 8.18776 12.5995 9.42524 10.9997 9.42524Z" fill="white"/>
-</svg>''',
-                                width: 22,
-                                height: 13.33,
-                                fit: BoxFit.contain,
-                              ),
+                              fit: BoxFit.contain,
                             ),
-                            // Views text: positioned after icon (left: 14+22+4=40)
-                            Positioned(
-                              top: 12,
-                              left: 40,
-                              child: Text(
-                                banner['views']!,
-                                style: GoogleFonts.outfit(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  height: 1.2,
-                                ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Live',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                height: 1.2,
                               ),
                             ),
                           ],
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+
+                      // 2. Active Viewers Badge
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(47),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 4.6, sigmaY: 4.6),
+                          child: Container(
+                            height: 40,
+                            padding: const EdgeInsets.symmetric(horizontal: 13),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2A).withValues(alpha: 0.72),
+                              borderRadius: BorderRadius.circular(47),
+                              border: Border.all(
+                                color: const Color(0x66FFFFFF),
+                                width: 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SvgPicture.string(
+                                  _eyeIconSvg,
+                                  width: 22,
+                                  height: 13.33,
+                                  fit: BoxFit.contain,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  views,
+                                  style: GoogleFonts.outfit(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    height: 1.2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
 
@@ -948,7 +1412,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        banner['title']!,
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.outfit(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -957,13 +1423,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        banner['desc']!,
+                        desc,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.poppins(
-                          fontSize: 14,             
-                            fontWeight: FontWeight.w400,
-                            color: Colors.white.withValues(alpha: 0.5), // blur/faded look
-                          height: 16 / 14,          // line-height: 16px → height ratio = 16/14
-                          letterSpacing: 0,         // letter-spacing: 0px
+                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
+                          color: Colors.white.withValues(alpha: 0.75),
+                          height: 16 / 14,
+                          letterSpacing: 0,
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -985,9 +1453,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               context,
                               MaterialPageRoute(
                                 builder: (context) => LiveDarshanScreen(
-                                  darshanId: '',
-                                  templeName: banner['title']!,
-                                  imageUrl: banner['image']!,
+                                  darshanId: darshanId,
+                                  templeName: title,
+                                  imageUrl: image,
                                 ),
                               ),
                             );
