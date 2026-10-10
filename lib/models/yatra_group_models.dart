@@ -68,6 +68,8 @@ class ContactUserModel {
   final bool isRegistered;
   final bool isMutualFollower;
   final bool isAlreadyMember;
+  final String city;
+  final String address;
 
   const ContactUserModel({
     required this.id,
@@ -77,6 +79,8 @@ class ContactUserModel {
     this.isRegistered = false,
     this.isMutualFollower = false,
     this.isAlreadyMember = false,
+    this.city = '',
+    this.address = '',
   });
 
   factory ContactUserModel.fromJson(dynamic rawJson, {bool registered = false}) {
@@ -92,6 +96,8 @@ class ContactUserModel {
       isRegistered: json['is_registered'] == true || registered,
       isMutualFollower: json['isMutualFollower'] == true || json['mutual'] == true,
       isAlreadyMember: json['isAlreadyMember'] == true || json['isMember'] == true,
+      city: json['city']?.toString() ?? '',
+      address: json['address']?.toString() ?? '',
     );
   }
 
@@ -104,6 +110,8 @@ class ContactUserModel {
         'is_registered': isRegistered,
         'isMutualFollower': isMutualFollower,
         'isAlreadyMember': isAlreadyMember,
+        'city': city,
+        'address': address,
       };
 }
 
@@ -245,7 +253,13 @@ class YatraGroupModel {
       groupName: json['name']?.toString() ?? json['groupName']?.toString() ?? 'Yatra Group',
       groupImage: json['image']?.toString() ?? json['groupImage']?.toString() ?? json['coverImage']?.toString() ?? '',
       description: json['description']?.toString() ?? '',
-      templeName: json['templeId']?['name']?.toString() ?? json['templeName']?.toString() ?? '',
+      templeName: json['templeId']?['name']?.toString() ??
+          json['destination']?.toString() ??
+          json['templeName']?.toString() ??
+          json['endTempleId']?['name']?.toString() ??
+          json['customYatraId']?['name']?.toString() ??
+          json['yatraId']?['title']?.toString() ??
+          'Pilgrimage Yatra',
       totalDistance: DistanceNum(distVal),
       estimatedSteps: json['estimatedSteps']?.toString() ?? json['steps']?.toString() ?? '0 Steps',
       memberCount: count,
@@ -254,7 +268,11 @@ class YatraGroupModel {
       visibility: vis,
       isPublic: vis == 'public',
       status: json['status']?.toString() ?? 'ACTIVE',
-      createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt'].toString()) : null,
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'].toString())
+          : (json['updatedAt'] is int
+              ? DateTime.fromMillisecondsSinceEpoch(json['updatedAt'] as int)
+              : null),
     );
   }
 

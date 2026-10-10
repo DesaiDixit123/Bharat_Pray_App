@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -71,14 +72,34 @@ class _MyYatraGroupsScreenState extends State<MyYatraGroupsScreen> {
     try {
       final token = await _getToken();
       final res = await ApiService.getMyYatraGroups(token);
-      final docs = (res['docs'] ?? res['groups'] ?? res) as List<dynamic>? ?? [];
+      List<dynamic> docs = [];
+      if (res is List) {
+        docs = res;
+      } else if (res is Map) {
+        docs = (res['docs'] ?? res['groups'] ?? res['data'] ?? []) as List<dynamic>;
+      }
+
+      // If API returned empty, check local active_yatra_groups
+      if (docs.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        final localStr = prefs.getString('active_yatra_groups');
+        if (localStr != null && localStr.isNotEmpty) {
+          try {
+            final localList = jsonDecode(localStr);
+            if (localList is List) {
+              docs = localList;
+            }
+          } catch (_) {}
+        }
+      }
+
       if (mounted) {
         setState(() {
           _myGroups = docs.map((d) => YatraGroupModel.fromJson(d)).toList();
         });
       }
     } catch (e) {
-      print('Error loading my groups: $e');
+      debugPrint('Error loading my groups: $e');
     } finally {
       if (mounted) setState(() => _loadingGroups = false);
     }
@@ -226,6 +247,79 @@ class _MyYatraGroupsScreenState extends State<MyYatraGroupsScreen> {
     );
   }
 
+  String _formatDate(DateTime? dt) {
+    if (dt == null) return 'Recent';
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${dt.day.toString().padLeft(2, '0')} ${months[dt.month - 1]} ${dt.year}';
+  }
+
+  Widget _buildMemberAvatarsPreview(List<dynamic> members) {
+    final previewList = members.take(4).toList();
+    if (previewList.isEmpty) {
+      return Container(
+        width: 26,
+        height: 26,
+        decoration: const BoxDecoration(
+          color: Color(0xFFFFE8D6),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.person, size: 14, color: Color(0xFFFF7A00)),
+      );
+    }
+    return SizedBox(
+      width: (previewList.length * 16.0) + 12,
+      height: 26,
+      child: Stack(
+        children: [
+          for (int i = 0; i < previewList.length; i++)
+            Positioned(
+              left: i * 16.0,
+              child: Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                  color: const Color(0xFFFFE8D6),
+                ),
+                child: Center(
+                  child: Text(
+                    _getMemberInitial(previewList[i]),
+                    style: GoogleFonts.outfit(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFFFF7A00),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _getMemberInitial(dynamic m) {
+    if (m is Map) {
+      final name = (m['name'] ?? m['userId']?['name'] ?? '').toString();
+      if (name.isNotEmpty) return name[0].toUpperCase();
+    }
+    return 'Y';
+  }
+
+  String _getMemberNamesSummary(List<dynamic> members) {
+    if (members.isEmpty) return 'Leader + Yatris';
+    final names = <String>[];
+    for (final m in members) {
+      if (m is Map) {
+        final name = (m['name'] ?? m['userId']?['name'] ?? '').toString();
+        if (name.isNotEmpty) names.add(name);
+      }
+    }
+    if (names.isEmpty) return 'Leader + Yatris';
+    return names.join(', ');
+  }
+
   Widget _buildGroupCard(YatraGroupModel group) {
     return InkWell(
       onTap: () {
@@ -239,125 +333,240 @@ class _MyYatraGroupsScreenState extends State<MyYatraGroupsScreen> {
       borderRadius: BorderRadius.circular(18),
       child: Container(
         margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFE8D2B8), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
               blurRadius: 10,
-              offset: const Offset(0, 4))
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Cover Image
-            Container(
-              height: 120,
-              width: double.infinity,
-              color: Colors.orange.shade50,
-              child: group.coverImage.isNotEmpty
-                  ? Image.network(
-                      group.coverImage,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                          const Icon(Icons.temple_hindu, color: Color(0xFFFF7A00), size: 48),
-                    )
-                  : const Center(
-                      child: Icon(Icons.temple_hindu, color: Color(0xFFFF7A00), size: 48)),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              offset: const Offset(0, 4),
+            )
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Cover Image Header with Badges
+              Stack(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          group.name,
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: const Color(0xFF2E2A36),
+                  Container(
+                    height: 125,
+                    width: double.infinity,
+                    color: const Color(0xFFFFE8D6),
+                    child: group.coverImage.isNotEmpty
+                        ? (group.coverImage.startsWith('http')
+                            ? Image.network(
+                                group.coverImage,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Center(
+                                  child: Icon(Icons.temple_hindu_rounded, color: Color(0xFFFF7A00), size: 48),
+                                ),
+                              )
+                            : Image.asset(
+                                group.coverImage,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Center(
+                                  child: Icon(Icons.temple_hindu_rounded, color: Color(0xFFFF7A00), size: 48),
+                                ),
+                              ))
+                        : const Center(
+                            child: Icon(Icons.temple_hindu_rounded, color: Color(0xFFFF7A00), size: 48),
                           ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                  ),
+                  // Created Date Badge (Top Left)
+                  Positioned(
+                    left: 10,
+                    top: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.65),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.calendar_today_rounded, size: 11, color: Colors.white),
+                          const SizedBox(width: 4),
+                          Text(
+                            _formatDate(group.createdAt),
+                            style: GoogleFonts.outfit(
+                              fontSize: 10.5,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Visibility Badge (Top Right)
+                  Positioned(
+                    right: 10,
+                    top: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: group.visibility == 'public'
+                            ? const Color(0xFFE8F5E9)
+                            : const Color(0xFFFFF3E0),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
                           color: group.visibility == 'public'
-                              ? Colors.green.shade50
-                              : Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          group.visibility == 'public' ? '🌐 Public' : '🔒 Private',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: group.visibility == 'public' ? Colors.green : Colors.orange,
-                          ),
+                              ? const Color(0xFF81C784)
+                              : const Color(0xFFFFB74D),
+                          width: 0.8,
                         ),
                       ),
-                    ],
+                      child: Text(
+                        group.visibility == 'public' ? '🌐 Public' : '🔒 Private',
+                        style: GoogleFonts.outfit(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          color: group.visibility == 'public'
+                              ? const Color(0xFF2E7D32)
+                              : const Color(0xFFE65100),
+                        ),
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _buildStatChip(Icons.straighten_rounded,
-                          '${group.totalDistance.toStringAsFixed(1)} KM'),
-                      const SizedBox(width: 8),
-                      _buildStatChip(Icons.directions_walk,
-                          '${group.estimatedSteps} Steps'),
-                      const SizedBox(width: 8),
-                      _buildStatChip(Icons.group,
-                          '${group.members.length}/${group.maxMembers}'),
-                    ],
-                  ),
-                  if (group.description.isNotEmpty) ...[
-                    const SizedBox(height: 8),
+                ],
+              ),
+
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Group Name
                     Text(
-                      group.description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                      group.name,
                       style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 17,
+                        color: const Color(0xFF2E2A36),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 5),
+
+                    // Destination / Yatra Name
+                    Row(
+                      children: [
+                        const Icon(Icons.temple_hindu_rounded, size: 15, color: Color(0xFFFF7A00)),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            group.templeName.isNotEmpty ? group.templeName : 'Sacred Pilgrimage Yatra',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFFFF7A00),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Metrics Chips
+                    Row(
+                      children: [
+                        _buildStatChip(
+                          Icons.straighten_rounded,
+                          '${group.totalDistance.toStringAsFixed(1)} KM',
+                        ),
+                        const SizedBox(width: 8),
+                        _buildStatChip(
+                          Icons.directions_walk_rounded,
+                          '${group.estimatedSteps}',
+                        ),
+                        const SizedBox(width: 8),
+                        _buildStatChip(
+                          Icons.group_rounded,
+                          '${group.memberCount} Yatris',
+                        ),
+                      ],
+                    ),
+
+                    // Members Preview Container
+                    Container(
+                      margin: const EdgeInsets.only(top: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF8F0),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFF0DECB), width: 1),
+                      ),
+                      child: Row(
+                        children: [
+                          _buildMemberAvatarsPreview(group.members),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${group.memberCount} Group Members',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF2E2A36),
+                                  ),
+                                ),
+                                Text(
+                                  _getMemberNamesSummary(group.members),
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 11,
+                                    color: const Color(0xFF7A757F),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Color(0xFFFF7A00)),
+                        ],
                       ),
                     ),
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-  Widget _buildStatChip(IconData icon, String label) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 14, color: const Color(0xFFFF7A00)),
-        const SizedBox(width: 3),
-        Text(
-          label,
-          style: GoogleFonts.outfit(
-            fontSize: 11,
-            color: Colors.grey.shade700,
-            fontWeight: FontWeight.w500,
+            ],
           ),
         ),
-      ],
+      ),
+    );
+  }
+
+  Widget _buildStatChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFE8D6).withOpacity(0.6),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: const Color(0xFFFF7A00)),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: GoogleFonts.outfit(
+              fontSize: 11.5,
+              color: const Color(0xFF2E2A36),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

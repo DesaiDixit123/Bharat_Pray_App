@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -626,6 +627,21 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
   }
 
   Widget _buildNetworkOrFallbackImage(String image, {double? width, double? height}) {
+    if (image.startsWith('data:image')) {
+      try {
+        final commaIdx = image.indexOf(',');
+        final base64Str = commaIdx != -1 ? image.substring(commaIdx + 1) : image;
+        return Image.memory(
+          base64Decode(base64Str),
+          width: width,
+          height: height,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _fallbackImage(width: width, height: height),
+        );
+      } catch (_) {
+        return _fallbackImage(width: width, height: height);
+      }
+    }
     if (image.startsWith('http://') || image.startsWith('https://')) {
       return Image.network(
         image,

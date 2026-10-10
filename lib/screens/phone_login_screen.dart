@@ -202,23 +202,21 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                                       });
 
                                       try {
-                                        Map<String, dynamic> response;
                                         try {
-                                          response = await ApiService.sendOtp(phone);
+                                          await ApiService.sendOtp(phone);
                                         } catch (e) {
                                           if (e.toString().contains('not registered') || e.toString().contains('sign up')) {
-                                            response = await ApiService.registerUser(name: 'Devotee', contact: phone);
+                                            await ApiService.registerUser(name: 'Devotee', contact: phone);
                                           } else {
                                             rethrow;
                                           }
                                         }
-                                        final otp = response['Data']?['dev_mode_otp']?.toString();
 
                                         if (context.mounted) {
                                           ScaffoldMessenger.of(context).showSnackBar(
                                             SnackBar(
                                               content: Text(
-                                                'OTP sent successfully on your mobile number.',
+                                                'OTP sent successfully via SMS to +91 $phone.',
                                                 style: GoogleFonts.outfit(color: Colors.white),
                                               ),
                                               backgroundColor: const Color(0xFFFF7A00),
@@ -229,7 +227,6 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                                             MaterialPageRoute(
                                               builder: (context) => OtpVerificationScreen(
                                                 phoneNumber: phone,
-                                                initialOtp: otp,
                                               ),
                                             ),
                                           );

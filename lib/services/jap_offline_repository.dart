@@ -348,6 +348,21 @@ class JapOfflineRepository {
     }
   }
 
+  /// Remove a user custom Jap locally by ID
+  static Future<void> removeCustomJap(String id) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final existingStr = prefs.getString(_customJapsKey);
+      if (existingStr != null) {
+        List<dynamic> list = json.decode(existingStr);
+        list.removeWhere((item) => (item['id'] ?? item['_id']) == id);
+        await prefs.setString(_customJapsKey, json.encode(list));
+      }
+    } catch (e) {
+      debugPrint('[JapOfflineRepository] Error removing custom Jap: $e');
+    }
+  }
+
   /// Get all user custom Japs
   static Future<List<Map<String, dynamic>>> getCustomJaps() async {
     try {

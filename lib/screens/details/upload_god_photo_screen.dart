@@ -46,19 +46,22 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
   // God categories (loaded dynamically from backend API)
   List<Map<String, String>> _categories = [];
 
-  // 10 Chant effect options matching reference styles
+  // Devotional Animation options (Classic Video + New Premium Devotional Animations)
   final List<Map<String, String>> _particleEffects = [
-    {'value': 'auto',       'label': '✨ Auto (Deity Default)'},
-    {'value': 'ram',        'label': '🏹 1. Shri Ram - Golden Ram Burst'},
-    {'value': 'om',         'label': '🌿 2. Om - Green Leaf Effect'},
-    {'value': 'radhe',      'label': '🦚 3. Radhe Krishna - Blue Glow Effect'},
-    {'value': 'hanuman',    'label': '🚩 4. Hanuman - Red Flame Effect'},
-    {'value': 'shiva',      'label': '🔱 5. Shiva - Purple Cosmic Effect'},
-    {'value': 'durga',      'label': '🌺 6. Maa Durga - Flower Petals Effect'},
-    {'value': 'sai',        'label': '🕊️ 7. Sai Baba - White Light Effect'},
-    {'value': 'gayatri',    'label': '📜 8. Gayatri Mantra - Sanskrit Text Effect'},
-    {'value': 'navkar',     'label': '🪷 9. Navkar Mantra - Golden Particles Effect'},
-    {'value': 'meditation', 'label': '🧘 10. Meditation - Calm Wave Effect'},
+    // Classic Video Animations (Preserved)
+    {'value': 'dhup',           'label': 'Dhoop Smoke Video'},
+    {'value': 'ram',            'label': 'Ram Ram Video'},
+    {'value': 'lotus',          'label': 'Lotus Video'},
+    {'value': 'peakok',         'label': 'Peacock Feather Video'},
+    {'value': 'arati',          'label': 'Temple Aarti Video'},
+
+    // New Premium Devotional Animations
+    {'value': 'radha_name',     'label': '✨ Radha Name Reveal'},
+    {'value': 'ram_spread',     'label': '✨ Ram Ram Divine Spread'},
+    {'value': 'incense_smoke',  'label': '✨ Incense Smoke Reveal'},
+    {'value': 'mantra_light',   'label': '✨ Mantra-to-Light'},
+    {'value': 'divine_energy',  'label': '✨ Divine Energy Formation'},
+    {'value': 'sacred_mandala', 'label': '✨ Sacred Mandala Formation'},
   ];
 
   @override
@@ -451,6 +454,10 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
       _showError('Please select God Category');
       return;
     }
+    if (_selectedParticleEffect == null || _selectedParticleEffect!.isEmpty) {
+      _showError('Please select Animation');
+      return;
+    }
 
     Navigator.pop(
       context,
@@ -462,7 +469,7 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
         audioFilePath: _audioFilePath ?? '',
         chantCount: int.tryParse(_chantCountController.text.trim()) ?? 108,
         category: _selectedCategory!,
-        particleEffect: _selectedParticleEffect ?? 'auto',
+        particleEffect: _selectedParticleEffect!,
       ),
     );
   }
@@ -575,20 +582,20 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // 6. Particle Effect Style dropdown
-                      _sectionLabel('Particle Effect Style'),
+                      // 6. Animation dropdown
+                      _sectionLabel('Select Animation *'),
                       const SizedBox(height: 8),
                       _buildDropdownTile(
-                        hint: '✨ Auto (Deity Default)',
+                        hint: 'Select Animation',
                         value: _selectedParticleEffect != null
                             ? _particleEffects.firstWhere(
                                 (e) => e['value'] == _selectedParticleEffect,
                                 orElse: () => {'label': ''},
                               )['label']
                             : null,
-                        icon: Icons.auto_fix_high_rounded,
+                        icon: Icons.movie_filter_rounded,
                         onTap: () => _showDropdown(
-                          title: 'Particle Effect Style',
+                          title: 'Select Animation',
                           options: _particleEffects,
                           selectedValue: _selectedParticleEffect,
                           onSelected: (val, _) =>

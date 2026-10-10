@@ -27,6 +27,7 @@ class YatraLiveSanghaScreen extends StatefulWidget {
   final Widget? completedScreen;
   final bool isFromCreateGroup;
   final List<dynamic>? routeTemples;
+  final List<dynamic>? groupMembers;
 
   const YatraLiveSanghaScreen({
     super.key,
@@ -42,6 +43,7 @@ class YatraLiveSanghaScreen extends StatefulWidget {
     this.completedScreen,
     this.isFromCreateGroup = false,
     this.routeTemples,
+    this.groupMembers,
   });
 
   @override
@@ -991,9 +993,19 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
                     _TotalGroupProgressCard(
                       progressText: '${_liveController.state.progressPercent.toInt()}%',
                       onTap: () {
+                        final liveKm = _liveController.state.kmCompleted > 0
+                            ? _liveController.state.kmCompleted
+                            : _liveDistanceKm;
+                        final liveSteps = (liveKm * 1400).toInt();
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => const IndividualProgressScreen(),
+                            builder: (_) => IndividualProgressScreen(
+                              groupId: widget.yatraId.isNotEmpty ? widget.yatraId : widget.journeyId,
+                              currentLeaderKm: liveKm,
+                              currentLeaderSteps: liveSteps,
+                              currentLeaderProgress: _liveController.state.progressPercent / 100.0,
+                              initialMembers: widget.groupMembers,
+                            ),
                           ),
                         );
                       },

@@ -143,13 +143,37 @@ class _MessagesScreenState extends State<MessagesScreen> {
         }
       }
 
-      // 2. Personal 1-on-1 chats: dynamically load only real conversations from SharedPreferences
+      // 2. Personal 1-on-1 chats: fetch from API and merge with SharedPreferences
       List<Map<String, dynamic>> personal = [];
+      if (token.isNotEmpty) {
+        try {
+          final apiConvs = await ApiService.getPersonalConversations(token);
+          for (final c in apiConvs) {
+            if (c is Map) {
+              personal.add(Map<String, dynamic>.from(c));
+            }
+          }
+        } catch (e) {
+          debugPrint("Failed to fetch personal conversations from API: $e");
+        }
+      }
+
       final localPersonalStr = prefs.getString('active_personal_chats');
       if (localPersonalStr != null && localPersonalStr.isNotEmpty) {
         try {
           final decoded = jsonDecode(localPersonalStr) as List<dynamic>;
-          personal = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          for (final item in decoded) {
+            if (item is Map) {
+              final map = Map<String, dynamic>.from(item);
+              final uId = (map['userId'] ?? map['id'] ?? '').toString();
+              if (uId.isNotEmpty) {
+                final existingIdx = personal.indexWhere((p) => (p['userId'] ?? p['id'] ?? '').toString() == uId);
+                if (existingIdx == -1) {
+                  personal.add(map);
+                }
+              }
+            }
+          }
         } catch (e) {
           debugPrint("Error parsing active_personal_chats: $e");
         }

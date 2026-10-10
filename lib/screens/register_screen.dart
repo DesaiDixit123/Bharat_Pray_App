@@ -260,14 +260,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
         contact: contact,
         profilePicFile: _profilePicFile,
       );
-      final otp = response['Data']?['dev_mode_otp']?.toString();
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
             _contactType == 'phone'
-                ? 'OTP sent successfully on your mobile number.'
-                : 'OTP sent successfully on your email.',
+                ? 'OTP sent successfully via SMS to +91 $contact.'
+                : 'OTP sent successfully to $contact.',
             style: GoogleFonts.outfit(color: Colors.white),
           ),
           backgroundColor: const Color(0xFFFF7A00),
@@ -278,7 +276,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
           MaterialPageRoute(
             builder: (_) => OtpVerificationScreen(
               phoneNumber: contact,
-              initialOtp: otp,
             ),
           ),
         );

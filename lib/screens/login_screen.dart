@@ -18,25 +18,36 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _contactController = TextEditingController();
   final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email']);
+  bool _isPhoneLogin = true;
   bool _isLoading = false;
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _contactController.dispose();
     super.dispose();
   }
 
-  void _loginWithEmail() async {
-    final email = _emailController.text.trim();
-    if (email.isEmpty) {
-      _showSnackBar('Please enter your email address');
+  void _sendLoginOtp() async {
+    final contact = _contactController.text.trim();
+    if (contact.isEmpty) {
+      _showSnackBar(_isPhoneLogin
+          ? 'Please enter your 10-digit phone number'
+          : 'Please enter your email address');
       return;
     }
-    if (!email.contains('@')) {
-      _showSnackBar('Please enter a valid email address');
-      return;
+
+    if (_isPhoneLogin) {
+      if (contact.length != 10) {
+        _showSnackBar('Phone number must be exactly 10 digits');
+        return;
+      }
+    } else {
+      if (!contact.contains('@')) {
+        _showSnackBar('Please enter a valid email address');
+        return;
+      }
     }
 
     setState(() {
@@ -44,24 +55,26 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      Map<String, dynamic> response;
       try {
-        response = await ApiService.sendOtp(email);
+        await ApiService.sendOtp(contact);
       } catch (e) {
         if (e.toString().contains('not registered') || e.toString().contains('sign up')) {
-          response = await ApiService.registerUser(name: email.split('@').first, contact: email);
+          await ApiService.registerUser(
+            name: _isPhoneLogin ? 'Devotee' : contact.split('@').first,
+            contact: contact,
+          );
         } else {
           rethrow;
         }
       }
 
-      final otp = response['Data']?['dev_mode_otp']?.toString();
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'OTP sent successfully on your email.',
+              _isPhoneLogin
+                  ? 'OTP sent successfully via SMS to +91 $contact.'
+                  : 'OTP sent successfully to $contact.',
               style: GoogleFonts.outfit(color: Colors.white),
             ),
             backgroundColor: const Color(0xFFFF7A00),
@@ -72,8 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
           context,
           MaterialPageRoute(
             builder: (context) => OtpVerificationScreen(
-              phoneNumber: email,
-              initialOtp: otp,
+              phoneNumber: contact,
             ),
           ),
         );
@@ -250,9 +262,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Email Address Label & Field
+                            // Phone/Email Label & Field
                             Text(
-                              'Email Address',
+                              _isPhoneLogin ? 'Phone Number' : 'Email Address',
                               style: GoogleFonts.outfit(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500,
@@ -271,19 +283,36 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                               child: TextField(
-                                controller: _emailController,
+                                controller: _contactController,
                                 style: GoogleFonts.outfit(color: Colors.white, fontSize: 16),
-                                keyboardType: TextInputType.emailAddress,
+                                keyboardType: _isPhoneLogin
+                                    ? TextInputType.number
+                                    : TextInputType.emailAddress,
+                                maxLength: _isPhoneLogin ? 10 : null,
+                                inputFormatters: _isPhoneLogin
+                                    ? [FilteringTextInputFormatter.digitsOnly]
+                                    : null,
                                 decoration: InputDecoration(
-                                  hintText: 'name@example.com',
+                                  counterText: '',
+                                  hintText: _isPhoneLogin
+                                      ? 'Enter 10-digit mobile number'
+                                      : 'name@example.com',
                                   hintStyle: GoogleFonts.outfit(
                                     color: Colors.white.withValues(alpha: 0.3),
                                     fontSize: 16,
                                   ),
                                   prefixIcon: Icon(
-                                    Icons.mail_outline_rounded,
-                                    color: Colors.white.withValues(alpha: 0.4),
+                                    _isPhoneLogin
+                                        ? Icons.phone_iphone_rounded
+                                        : Icons.mail_outline_rounded,
+                                    color: const Color(0xFFFF7A00),
                                     size: 22,
+                                  ),
+                                  prefixText: _isPhoneLogin ? '+91  ' : null,
+                                  prefixStyle: GoogleFonts.outfit(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                   border: InputBorder.none,
                                   contentPadding: const EdgeInsets.symmetric(
@@ -293,32 +322,34 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 24),
-                            
-                            // Login with Phone Number
+                            const SizedBox(height: 16),
+
+                            // Toggle between Phone & Email login
                             GestureDetector(
                               onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const PhoneLoginScreen(),
-                                  ),
-                                );
+                                setState(() {
+                                  _isPhoneLogin = !_isPhoneLogin;
+                                  _contactController.clear();
+                                });
                               },
                               child: SizedBox(
                                 height: 24,
                                 child: Row(
                                   children: [
-                                    const Icon(
-                                      Icons.phone_iphone_rounded,
-                                      color: Color(0xFFFF7A00),
+                                    Icon(
+                                      _isPhoneLogin
+                                          ? Icons.mail_outline_rounded
+                                          : Icons.phone_iphone_rounded,
+                                      color: const Color(0xFFFF7A00),
                                       size: 18,
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
-                                      'Login with Phone Number',
+                                      _isPhoneLogin
+                                          ? 'Login with Email instead'
+                                          : 'Login with Phone Number instead',
                                       style: GoogleFonts.poppins(
-                                        fontSize: 16,
+                                        fontSize: 14,
                                         fontWeight: FontWeight.w500,
                                         color: const Color(0xFFFF7A00),
                                         height: 1.5,
@@ -330,8 +361,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                             const SizedBox(height: 24),
-                            
-                            // Login button
+
+                            // Get OTP button
                             SizedBox(
                               width: double.infinity,
                               height: 52,
@@ -344,7 +375,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     borderRadius: BorderRadius.circular(16),
                                   ),
                                 ),
-                                onPressed: _isLoading ? null : _loginWithEmail,
+                                onPressed: _isLoading ? null : _sendLoginOtp,
                                 child: _isLoading
                                     ? const SizedBox(
                                         width: 24,
@@ -355,7 +386,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                         ),
                                       )
                                     : Text(
-                                        'Login',
+                                        'Get OTP',
                                         style: GoogleFonts.outfit(
                                           fontSize: 18,
                                           fontWeight: FontWeight.bold,

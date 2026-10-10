@@ -1,20 +1,55 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/api_service.dart';
+import '../../models/yatra_group_models.dart';
 
 class IndividualProgressScreen extends StatefulWidget {
   final String groupId;
+  final double currentLeaderKm;
+  final int currentLeaderSteps;
+  final double currentLeaderProgress;
+  final List<dynamic>? initialMembers;
 
-  const IndividualProgressScreen({super.key, this.groupId = ''});
+  const IndividualProgressScreen({
+    super.key,
+    this.groupId = '',
+    this.currentLeaderKm = 0.0,
+    this.currentLeaderSteps = 0,
+    this.currentLeaderProgress = 0.0,
+    this.initialMembers,
+  });
 
   @override
   State<IndividualProgressScreen> createState() => _IndividualProgressScreenState();
 }
 
+ImageProvider? _getAvatarProvider(String url) {
+  final clean = url.trim();
+  if (clean.isEmpty) return null;
+  if (clean.startsWith('http://') || clean.startsWith('https://')) {
+    return NetworkImage(clean);
+  }
+  if (clean.startsWith('assets/')) {
+    return AssetImage(clean);
+  }
+  final baseDomain = ApiService.baseUrl.replaceAll('/user', '');
+  return NetworkImage('$baseDomain/uploads/$clean');
+}
+
 class _IndividualProgressScreenState extends State<IndividualProgressScreen> {
   static const Color _bg = Color(0xFFFFE8D6);
-  
+
+  static const List<({Color bar, Color bg, Color text})> _palette = [
+    (bar: Color(0xFF7759D9), bg: Color(0xFFE8E5F7), text: Color(0xFF7A68D6)),
+    (bar: Color(0xFF3B64B7), bg: Color(0xFFE5F1FD), text: Color(0xFF4A90E2)),
+    (bar: Color(0xFF55B9C9), bg: Color(0xFFE0F7FA), text: Color(0xFF00ACC1)),
+    (bar: Color(0xFFC85AAA), bg: Color(0xFFFCE4EC), text: Color(0xFFD81B60)),
+    (bar: Color(0xFF4AB56A), bg: Color(0xFFE8F5E9), text: Color(0xFF43A047)),
+    (bar: Color(0xFFD1448E), bg: Color(0xFFFFEBEE), text: Color(0xFFE53935)),
+  ];
+
   List<_ProgressMember> _members = [];
   bool _isLoading = true;
 
@@ -24,115 +59,294 @@ class _IndividualProgressScreenState extends State<IndividualProgressScreen> {
     _fetchMembers();
   }
 
+  String _formatCity(String? rawCity, String? rawAddress) {
+    final city = rawCity?.trim() ?? '';
+    final address = rawAddress?.trim() ?? '';
+
+    if (city.isNotEmpty && city.toLowerCase() != 'gujarat, india') {
+      if (!city.toLowerCase().contains('gujarat') && !city.contains(',')) {
+        return '$city, Gujarat';
+      }
+      return city;
+    }
+
+    if (address.isNotEmpty) {
+      final parts = address.split(',').map((p) => p.trim()).where((p) => p.isNotEmpty).toList();
+      if (parts.length >= 2) {
+        return '${parts[parts.length - 2]}, ${parts.last}';
+      } else if (parts.isNotEmpty) {
+        final p = parts.first;
+        if (!p.toLowerCase().contains('gujarat')) {
+          return '$p, Gujarat';
+        }
+        return p;
+      }
+    }
+
+    return 'Surat, Gujarat';
+  }
+
   Future<void> _fetchMembers() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token') ?? '';
-      
-      if (token.isNotEmpty && widget.groupId.isNotEmpty) {
-        final apiMembers = await ApiService.getGroupMembers(token, widget.groupId);
-        if (apiMembers.isNotEmpty) {
-          // In a real app we'd map apiMembers to _ProgressMember
-          // For now, if there's any data, we'll assume it's correctly mapped or fallback to mock
-          // We'll stick with mock data if we can't parse it easily
+
+      // Leader info from SharedPreferences
+      String leaderName = prefs.getString('user_name') ??
+          prefs.getString('name') ??
+          prefs.getString('fullName') ??
+          'You';
+      String leaderAvatar = prefs.getString('profile_pic') ?? '';
+      String leaderCity = prefs.getString('city') ??
+          prefs.getString('user_city') ??
+          prefs.getString('address') ??
+          prefs.getString('user_address') ??
+          '';
+
+      double leaderKm = widget.currentLeaderKm;
+      int leaderSteps = widget.currentLeaderSteps;
+      double leaderProg = widget.currentLeaderProgress.clamp(0.0, 1.0);
+
+      final List<_ProgressMember> loadedMembers = [];
+
+      // 1. Check widget.initialMembers if provided
+      if (widget.initialMembers != null && widget.initialMembers!.isNotEmpty) {
+        int colorIdx = 1;
+        for (final m in widget.initialMembers!) {
+          String mName = '';
+          String mPic = '';
+          String mCity = '';
+          String mAddress = '';
+          if (m is ContactUserModel) {
+            mName = m.name;
+            mPic = m.profilePic;
+            mCity = m.city;
+            mAddress = m.address;
+          } else if (m is Map) {
+            mName = m['name']?.toString() ?? 'Member';
+            mPic = m['profilePic']?.toString() ?? m['avatar']?.toString() ?? m['profile_pic']?.toString() ?? '';
+            mCity = m['city']?.toString() ?? '';
+            mAddress = m['address']?.toString() ?? '';
+          }
+          if (mName.isNotEmpty &&
+              !mName.toLowerCase().contains('(leader)') &&
+              !mName.toLowerCase().contains('leader')) {
+            final theme = _palette[colorIdx % _palette.length];
+            colorIdx++;
+            loadedMembers.add(_ProgressMember(
+              name: mName,
+              city: _formatCity(mCity, mAddress),
+              distanceLabel: '0.0 KM',
+              stepsLabel: '0',
+              progress: 0.0,
+              detailDistance: '0.0 KM',
+              totalProgress: '0%',
+              stepsToReach: '0 Steps',
+              timeLeft: 'Active',
+              activities: const [],
+              avatarUrl: mPic,
+              barColor: theme.bar,
+              cityBg: theme.bg,
+              cityText: theme.text,
+            ));
+          }
         }
       }
-    } catch (e) {
-      debugPrint('Error fetching group members: \$e');
-    } finally {
+
+      // 2. Check local latest_yatra_members from SharedPreferences
+      if (loadedMembers.isEmpty) {
+        try {
+          final savedMembersStr = prefs.getString('latest_yatra_members');
+          if (savedMembersStr != null && savedMembersStr.isNotEmpty) {
+            final List<dynamic> savedList = jsonDecode(savedMembersStr);
+            int colorIdx = 1;
+            for (final sm in savedList) {
+              if (sm is Map) {
+                final mName = sm['name']?.toString() ?? 'Member';
+                if (mName.toLowerCase().contains('leader')) continue;
+                final theme = _palette[colorIdx % _palette.length];
+                colorIdx++;
+                final mPic = sm['profilePic']?.toString() ?? sm['profile_pic']?.toString() ?? '';
+                final mCity = sm['city']?.toString() ?? '';
+                final mAddress = sm['address']?.toString() ?? '';
+                loadedMembers.add(_ProgressMember(
+                  name: mName,
+                  city: _formatCity(mCity, mAddress),
+                  distanceLabel: '0.0 KM',
+                  stepsLabel: '0',
+                  progress: 0.0,
+                  detailDistance: '0.0 KM',
+                  totalProgress: '0%',
+                  stepsToReach: '0 Steps',
+                  timeLeft: 'Active',
+                  activities: const [],
+                  avatarUrl: mPic,
+                  barColor: theme.bar,
+                  cityBg: theme.bg,
+                  cityText: theme.text,
+                ));
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Error reading latest_yatra_members: $e');
+        }
+      }
+
+      // 3. Try fetching group dashboard from API if groupId is present
+      if (token.isNotEmpty && widget.groupId.isNotEmpty) {
+        try {
+          final dashboard = await ApiService.getGroupDashboard(token, widget.groupId);
+          if (dashboard.createdBy != null) {
+            final creator = dashboard.createdBy!;
+            final cName = creator['name']?.toString() ?? '';
+            if (cName.isNotEmpty) {
+              leaderName = cName;
+            }
+            final cPic = creator['profilePic']?.toString() ?? '';
+            if (cPic.isNotEmpty) {
+              leaderAvatar = cPic;
+            }
+            final cCity = creator['city']?.toString() ?? '';
+            if (cCity.isNotEmpty) {
+              leaderCity = cCity;
+            }
+          }
+
+          if (dashboard.members.isNotEmpty) {
+            final apiMemberList = <_ProgressMember>[];
+            int colorIdx = 1;
+            for (final m in dashboard.members) {
+              if (m.role.toLowerCase() == 'leader' || m.name.toLowerCase().contains('(leader)')) {
+                continue;
+              }
+              final theme = _palette[colorIdx % _palette.length];
+              colorIdx++;
+              apiMemberList.add(_ProgressMember(
+                name: m.name,
+                city: _formatCity(m.city, ''),
+                distanceLabel: '${m.distanceCoveredKm.toStringAsFixed(1)} KM',
+                stepsLabel: '${m.steps}',
+                progress: (m.progressPercent / 100.0).clamp(0.0, 1.0),
+                detailDistance: '${m.distanceCoveredKm.toStringAsFixed(1)} KM',
+                totalProgress: '${(m.progressPercent).toStringAsFixed(0)}%',
+                stepsToReach: '0 Steps',
+                timeLeft: 'Active',
+                activities: const [],
+                avatarUrl: m.profilePic,
+                barColor: theme.bar,
+                cityBg: theme.bg,
+                cityText: theme.text,
+              ));
+            }
+            if (apiMemberList.isNotEmpty) {
+              loadedMembers.clear();
+              loadedMembers.addAll(apiMemberList);
+            }
+          }
+        } catch (e) {
+          debugPrint('Error fetching group dashboard: $e');
+        }
+      }
+
+      // 4. Check active_yatra_groups if loadedMembers is still empty
+      if (loadedMembers.isEmpty) {
+        try {
+          final localGroupsStr = prefs.getString('active_yatra_groups');
+          if (localGroupsStr != null && localGroupsStr.isNotEmpty) {
+            final List<dynamic> localGroups = jsonDecode(localGroupsStr);
+            Map<String, dynamic>? targetGroup;
+            if (widget.groupId.isNotEmpty) {
+              targetGroup = localGroups.firstWhere(
+                (g) => g['_id'] == widget.groupId || g['id'] == widget.groupId,
+                orElse: () => null,
+              );
+            }
+            targetGroup ??= localGroups.isNotEmpty ? localGroups.first as Map<String, dynamic> : null;
+
+            if (targetGroup != null && targetGroup['members'] is List) {
+              final rawMembers = targetGroup['members'] as List<dynamic>;
+              int colorIdx = 1;
+              for (final rm in rawMembers) {
+                if (rm is Map) {
+                  final mRole = rm['role']?.toString().toLowerCase() ?? '';
+                  final mName = rm['name']?.toString() ?? 'Member';
+                  if (mRole == 'leader' ||
+                      mName.toLowerCase().contains('(leader)') ||
+                      mName.toLowerCase().contains('(admin)')) {
+                    final lCity = rm['city']?.toString() ?? rm['address']?.toString() ?? '';
+                    if (lCity.isNotEmpty && leaderCity.isEmpty) {
+                      leaderCity = lCity;
+                    }
+                    continue;
+                  }
+                  final theme = _palette[colorIdx % _palette.length];
+                  colorIdx++;
+                  final memberCity = rm['city']?.toString() ?? rm['address']?.toString() ?? '';
+                  loadedMembers.add(_ProgressMember(
+                    name: mName,
+                    city: _formatCity(memberCity, rm['address']?.toString()),
+                    distanceLabel: '0.0 KM',
+                    stepsLabel: '0',
+                    progress: 0.0,
+                    detailDistance: '0.0 KM',
+                    totalProgress: '0%',
+                    stepsToReach: '0 Steps',
+                    timeLeft: 'Active',
+                    activities: const [],
+                    avatarUrl: rm['profilePic']?.toString() ?? rm['avatar']?.toString() ?? '',
+                    barColor: theme.bar,
+                    cityBg: theme.bg,
+                    cityText: theme.text,
+                  ));
+                }
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Error reading local active_yatra_groups: $e');
+        }
+      }
+
+      // Format leader card as #1
+      final leaderTheme = _palette[0];
+      final displayName = leaderName.toLowerCase().contains('leader')
+          ? leaderName
+          : '$leaderName (Leader)';
+
+      final leaderMember = _ProgressMember(
+        name: displayName,
+        city: _formatCity(leaderCity, ''),
+        distanceLabel: '${leaderKm.toStringAsFixed(1)} KM',
+        stepsLabel: '$leaderSteps',
+        progress: leaderProg,
+        detailDistance: '${leaderKm.toStringAsFixed(1)} KM',
+        totalProgress: '${(leaderProg * 100).toInt()}%',
+        stepsToReach: '0 Steps',
+        timeLeft: 'Active',
+        activities: const [],
+        avatarUrl: leaderAvatar,
+        barColor: leaderTheme.bar,
+        cityBg: leaderTheme.bg,
+        cityText: leaderTheme.text,
+      );
+
+      final fullList = <_ProgressMember>[leaderMember, ...loadedMembers];
+
       if (mounted) {
         setState(() {
-          _members = _getMockMembers();
+          _members = fullList;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error in _fetchMembers: $e');
+      if (mounted) {
+        setState(() {
           _isLoading = false;
         });
       }
     }
-  }
-
-  List<_ProgressMember> _getMockMembers() {
-    return <_ProgressMember>[
-      const _ProgressMember(
-        name: 'Mehul R.',
-        city: 'Surat, Gujarat',
-        distanceLabel: '6.5KM',
-        stepsLabel: '48,000',
-        progress: 0.28,
-        detailDistance: '16.5KM',
-        totalProgress: '12%',
-        stepsToReach: '3,29,500 Steps',
-        timeLeft: '2d 14h 30m',
-        activities: <_ActivityItem>[
-          _ActivityItem(time: '10:30 AM', distance: 'Walked 2.5KM', steps: '6,200 Steps'),
-          _ActivityItem(time: '10:30 AM', distance: 'Walked 2.5KM', steps: '6,200 Steps'),
-          _ActivityItem(time: '10:30 AM', distance: 'Walked 2.5KM', steps: '6,200 Steps'),
-        ],
-        avatarUrl:
-            'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop&q=60',
-        barColor: Color(0xFF7759D9),
-        cityBg: Color(0xFFE8E5F7),
-        cityText: Color(0xFF7A68D6),
-      ),
-      const _ProgressMember(
-        name: 'Amit K.',
-        city: 'Vapi, Gujarat',
-        distanceLabel: '5.5KM',
-        stepsLabel: '10,000',
-        progress: 0.28,
-        avatarUrl:
-            'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200&auto=format&fit=crop&q=60',
-        barColor: Color(0xFF3B64B7),
-        cityBg: Color(0xFFE5F1FD),
-        cityText: Color(0xFF4A90E2),
-      ),
-      const _ProgressMember(
-        name: 'Ketan P.',
-        city: 'Bharuch, Gujarat',
-        distanceLabel: '3.5KM',
-        stepsLabel: '5,000',
-        progress: 0.28,
-        avatarUrl:
-            'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&auto=format&fit=crop&q=60',
-        barColor: Color(0xFF55B9C9),
-        cityBg: Color(0xFFE0F7FA),
-        cityText: Color(0xFF00ACC1),
-      ),
-      const _ProgressMember(
-        name: 'Pooja H.',
-        city: 'Ahemdabad, Gujarat',
-        distanceLabel: '10.5KM',
-        stepsLabel: '45,000',
-        progress: 0.28,
-        avatarUrl:
-            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=60',
-        barColor: Color(0xFFC85AAA),
-        cityBg: Color(0xFFFCE4EC),
-        cityText: Color(0xFFD81B60),
-      ),
-      const _ProgressMember(
-        name: 'Hitakshi J.',
-        city: 'Amreli, Gujarat',
-        distanceLabel: '7.5KM',
-        stepsLabel: '30,000',
-        progress: 0.28,
-        avatarUrl:
-            'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&auto=format&fit=crop&q=60',
-        barColor: Color(0xFF4AB56A),
-        cityBg: Color(0xFFE8F5E9),
-        cityText: Color(0xFF43A047),
-      ),
-      const _ProgressMember(
-        name: 'Pratiksha S.',
-        city: 'Vadodara, Gujarat',
-        distanceLabel: '0.5',
-        stepsLabel: '1,000',
-        progress: 0.28,
-        avatarUrl:
-            'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&auto=format&fit=crop&q=60',
-        barColor: Color(0xFFD1448E),
-        cityBg: Color(0xFFFFEBEE),
-        cityText: Color(0xFFE53935),
-      ),
-    ];
   }
 
   @override
@@ -251,7 +465,17 @@ class _IndividualProgressScreenState extends State<IndividualProgressScreen> {
                       CircleAvatar(
                         radius: 50,
                         backgroundColor: const Color(0xFFE7D4C2),
-                        backgroundImage: NetworkImage(member.avatarUrl),
+                        backgroundImage: _getAvatarProvider(member.avatarUrl),
+                        child: member.avatarUrl.trim().isEmpty
+                            ? Text(
+                                member.name.isNotEmpty ? member.name[0].toUpperCase() : '?',
+                                style: GoogleFonts.outfit(
+                                  color: const Color(0xFFFF7A00),
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              )
+                            : null,
                       ),
                       const SizedBox(height: 10),
                       Text(
@@ -533,7 +757,17 @@ class _MemberProgressCard extends StatelessWidget {
               CircleAvatar(
                 radius: 24,
                 backgroundColor: const Color(0xFFE7D4C2),
-                backgroundImage: NetworkImage(member.avatarUrl),
+                backgroundImage: _getAvatarProvider(member.avatarUrl),
+                child: member.avatarUrl.trim().isEmpty
+                    ? Text(
+                        member.name.isNotEmpty ? member.name[0].toUpperCase() : '?',
+                        style: GoogleFonts.outfit(
+                          color: const Color(0xFFFF7A00),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      )
+                    : null,
               ),
               const SizedBox(width: 10),
               Expanded(

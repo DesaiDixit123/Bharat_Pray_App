@@ -155,19 +155,25 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
     final result = await Navigator.push<List<ContactUserModel>>(
       context,
       MaterialPageRoute(
-        builder: (context) => const ContactSyncScreen(selectedMembers: []),
+        builder: (context) => ContactSyncScreen(
+          selectedMembers: const [],
+          isGroupCreation: true,
+          groupId: widget.groupId,
+        ),
       ),
     );
 
     if (result != null && result.isNotEmpty) {
       try {
         final token = await _getToken();
-        final inviteeIds = result.map((m) => m.id).toList();
-        await ApiService.sendGroupInvitations(token, groupId: widget.groupId, inviteeIds: inviteeIds);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Sent invitations to ${inviteeIds.length} contact(s)!')),
-        );
-        _loadDashboard(showLoading: false);
+        final inviteeIds = result.map((m) => m.id).where((id) => id.isNotEmpty).toList();
+        if (inviteeIds.isNotEmpty) {
+          await ApiService.sendGroupInvitations(token, groupId: widget.groupId, inviteeIds: inviteeIds);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Sent invitations to ${inviteeIds.length} contact(s)!')),
+          );
+          _loadDashboard(showLoading: false);
+        }
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to send invitations: $e')),

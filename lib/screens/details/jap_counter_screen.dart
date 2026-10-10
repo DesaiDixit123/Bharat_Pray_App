@@ -3,9 +3,11 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/jap_models.dart';
 import '../../models/particles.dart';
@@ -17,7 +19,10 @@ import 'upload_god_photo_screen.dart';
 import 'notification_screen.dart';
 import 'messages_screen.dart';
 import '../../services/yatra_personal_chat_service.dart';
-import '../../widgets/devotional_chant_overlay.dart';
+import '../../animations/jap/jap_animation_type.dart';
+import '../../animations/jap/jap_mantra_helper.dart';
+import '../../animations/jap/premium_jap_animator.dart';
+import '../../animations/jap/jap_animation_selector_sheet.dart';
 
 // ─────────────────────────────────────────────
 // Main Jap List Screen
@@ -93,13 +98,85 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       debugPrint('[JapCounterScreen] Error fetching remote japs: $e');
     }
 
-    // 3. Load custom user Japs from local offline storage (always runs)
+    // 3. Load custom user Japs: first auto-sync local ones, then fetch server ones
     List<JapConfig> customJaps = [];
     try {
       final customJapsRaw = await JapOfflineRepository.getCustomJaps();
-      customJaps = customJapsRaw
-          .map((e) => JapConfig.fromJson(e))
-          .toList();
+
+      // If user is logged in, upload any local custom japs that haven't been pushed to server yet
+      if (_token.isNotEmpty) {
+        for (final localCustom in customJapsRaw) {
+          final localId = (localCustom['id'] ?? localCustom['_id'] ?? '').toString();
+          if (localId.startsWith('custom_')) {
+            try {
+              final coverPath = (localCustom['thumbnail'] ?? '').toString();
+              final godPath = (localCustom['darshanImage'] ?? '').toString();
+              final audioPath = (localCustom['shlokAudio'] ?? '').toString();
+              if (File(coverPath).existsSync() && File(godPath).existsSync()) {
+                final serverRes = await ApiService.createCustomJap(
+                  _token,
+                  name: (localCustom['name'] ?? 'My Custom Jap').toString(),
+                  coverImageFile: File(coverPath),
+                  godImageFile: File(godPath),
+                  audioFile: audioPath.isNotEmpty && File(audioPath).existsSync() ? File(audioPath) : null,
+                  targetCount: (localCustom['targetCount'] as num?)?.toInt() ?? 108,
+                  particleShape: (localCustom['particleShape'] ?? 'auto').toString(),
+                );
+                final newId = (serverRes['_id'] ?? serverRes['id'])?.toString();
+                if (newId != null && newId.length == 24) {
+                  await JapOfflineRepository.removeCustomJap(localId);
+                  localCustom['id'] = newId;
+                  localCustom['_id'] = newId;
+                  if (serverRes['thumbnail'] != null && serverRes['thumbnail'].toString().isNotEmpty) {
+                    localCustom['thumbnail'] = serverRes['thumbnail'];
+                  }
+                  if (serverRes['darshanImage'] != null && serverRes['darshanImage'].toString().isNotEmpty) {
+                    localCustom['darshanImage'] = serverRes['darshanImage'];
+                  }
+                  if (serverRes['shlokAudio'] != null && serverRes['shlokAudio'].toString().isNotEmpty) {
+                    localCustom['shlokAudio'] = serverRes['shlokAudio'];
+                  }
+                  await JapOfflineRepository.saveCustomJap(localCustom);
+
+                  // Migrate local progress
+                  final oldProgress = await JapOfflineRepository.getProgress(localId);
+                  if (oldProgress['count']! > 0 || oldProgress['completedMalas']! > 0) {
+                    await JapOfflineRepository.saveProgress(
+                      japId: newId,
+                      count: oldProgress['count']!,
+                      completedMalas: oldProgress['completedMalas']!,
+                    );
+                    final total = (oldProgress['completedMalas']! * ((localCustom['targetCount'] as num?)?.toInt() ?? 108)) + oldProgress['count']!;
+                    await ApiService.syncJapProgress(_token, newId, total);
+                  }
+                }
+              }
+            } catch (syncErr) {
+              debugPrint('[JapCounterScreen] Auto-sync custom jap error: $syncErr');
+            }
+          }
+        }
+
+        // Fetch remote custom japs from server
+        try {
+          final serverCustoms = await ApiService.getMyCustomJaps(_token);
+          for (final sc in serverCustoms) {
+            final scConfig = JapConfig.fromJson(sc);
+            customJaps.add(scConfig);
+          }
+        } catch (e) {
+          debugPrint('[JapCounterScreen] Error fetching server custom japs: $e');
+        }
+      }
+
+      // Re-read local custom japs
+      final reloadedCustoms = await JapOfflineRepository.getCustomJaps();
+      for (final raw in reloadedCustoms) {
+        final cfg = JapConfig.fromJson(raw);
+        if (!customJaps.any((c) => c.id == cfg.id)) {
+          customJaps.add(cfg);
+        }
+      }
     } catch (e) {
       debugPrint('[JapCounterScreen] Error loading local custom japs: $e');
     }
@@ -308,13 +385,97 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
     if (result == null || !mounted) return;
 
     if (result is CustomJapDetails) {
+      String assignedId = 'custom_${DateTime.now().millisecondsSinceEpoch}';
+      String resolvedThumbnail = result.coverImagePath;
+      String resolvedDarshan = result.godImagePath;
+      String resolvedAudio = result.audioFilePath;
+
+      if (_token.isNotEmpty) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 10,
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      color: Color(0xFFFF7700),
+                      strokeWidth: 2.5,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Text(
+                    'Saving custom Jap...',
+                    style: GoogleFonts.outfit(
+                      color: const Color(0xFF2E2A36),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+        try {
+          final serverRes = await ApiService.createCustomJap(
+            _token,
+            name: result.name,
+            coverImageFile: File(result.coverImagePath),
+            godImageFile: File(result.godImagePath),
+            audioFile: result.audioFilePath.isNotEmpty && File(result.audioFilePath).existsSync()
+                ? File(result.audioFilePath)
+                : null,
+            targetCount: result.chantCount,
+            particleShape: result.particleEffect,
+            godCategory: result.category,
+          );
+
+          final serverId = (serverRes['_id'] ?? serverRes['id'])?.toString();
+          if (serverId != null && serverId.length == 24) {
+            assignedId = serverId;
+            if (serverRes['thumbnail'] != null && serverRes['thumbnail'].toString().isNotEmpty) {
+              resolvedThumbnail = serverRes['thumbnail'].toString();
+            }
+            if (serverRes['darshanImage'] != null && serverRes['darshanImage'].toString().isNotEmpty) {
+              resolvedDarshan = serverRes['darshanImage'].toString();
+            }
+            if (serverRes['shlokAudio'] != null && serverRes['shlokAudio'].toString().isNotEmpty) {
+              resolvedAudio = serverRes['shlokAudio'].toString();
+            }
+          }
+        } catch (e) {
+          debugPrint('[JapCounterScreen] Server createCustomJap failed, saved offline: $e');
+        } finally {
+          if (mounted) {
+            Navigator.of(context, rootNavigator: true).pop();
+          }
+        }
+      }
+
       final newCustomConfig = JapConfig(
-        id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
+        id: assignedId,
         name: result.name,
-        thumbnailUrl: result.coverImagePath,
-        darshanImageUrl: result.godImagePath,
+        thumbnailUrl: resolvedThumbnail,
+        darshanImageUrl: resolvedDarshan,
         shlokText: '',
-        shlokAudioUrl: result.audioFilePath,
+        shlokAudioUrl: resolvedAudio,
         targetCount: result.chantCount,
         progress: 0,
         particleShape: result.particleEffect,
@@ -326,6 +487,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
 
       await JapOfflineRepository.saveCustomJap({
         '_id': newCustomConfig.id,
+        'id': newCustomConfig.id,
         'name': newCustomConfig.name,
         'thumbnail': newCustomConfig.thumbnailUrl,
         'darshanImage': newCustomConfig.darshanImageUrl,
@@ -936,13 +1098,125 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   bool _showContinueButton = false;
   double _buttonScale = 1.0;
 
-  DevotionalAnimationMode _devotionalMode = DevotionalAnimationMode.pushpanjaliPetals;
-  bool _showDevotionalOverlay = false;
-
   DateTime _lastTapTime = DateTime.fromMillisecondsSinceEpoch(0);
   static const Duration _debounceDuration = Duration(milliseconds: 80);
 
   ImageProvider? _imageProvider;
+
+  VideoPlayerController? _videoController;
+  bool _isVideoPlaying = false;
+  String _currentVideoAsset = '';
+
+  // Premium Devotional Animation System State
+  late JapAnimationType _activeAnimationType;
+  late final AnimationController _premiumAnimController;
+  bool _isPremiumAnimPlaying = false;
+  String _currentMantra = '';
+  double _animSeed = 0.0;
+  Offset? _currentRevealPoint;
+
+  String _resolveAnimationVideo() {
+    switch (_activeAnimationType) {
+      case JapAnimationType.dhupVideo:
+        return 'assets/videos/dhup_animation.mp4';
+      case JapAnimationType.ramVideo:
+        return 'assets/videos/ram-ram-animation.mp4';
+      case JapAnimationType.lotusVideo:
+        return 'assets/videos/lotus-animation.mp4';
+      case JapAnimationType.peacockVideo:
+        return 'assets/videos/peakok-feather.mp4';
+      case JapAnimationType.aartiVideo:
+        return 'assets/videos/arati-animation.mp4';
+      default:
+        break;
+    }
+
+    final shape = (widget.entry.particleShape ?? '').toLowerCase();
+    final name = widget.entry.name.toLowerCase();
+
+    if (shape == 'ram' || shape.contains('ram') || name.contains('ram') || name.contains('raghav') || name.contains('sita')) {
+      return 'assets/videos/ram-ram-animation.mp4';
+    }
+    if (shape == 'peakok' || shape.contains('peakok') || shape.contains('peacock') || shape.contains('radhe') || shape.contains('krishna') ||
+        name.contains('radha') || name.contains('krishna') || name.contains('kanha') || name.contains('govind') || name.contains('mor') || name.contains('pankh')) {
+      return 'assets/videos/peakok-feather.mp4';
+    }
+    if (shape == 'dhup' || shape.contains('dhup') || shape.contains('dhoop') || shape.contains('shiva') ||
+        name.contains('shiva') || name.contains('shiv') || name.contains('mahadev') || name.contains('shankar') || name.contains('bhole')) {
+      return 'assets/videos/dhup_animation.mp4';
+    }
+    if (shape == 'arati' || shape.contains('arati') || shape.contains('aarti') || shape.contains('durga') || shape.contains('hanuman') ||
+        name.contains('aarti') || name.contains('arati') || name.contains('diya') || name.contains('durga') || name.contains('mata') || name.contains('ambe') || name.contains('mandir') || name.contains('temple')) {
+      return 'assets/videos/arati-animation.mp4';
+    }
+    if (shape == 'lotus' || shape.contains('lotus') || shape.contains('om') || shape.contains('ganesh') || shape.contains('navkar') ||
+        name.contains('ganesh') || name.contains('ganpati') || name.contains('lakshmi') || name.contains('laxmi') || name.contains('lotus') || name.contains('kamal')) {
+      return 'assets/videos/lotus-animation.mp4';
+    }
+
+    return 'assets/videos/dhup_animation.mp4';
+  }
+
+  void _initVideoAnimation() {
+    _videoController?.dispose();
+    _currentVideoAsset = _resolveAnimationVideo();
+    _videoController = VideoPlayerController.asset(_currentVideoAsset)
+      ..initialize().then((_) {
+        if (mounted) setState(() {});
+      }).catchError((err) {
+        debugPrint('[JapVideo] Error initializing $_currentVideoAsset: $err');
+      })
+      ..setLooping(false);
+
+    if (widget.entry.shlokAudioUrl != null && widget.entry.shlokAudioUrl!.isNotEmpty) {
+      _videoController?.setVolume(0.0);
+    } else {
+      _videoController?.setVolume(1.0);
+    }
+  }
+
+  Future<void> _loadSavedAnimationPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString('jap_anim_${widget.entry.id}');
+      if (saved != null && saved.isNotEmpty && mounted) {
+        setState(() {
+          _activeAnimationType = JapAnimationType.fromKey(saved, deityName: widget.entry.name);
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _openAnimationSelector() {
+    JapAnimationSelectorSheet.show(
+      context,
+      currentType: _activeAnimationType,
+      onSelected: (selected) async {
+        setState(() {
+          _activeAnimationType = selected;
+        });
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('jap_anim_${widget.entry.id}', selected.key);
+        } catch (_) {}
+        if (selected.isVideo) {
+          _initVideoAnimation();
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              duration: const Duration(seconds: 2),
+              backgroundColor: const Color(0xFFFF7700),
+              content: Text(
+                'Animation: ${selected.label}',
+                style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
+            ),
+          );
+        }
+      },
+    );
+  }
 
   final List<EmberParticle> _embers = [];
   final List<GlowRing> _glowRings = [];
@@ -999,6 +1273,9 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   void initState() {
     super.initState();
 
+    _activeAnimationType = JapAnimationType.fromKey(widget.entry.particleShape, deityName: widget.entry.name);
+    _loadSavedAnimationPreference();
+
     _target = widget.entry.targetCount;
     final totalProgress = widget.entry.progress;
     _completedMalas = totalProgress ~/ _target;
@@ -1035,6 +1312,11 @@ class _JapDetailScreenState extends State<JapDetailScreen>
       duration: const Duration(milliseconds: 1200),
     );
 
+    _premiumAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3000),
+    );
+
     if (_completedMalas > 0) {
       _completionController.value = 1.0;
       _showContinueButton = true;
@@ -1045,125 +1327,11 @@ class _JapDetailScreenState extends State<JapDetailScreen>
       _lifecycle = JapLifecycle.started;
     }
 
-    final n = widget.entry.name.toLowerCase();
-    if (n.contains('ram') || n.contains('raghav') || n.contains('sita')) {
-      _devotionalMode = DevotionalAnimationMode.ramNaamVandana;
-    } else if (n.contains('radha') || n.contains('krishna') || n.contains('kanha')) {
-      _devotionalMode = DevotionalAnimationMode.radhaMorPankh108;
-    } else if (n.contains('shiva') || n.contains('mahadev') || n.contains('shankar')) {
-      _devotionalMode = DevotionalAnimationMode.dhoopSmoke;
-    } else if (n.contains('aarti') || n.contains('diya') || n.contains('temple')) {
-      _devotionalMode = DevotionalAnimationMode.mahaAartiBells;
-    } else {
-      _devotionalMode = DevotionalAnimationMode.pushpanjaliPetals;
-    }
-  }
-
-  void _openDevotionalModePicker() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF1E1428),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'દિવ્ય એનિમેશન સ્ટાઇલ પસંદ કરો',
-                    style: GoogleFonts.outfit(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 17,
-                      color: const Color(0xFFFFD54F),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, color: Colors.white70),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              ...DevotionalAnimationMode.values.map((mode) {
-                final isSelected = mode == _devotionalMode;
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? const Color(0xFFFF9933).withValues(alpha: 0.18)
-                        : Colors.white.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: isSelected
-                          ? const Color(0xFFFF9933)
-                          : Colors.white.withValues(alpha: 0.12),
-                      width: isSelected ? 1.5 : 1.0,
-                    ),
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-                    leading: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isSelected
-                            ? const Color(0xFFFF9933)
-                            : Colors.white.withValues(alpha: 0.1),
-                      ),
-                      child: Icon(
-                        mode.icon,
-                        color: isSelected ? Colors.white : const Color(0xFFFFB74D),
-                        size: 20,
-                      ),
-                    ),
-                    title: Text(
-                      mode.title,
-                      style: GoogleFonts.outfit(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        color: Colors.white,
-                      ),
-                    ),
-                    subtitle: Text(
-                      mode.subtitle,
-                      style: GoogleFonts.outfit(
-                        fontSize: 11,
-                        color: Colors.white60,
-                      ),
-                    ),
-                    trailing: isSelected
-                        ? const Icon(Icons.check_circle_rounded, color: Color(0xFFFF9933), size: 22)
-                        : null,
-                    onTap: () {
-                      setState(() {
-                        _devotionalMode = mode;
-                        _showDevotionalOverlay = true;
-                      });
-                      Navigator.pop(ctx);
-                    },
-                  ),
-                );
-              }),
-              const SizedBox(height: 10),
-            ],
-          ),
-        );
-      },
-    );
+    _initVideoAnimation();
   }
 
   void _tryUnlockTap() {
-    if (!_isRevealAnimating && !_isAudioPlaying && _count < _target) {
+    if (!_isRevealAnimating && !_isAudioPlaying && !_isVideoPlaying && !_isPremiumAnimPlaying && _count < _target) {
       if (mounted) {
         setState(() => _canTap = true);
       }
@@ -1172,15 +1340,20 @@ class _JapDetailScreenState extends State<JapDetailScreen>
 
   void _resetMala() {
     if (mounted) {
+      _videoController?.pause();
+      _videoController?.seekTo(Duration.zero);
+      _premiumAnimController.reset();
       HapticFeedback.mediumImpact();
       setState(() {
         _count = 0;
         _completedMalas = 0;
         _canTap = true;
         _isAudioPlaying = false;
+        _isVideoPlaying = false;
+        _isPremiumAnimPlaying = false;
+        _currentRevealPoint = null;
         _isRevealAnimating = false;
         _showContinueButton = false;
-        _showDevotionalOverlay = false;
         _lifecycle = JapLifecycle.started;
         _shuffledIndices = _buildShuffled(0);
         _jitteredPoints = _generateJitteredPoints(0);
@@ -1247,52 +1420,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   }
 
   void _updateParticlesNoSetState() {
-    final bool isCompleted = _completedMalas > 0 || _count >= _target;
-
-    for (final ember in _embers) {
-      ember.update(393, 1010);
-    }
-
-    _glowRings.removeWhere((ring) => !ring.update());
-    _tapSparks.removeWhere((spark) => !spark.update());
-    _spiralSparks.removeWhere((spark) => !spark.update());
-    _floatingOms.removeWhere((om) => !om.update());
-    _mistParticles.removeWhere((mist) => !mist.update());
-    _divineSymbolParticles.removeWhere((sym) => !sym.update());
-    _smokePuffs.removeWhere((p) => !p.update());
-    for (final petal in _tapPetals) {
-      petal.update(353, 520);
-    }
-    _tapPetals.removeWhere((p) => p.y > 540);
-
-    // Emit atmospheric mist periodically
-    final now = DateTime.now();
-    if (now.difference(_lastMistTime).inMilliseconds > 400 && _mistParticles.length < 12) {
-      _lastMistTime = now;
-      final rng = math.Random();
-      final pack = widget.entry.effectPack;
-      _mistParticles.add(
-        MistParticle(
-          x: rng.nextDouble() * 353,
-          y: 650.0 + rng.nextDouble() * 20,
-          vx: (rng.nextDouble() - 0.5) * 0.8,
-          vy: -(rng.nextDouble() * 1.2 + 0.6),
-          size: rng.nextDouble() * 50 + 40,
-          maxAlpha: rng.nextDouble() * 0.12 + 0.05,
-          maxLife: rng.nextDouble() * 3.0 + 2.5,
-          color: pack.haloGlowColor,
-        ),
-      );
-    }
-
-
-
-    if (_petals.isEmpty) {
-      _initPetals();
-    }
-    for (final petal in _petals) {
-      petal.update(393, 1010);
-    }
+    // Particle animations removed
   }
 
   @override
@@ -1321,6 +1449,8 @@ class _JapDetailScreenState extends State<JapDetailScreen>
 
   @override
   void dispose() {
+    _premiumAnimController.dispose();
+    _videoController?.dispose();
     _audioPlayer.dispose();
     _revealController.dispose();
     _completionController.dispose();
@@ -1361,32 +1491,13 @@ class _JapDetailScreenState extends State<JapDetailScreen>
 
     setState(() {
       _canTap = false;
-      _isRevealAnimating = true;
       _isAudioPlaying = true;
       _buttonScale = 0.82;
-      _revealingTile = tileIdx;
-      _showDevotionalOverlay = true;
-
-      _count = math.min(_count + 1, _target);
-      _lifecycle = _count >= _target
-          ? JapLifecycle.completed
-          : JapLifecycle.inProgress;
-
+      _currentRevealPoint = revealPt;
+      _revealingTile = null; // Do not unmask tile until animation completes!
     });
 
-    // 4. Persistence to local cache
-    JapOfflineRepository.saveProgress(
-      japId: widget.entry.id,
-      count: _count,
-      completedMalas: _completedMalas,
-    );
-
-    // 5. Milestone background cloud sync (at 27, 54, 81, 108)
-    if (_count % 27 == 0 || _count >= _target) {
-      _triggerBackgroundSync();
-    }
-
-    // 6. Tactile Button spring animation
+    // Tactile Button spring animation
     Future.delayed(const Duration(milliseconds: 70), () {
       if (mounted) setState(() => _buttonScale = 1.12);
     });
@@ -1394,15 +1505,81 @@ class _JapDetailScreenState extends State<JapDetailScreen>
       if (mounted) setState(() => _buttonScale = 1.0);
     });
 
-    // 7. Unmasking animation
-    _revealController.forward(from: 0.0).then((_) {
+    // Helper: Reveals tile and updates count strictly AFTER animation completes
+    void completeChantAndReveal() {
       if (!mounted) return;
       setState(() {
-        _revealingTile = null;
-        _isRevealAnimating = false;
+        _count = math.min(_count + 1, _target);
+        _revealingTile = tileIdx;
+        _isRevealAnimating = true;
+        _lifecycle = _count >= _target
+            ? JapLifecycle.completed
+            : JapLifecycle.inProgress;
+        _isPremiumAnimPlaying = false;
+        _isVideoPlaying = false;
       });
-      _tryUnlockTap();
-    });
+
+      // Soft feathered unmasking animation
+      _revealController.forward(from: 0.0).then((_) {
+        if (!mounted) return;
+        setState(() {
+          _revealingTile = null;
+          _isRevealAnimating = false;
+        });
+        _tryUnlockTap();
+      });
+
+      // Persistence to local cache
+      JapOfflineRepository.saveProgress(
+        japId: widget.entry.id,
+        count: _count,
+        completedMalas: _completedMalas,
+      );
+
+      // Milestone background cloud sync (at 27, 54, 81, 108)
+      if (_count % 27 == 0 || _count >= _target) {
+        _triggerBackgroundSync();
+      }
+    }
+
+    // 3b. Trigger Animation: Video vs New Premium Devotional Animation
+    if (_activeAnimationType.isVideo) {
+      final ctrl = _videoController;
+      if (ctrl != null && ctrl.value.isInitialized) {
+        ctrl.seekTo(Duration.zero).then((_) {
+          ctrl.play();
+        });
+        setState(() {
+          _isVideoPlaying = true;
+        });
+      }
+
+      // Video completes after duration -> then reveal!
+      Future.delayed(const Duration(milliseconds: 3500), () {
+        if (mounted) {
+          _videoController?.pause();
+          completeChantAndReveal();
+        }
+      });
+    } else {
+      // Premium Devotional Animation (Duration: ~3.0 seconds)
+      _animSeed = math.Random().nextDouble();
+
+      // Resolve devotional mantra for text-based animations
+      if (_activeAnimationType == JapAnimationType.mantraLight) {
+        _currentMantra = JapMantraHelper.getRandomMantra(widget.entry.name);
+      } else {
+        _currentMantra = '';
+      }
+
+      setState(() {
+        _isPremiumAnimPlaying = true;
+      });
+      // Animation plays first -> when completed, the tile reveals!
+      _premiumAnimController.forward(from: 0.0).then((_) {
+        completeChantAndReveal();
+      });
+    }
 
     // 8. Audio playback
     final audioUrl = widget.entry.shlokAudioUrl;
@@ -1589,19 +1766,19 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                             ),
                           ),
                         ),
-                        // Top Bar: Animation Style & Reset Buttons
+                        // Top Bar: Effect & Reset Buttons
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             GestureDetector(
-                              onTap: _openDevotionalModePicker,
+                              onTap: _openAnimationSelector,
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFF9933).withValues(alpha: 0.12),
+                                  color: Colors.white,
                                   borderRadius: BorderRadius.circular(16),
                                   border: Border.all(
-                                    color: const Color(0xFFFF9933),
+                                    color: const Color(0xFFC8A882),
                                     width: 1.2,
                                   ),
                                 ),
@@ -1609,17 +1786,17 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     const Icon(
-                                      Icons.auto_awesome_rounded,
-                                      size: 14,
+                                      Icons.auto_awesome,
+                                      size: 13,
                                       color: Color(0xFFFF7700),
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'એનિમેશન',
+                                      'Effect',
                                       style: GoogleFonts.outfit(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 12,
-                                        color: const Color(0xFFFF7700),
+                                        color: const Color(0xFF2E2A36),
                                       ),
                                     ),
                                   ],
@@ -1690,7 +1867,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
-                                // Unmasked Darshan Image
+                                // Unmasked Darshan Image (Base)
                                 if (_imageProvider != null)
                                   Image(
                                     image: _imageProvider!,
@@ -1737,22 +1914,46 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                                   },
                                 ),
 
-                                // Photorealistic Devotional Chant Overlay
-                                if (_showDevotionalOverlay)
+                                // 4-Second Devotional Video Animation Layer
+                                if (_videoController != null &&
+                                    _videoController!.value.isInitialized)
                                   Positioned.fill(
-                                    child: IgnorePointer(
-                                      child: DevotionalChantOverlay(
-                                        key: ValueKey('dev_${_devotionalMode}_$_count'),
-                                        mode: _devotionalMode,
-                                        tapCount: _count,
-                                        onCompleted: () {
-                                          if (mounted) {
-                                            setState(() => _showDevotionalOverlay = false);
-                                          }
-                                        },
+                                    child: AnimatedOpacity(
+                                      opacity: _isVideoPlaying ? 1.0 : 0.0,
+                                      duration: const Duration(milliseconds: 200),
+                                      child: IgnorePointer(
+                                        child: BlendedLayer(
+                                          blendMode: BlendMode.screen,
+                                          child: FittedBox(
+                                            fit: BoxFit.cover,
+                                            child: SizedBox(
+                                              width: _videoController!.value.size.width,
+                                              height: _videoController!.value.size.height,
+                                              child: VideoPlayer(_videoController!),
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
+
+                                // New Premium Devotional Animation Layer (10 Options)
+                                AnimatedBuilder(
+                                  animation: _premiumAnimController,
+                                  builder: (ctx, _) {
+                                    return Positioned.fill(
+                                      child: PremiumJapAnimator(
+                                        animationType: _activeAnimationType,
+                                        progress: _premiumAnimController.value,
+                                        isPlaying: _isPremiumAnimPlaying,
+                                        deityName: widget.entry.name,
+                                        currentMantra: _currentMantra,
+                                        revealPoint: _currentRevealPoint ?? const Offset(176, 260),
+                                        seed: _animSeed,
+                                      ),
+                                    );
+                                  },
+                                ),
 
                               // Completion Blessing Banner Overlay
                               if (_showContinueButton)
@@ -2007,23 +2208,6 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                 ],
               ),
             ),
-
-            // Top Overlay Flower Petals / Bilva / Feathers Shower (Ignored from Pointer/Touch Events)
-            IgnorePointer(
-              child: AnimatedBuilder(
-                animation: _ambientController,
-                builder: (ctx, _) {
-                  return CustomPaint(
-                    size: MediaQuery.of(context).size,
-                    painter: DivineOverlayPainter(
-                      embers: _embers,
-                      petals: _petals,
-                      isCompleted: isCompleted,
-                    ),
-                  );
-                },
-              ),
-            ),
           ],
         ),
       ),
@@ -2194,11 +2378,11 @@ class DivineCardPainter extends CustomPainter {
     // Clip everything to the card's rounded corners so reveals don't leak outside
     canvas.clipRRect(cardRRect);
 
-    // 1. Draw Divine Veil Overlay strictly proportional to completed chant count
-    final veilAlpha = ((1.0 - completionFadeProgress) * 0.94).clamp(0.0, 0.94);
+    // 1. Draw Divine Veil Overlay strictly proportional to completed chant count (100% Solid Black)
+    final veilAlpha = (1.0 - completionFadeProgress).clamp(0.0, 1.0);
 
     final veilPaint = Paint()
-      ..color = const Color(0xFF140D1F).withValues(alpha: veilAlpha);
+      ..color = Colors.black.withValues(alpha: veilAlpha);
 
     if (completionFadeProgress < 1.0 && veilAlpha > 0.01) {
       canvas.saveLayer(rect, Paint());
@@ -2206,20 +2390,20 @@ class DivineCardPainter extends CustomPainter {
 
       final erasePaint = Paint()
         ..blendMode = BlendMode.dstOut
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10.0);
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22.0);
 
-      // Proportional radius mathematically sized so target chants reveal exactly 100%
+      // Proportional radius mathematically sized so target chants reveal progressively
       final double targetSafe = math.max(1, target).toDouble();
       final double cellRadius =
           (math.sqrt((size.width * size.height) / (targetSafe * math.pi)) *
-                  1.35)
-              .clamp(24.0, 38.0);
+                  0.95)
+              .clamp(16.0, 25.0);
 
       for (int i = 0; i < count && i < target; i++) {
         final tileIdx = shuffledIndices[i];
         final pt = jitteredPoints[tileIdx];
 
-        // Organic varied radius around the exact cell size (no premature full unmasking)
+        // Organic varied radius around the exact cell size
         final tileRng = math.Random((tileIdx + 1) * 7919);
         final baseRadius = cellRadius * (0.92 + tileRng.nextDouble() * 0.22);
 
@@ -2232,83 +2416,11 @@ class DivineCardPainter extends CustomPainter {
                   0.65;
         }
         final r = baseRadius * scale;
-        _drawRevealShape(canvas, pt, r, erasePaint, tileIdx);
+        // Erase with pure blurred circle: Completely soft edges, zero cloud shape!
+        canvas.drawCircle(pt, r, erasePaint);
       }
 
       canvas.restore();
-    }
-
-    // 2. Draw Incense Smoke Puffs
-    for (final smoke in smokePuffs) {
-      final alpha = (smoke.life / smoke.maxLife).clamp(0.0, 1.0) * smoke.alpha;
-      final smokePaint = Paint()
-        ..color = effectPack.secondaryColor.withValues(alpha: alpha)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10.0);
-      canvas.drawCircle(Offset(smoke.x, smoke.y), smoke.size, smokePaint);
-    }
-
-    // 3. Draw Fluttering Tap Flower Petals
-    for (final petal in tapPetals) {
-      canvas.save();
-      canvas.translate(petal.x, petal.y);
-      canvas.rotate(petal.angle);
-      final petalPaint = Paint()
-        ..color = petal.color.withValues(alpha: 0.85)
-        ..style = PaintingStyle.fill;
-      final pPath = Path();
-      pPath.moveTo(0, -petal.size);
-      pPath.quadraticBezierTo(petal.size * 0.5, -petal.size * 0.2, 0, petal.size * 0.6);
-      pPath.quadraticBezierTo(-petal.size * 0.5, -petal.size * 0.2, 0, -petal.size);
-      canvas.drawPath(pPath, petalPaint);
-      canvas.restore();
-    }
-
-    // 4. Draw Lotus Mandala Bloom Glow Rings
-    for (final ring in glowRings) {
-      final progress = 1.0 - (ring.life / ring.maxLife);
-      final opacity = (1.0 - progress).clamp(0.0, 1.0);
-      final ringPaint = Paint()
-        ..color = ring.color.withValues(alpha: opacity * 0.5)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0;
-      canvas.drawCircle(ring.position, ring.maxRadius * progress, ringPaint);
-    }
-
-    // 5. Draw Tap Sparks
-    for (final spark in tapSparks) {
-      final alpha = (spark.life / spark.maxLife).clamp(0.0, 1.0);
-      final sparkPaint = Paint()..color = spark.color.withValues(alpha: alpha);
-      canvas.drawCircle(spark.position, spark.size, sparkPaint);
-    }
-
-    // 6. Draw Floating Om Glyphs & Mantras
-    for (final om in floatingOms) {
-      final alpha = (om.life / om.maxLife).clamp(0.0, 1.0);
-      final tp = _getOmPainter(om.text);
-      final paint = tp.text!.style!.copyWith(
-        color: effectPack.primaryColor.withValues(alpha: alpha),
-      );
-      final blended = TextPainter(
-        text: TextSpan(text: om.text, style: paint),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      blended.paint(
-        canvas,
-        om.position - Offset(blended.width / 2, blended.height / 2),
-      );
-    }
-
-    // 7. Draw Atmospheric Mist Particles
-    for (final mist in mistParticles) {
-      final mistPaint = Paint()
-        ..color = mist.color.withValues(alpha: mist.alpha)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12.0);
-      canvas.drawCircle(Offset(mist.x, mist.y), mist.size, mistPaint);
-    }
-
-    // 8. Draw Divine Symbols (Trishul, Shankh, Flute, Bow, Lotus, Chakra, ॐ)
-    for (final sym in divineSymbolParticles) {
-      _drawDivineSymbol(canvas, sym);
     }
   }
 
@@ -2333,154 +2445,7 @@ class DivineCardPainter extends CustomPainter {
   }
 
 
-  void _drawDivineSymbol(Canvas canvas, DivineSymbolParticle particle) {
-    canvas.save();
-    canvas.translate(particle.position.dx, particle.position.dy);
-    canvas.scale(0.8 + (1.0 - particle.life / particle.maxLife) * 0.4);
 
-    final paint = Paint()
-      ..color = particle.color.withValues(alpha: particle.alpha)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..strokeCap = StrokeCap.round;
-
-    final fillPaint = Paint()
-      ..color = particle.color.withValues(alpha: particle.alpha * 0.4)
-      ..style = PaintingStyle.fill;
-
-    final path = Path();
-
-    switch (particle.symbol) {
-      case DivineSymbolType.lotus:
-        // Lotus: 3 overlapping petals
-        for (int i = -1; i <= 1; i++) {
-          final p = Path();
-          p.moveTo(0, 10);
-          p.quadraticBezierTo(i * 12.0, -5, i * 6.0, -18);
-          p.quadraticBezierTo(0, -10, 0, 10);
-          canvas.drawPath(p, fillPaint);
-          canvas.drawPath(p, paint);
-        }
-        break;
-
-      case DivineSymbolType.flute:
-        // Flute: Diagonal flute with peacock feather dot
-        canvas.rotate(0.3);
-        final rrect = RRect.fromRectAndRadius(
-          Rect.fromCenter(center: Offset.zero, width: 36, height: 8),
-          const Radius.circular(4),
-        );
-        canvas.drawRRect(rrect, fillPaint);
-        canvas.drawRRect(rrect, paint);
-        for (int i = -10; i <= 10; i += 6) {
-          canvas.drawCircle(Offset(i.toDouble(), 0), 1.2, Paint()..color = Colors.white.withValues(alpha: particle.alpha));
-        }
-        break;
-
-      case DivineSymbolType.trishul:
-        // Sacred Golden Trishul with Mahadev's crescent halo
-        final haloPaint = Paint()
-          ..color = const Color(0xFF00E5FF).withValues(alpha: (particle.alpha * 0.4).clamp(0.0, 1.0))
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6.0);
-        canvas.drawCircle(const Offset(0, -5), 14.0, haloPaint);
-
-        final goldTrishulPaint = Paint()
-          ..color = const Color(0xFFFFD700).withValues(alpha: particle.alpha)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.4
-          ..strokeCap = StrokeCap.round;
-
-        path.moveTo(0, 16);
-        path.lineTo(0, -22); // Central spear tip
-        path.moveTo(-11, 2);
-        path.cubicTo(-13, -12, -7, -18, -10, -20);
-        path.moveTo(11, 2);
-        path.cubicTo(13, -12, 7, -18, 10, -20);
-        path.moveTo(-11, 2);
-        path.quadraticBezierTo(0, 8, 11, 2);
-        canvas.drawPath(path, goldTrishulPaint);
-        // Damru knot
-        canvas.drawCircle(const Offset(0, 4), 2.5, Paint()..color = const Color(0xFFFF3D00));
-        break;
-
-      case DivineSymbolType.chakra:
-        // Luminous Sudarshana Chakra with radiant flaming teeth
-        canvas.rotate(particle.rotation);
-        final aura = Paint()
-          ..color = const Color(0xFFFFB300).withValues(alpha: (particle.alpha * 0.45).clamp(0.0, 1.0))
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.0);
-        canvas.drawCircle(Offset.zero, 16.0, aura);
-
-        final rimPaint = Paint()
-          ..color = const Color(0xFFFFD700).withValues(alpha: particle.alpha)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.0;
-        canvas.drawCircle(Offset.zero, 13, rimPaint);
-        canvas.drawCircle(Offset.zero, 6, rimPaint);
-
-        final spokePaint = Paint()
-          ..color = const Color(0xFFFFF9C4).withValues(alpha: particle.alpha)
-          ..strokeWidth = 1.6;
-        for (int i = 0; i < 8; i++) {
-          final ang = (i / 8.0) * 2 * math.pi;
-          canvas.drawLine(
-            Offset(math.cos(ang) * 6, math.sin(ang) * 6),
-            Offset(math.cos(ang) * 15, math.sin(ang) * 15),
-            spokePaint,
-          );
-        }
-        break;
-
-      case DivineSymbolType.shankh:
-        // Sacred Panchajanya Conch Shell with golden spiral
-        final shankhPaint = Paint()
-          ..color = const Color(0xFFFFFDE7).withValues(alpha: particle.alpha)
-          ..style = PaintingStyle.fill;
-        final shankhRim = Paint()
-          ..color = const Color(0xFFFFD700).withValues(alpha: particle.alpha)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.8;
-        final sRect = Rect.fromCenter(center: Offset.zero, width: 22, height: 28);
-        canvas.drawOval(sRect, shankhPaint);
-        canvas.drawOval(sRect, shankhRim);
-        path.moveTo(0, -14);
-        path.cubicTo(10, -4, 4, 10, -2, 14);
-        canvas.drawPath(path, shankhRim);
-        break;
-
-      case DivineSymbolType.bowArrow:
-        // Divine Kodanda Bow with golden arrowhead
-        final bowPaint = Paint()
-          ..color = const Color(0xFFFFD700).withValues(alpha: particle.alpha)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.2
-          ..strokeCap = StrokeCap.round;
-        path.addArc(Rect.fromCenter(center: Offset.zero, width: 28, height: 34), -1.5, 3.0);
-        path.moveTo(-14, 0);
-        path.lineTo(18, 0); // Arrow
-        path.moveTo(11, -5);
-        path.lineTo(18, 0);
-        path.lineTo(11, 5);
-        canvas.drawPath(path, bowPaint);
-        // Glowing arrow tip
-        canvas.drawCircle(
-          const Offset(18, 0),
-          3.0,
-          Paint()
-            ..color = const Color(0xFFFFEA00).withValues(alpha: particle.alpha)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0),
-        );
-        break;
-
-      case DivineSymbolType.om:
-      case DivineSymbolType.none:
-        final tp = _getOmPainter('ॐ');
-        tp.paint(canvas, const Offset(-10, -10));
-        break;
-    }
-
-    canvas.restore();
-  }
 
   /// Draw reveal hole using smooth organic cloud shapes (no box, no circle, random sizes & contours)
   void _drawRevealShape(
@@ -2490,18 +2455,13 @@ class DivineCardPainter extends CustomPainter {
     Paint erasePaint,
     int index,
   ) {
-    canvas.save();
-    canvas.translate(center.dx, center.dy);
-
     final path = Path();
-    _buildOrganicCloudPath(path, radius, index);
-
+    buildOrganicCloudPathAt(path, center, radius, index);
     canvas.drawPath(path, erasePaint);
-    canvas.restore();
   }
 
   /// Organic asymmetrical cloud silhouette with 9 Bézier lobes and random variation
-  void _buildOrganicCloudPath(Path path, double r, int index) {
+  static void buildOrganicCloudPathAt(Path path, Offset center, double r, int index) {
     final rng = math.Random((index + 1) * 7919);
     const int points = 9;
     final List<Offset> pts = [];
@@ -2511,7 +2471,7 @@ class DivineCardPainter extends CustomPainter {
       final angle = baseAngle + angleJitter;
       final lobeFactor = 0.70 + (rng.nextDouble() * 0.60);
       final curR = r * lobeFactor;
-      pts.add(Offset(curR * math.cos(angle), curR * math.sin(angle)));
+      pts.add(Offset(center.dx + curR * math.cos(angle), center.dy + curR * math.sin(angle)));
     }
     path.moveTo((pts[0].dx + pts[points - 1].dx) / 2, (pts[0].dy + pts[points - 1].dy) / 2);
     for (int k = 0; k < points; k++) {
@@ -2522,9 +2482,6 @@ class DivineCardPainter extends CustomPainter {
     }
     path.close();
   }
-
-
-
 
   @override
   bool shouldRepaint(covariant DivineCardPainter oldDelegate) {
@@ -2538,6 +2495,7 @@ class DivineCardPainter extends CustomPainter {
         (oldDelegate.timeSeconds - timeSeconds).abs() > 0.008;
   }
 }
+
 
 class DivineOverlayPainter extends CustomPainter {
   final List<EmberParticle> embers;
@@ -2639,3 +2597,36 @@ class DivineOverlayPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant DivineOverlayPainter oldDelegate) => true;
 }
+
+/// Renders a child widget onto the underlying canvas using a specific BlendMode (e.g. BlendMode.screen).
+class BlendedLayer extends SingleChildRenderObjectWidget {
+  final BlendMode blendMode;
+  const BlendedLayer({super.key, required this.blendMode, required super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderBlendedLayer(blendMode);
+  }
+
+  @override
+  void updateRenderObject(BuildContext context, covariant _RenderBlendedLayer renderObject) {
+    renderObject.blendMode = blendMode;
+  }
+}
+
+class _RenderBlendedLayer extends RenderProxyBox {
+  BlendMode blendMode;
+  _RenderBlendedLayer(this.blendMode);
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    if (child == null) return;
+    context.canvas.saveLayer(
+      offset & size,
+      Paint()..blendMode = blendMode,
+    );
+    context.paintChild(child!, offset);
+    context.canvas.restore();
+  }
+}
+

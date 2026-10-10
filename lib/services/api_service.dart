@@ -6,14 +6,15 @@ import '../models/user_model.dart';
 import '../models/yatra_model.dart';
 import '../models/journey_models.dart';
 import '../models/notification_model.dart';
+import 'fast2sms_service.dart';
 
 class ApiService {
   // Set to true to use the live production server, false for local testing
-  static const bool isLive = false;
+  static const bool isLive = true;
 
   // Local backend configuration:
   // Active ADB Reverse USB Tunnel = 127.0.0.1, Wi-Fi IP = 192.168.29.73, Android Emulator = 10.0.2.2
-  static const String _localIp = '127.0.0.1';
+  static const String _localIp = '192.168.29.73';
   static const int _localPort = 3020;
 
   static String get baseUrl {
@@ -64,6 +65,12 @@ class ApiService {
     if (url == null || url.trim().isEmpty) return '';
     var trimmed = url.trim();
     if (trimmed.startsWith('assets/')) return trimmed; // Keep local assets as is
+
+    // Keep data:image intact
+    if (trimmed.contains('data:image')) {
+      final idx = trimmed.indexOf('data:image');
+      return trimmed.substring(idx);
+    }
 
     // Keep absolute local filesystem paths unchanged (so local cache/picked files load correctly)
     if (trimmed.startsWith('/data/') ||
@@ -269,7 +276,12 @@ class ApiService {
         'fcm_token': 'default_fcm_token',
       }),
     );
-    return _processResponse(response);
+    final res = _processResponse(response);
+    final devOtp = res['Data']?['dev_mode_otp']?.toString();
+    if (devOtp != null && devOtp.isNotEmpty && !contact.contains('@')) {
+      await Fast2SmsService.sendOtp(mobileNumber: contact, otp: devOtp);
+    }
+    return res;
   }
 
   // POST /user/verify-otp
@@ -340,7 +352,12 @@ class ApiService {
 
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
-    return _processResponse(response);
+    final res = _processResponse(response);
+    final devOtp = res['Data']?['dev_mode_otp']?.toString();
+    if (devOtp != null && devOtp.isNotEmpty && !contact.contains('@')) {
+      await Fast2SmsService.sendOtp(mobileNumber: contact, otp: devOtp);
+    }
+    return res;
   }
 
   // GET /user/profile
@@ -478,6 +495,81 @@ class ApiService {
       body: json.encode(bodyPayload),
     );
     return _processResponse(response)['Data'] ?? {};
+  }
+
+  // POST /user/jap/create-custom
+  static Future<Map<String, dynamic>> createCustomJap(
+    String token, {
+    required String name,
+    required File coverImageFile,
+    required File godImageFile,
+    File? audioFile,
+    int targetCount = 108,
+    String? particleShape,
+    String? godCategory,
+    String? shlokText,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/user/jap/create-custom');
+      final request = http.MultipartRequest('POST', uri);
+
+      request.headers['Authorization'] = 'Bearer $token';
+      request.fields['name'] = name;
+      request.fields['targetCount'] = targetCount.toString();
+      if (particleShape != null && particleShape.isNotEmpty) {
+        request.fields['particleShape'] = particleShape;
+      }
+      if (godCategory != null && godCategory.isNotEmpty) {
+        request.fields['godCategory'] = godCategory;
+      }
+      if (shlokText != null && shlokText.isNotEmpty) {
+        request.fields['shlokText'] = shlokText;
+      }
+
+      // Cover image
+      if (coverImageFile.existsSync()) {
+        request.files.add(await http.MultipartFile.fromPath('coverImage', coverImageFile.path));
+      }
+
+      // God image
+      if (godImageFile.existsSync()) {
+        request.files.add(await http.MultipartFile.fromPath('godImage', godImageFile.path));
+      }
+
+      // Audio file
+      if (audioFile != null && audioFile.existsSync()) {
+        request.files.add(await http.MultipartFile.fromPath('audio', audioFile.path));
+      }
+
+      _logApiCall('POST (Multipart)', uri, headers: request.headers);
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 45));
+      final response = await http.Response.fromStream(streamedResponse);
+      _logApiResponse('POST (Multipart)', uri, response);
+      final res = _processResponse(response);
+      return res['Data'] is Map ? Map<String, dynamic>.from(res['Data']) : {};
+    } catch (e) {
+      print('[API ERROR] createCustomJap | $e');
+      rethrow;
+    }
+  }
+
+  // GET /user/jap/my-custom-japs
+  static Future<List<dynamic>> getMyCustomJaps(String token) async {
+    try {
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/user/jap/my-custom-japs'),
+        headers: _authHeaders(token),
+      );
+      final processed = _processResponse(response);
+      final data = processed['Data'];
+      if (data is List) {
+        return data;
+      }
+      return [];
+    } catch (e) {
+      print('[API ERROR] getMyCustomJaps | $e');
+      return [];
+    }
   }
 
   // POST /user/jap/start-session
@@ -833,7 +925,7 @@ class ApiService {
         throw Exception('Stream URL not found in API response for bhajan $bhajanId.');
       }
       // The backend must return a direct, network-accessible URL.
-      return streamUrl;
+      return resolveImageUrl(streamUrl);
     });
   }
 
@@ -2546,10 +2638,68 @@ class ApiService {
           'Authorization': 'Bearer $token',
         },
       );
-      return _processResponse(response)['Data'] ?? [];
+      final body = _processResponse(response);
+      final data = body['Data'];
+      if (data is List) return data;
+      if (data is Map && data['docs'] is List) return data['docs'] as List<dynamic>;
+      return [];
     } catch (e) {
       print('Error fetching personal messages: $e');
       return [];
+    }
+  }
+
+  // GET /user/yatra/personal-chat/conversations
+  static Future<List<dynamic>> getPersonalConversations(String token) async {
+    try {
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/user/yatra/personal-chat/conversations'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      final body = _processResponse(response);
+      final data = body['Data'];
+      if (data is List) return data;
+      return [];
+    } catch (e) {
+      print('Error fetching personal conversations: $e');
+      return [];
+    }
+  }
+
+  // POST /user/yatra/personal-chat/message
+  static Future<Map<String, dynamic>> sendPersonalMessage(
+    String token, {
+    required String targetUserId,
+    required String content,
+    String yatraId = '',
+    String journeyId = '',
+    String messageType = 'text',
+    String mediaUrl = '',
+  }) async {
+    try {
+      final response = await _safePost(
+        Uri.parse('$baseUrl/user/yatra/personal-chat/message'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({
+          'receiverId': targetUserId,
+          'content': content,
+          'yatraId': yatraId.isNotEmpty ? yatraId : null,
+          'journeyId': journeyId.isNotEmpty ? journeyId : null,
+          'messageType': messageType,
+          'mediaUrl': mediaUrl,
+        }),
+      );
+      final body = _processResponse(response);
+      return body['Data'] is Map ? Map<String, dynamic>.from(body['Data']) : {};
+    } catch (e) {
+      print('Error sending personal message via HTTP: $e');
+      return {};
     }
   }
 

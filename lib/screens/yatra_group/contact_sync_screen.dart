@@ -152,6 +152,15 @@ class _ContactSyncScreenState extends State<ContactSyncScreen> {
         _selected.add(user);
       }
     });
+    _saveSelectedMembersLocally();
+  }
+
+  Future<void> _saveSelectedMembersLocally() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = _selected.map((m) => m.toJson()).toList();
+      await prefs.setString('latest_yatra_members', jsonEncode(list));
+    } catch (_) {}
   }
 
   void _openChatWithUser(ContactUserModel user) {
@@ -500,6 +509,8 @@ class _ContactSyncScreenState extends State<ContactSyncScreen> {
       'name': m.name,
       'mobile': m.mobile,
       'profilePic': m.profilePic,
+      'city': m.city,
+      'address': m.address,
       'role': 'member',
       'isAdmin': false,
     }).toList();
@@ -508,10 +519,14 @@ class _ContactSyncScreenState extends State<ContactSyncScreen> {
     final prefs = await SharedPreferences.getInstance();
     final myName = prefs.getString('name') ?? prefs.getString('fullName') ?? 'You';
     final myPic = prefs.getString('profile_pic') ?? '';
+    final myCity = prefs.getString('city') ?? '';
+    final myAddress = prefs.getString('address') ?? '';
     memberMaps.insert(0, <String, dynamic>{
-      'name': '$myName (Admin)',
+      'name': '$myName (Leader)',
       'mobile': 'Leader',
       'profilePic': myPic,
+      'city': myCity,
+      'address': myAddress,
       'role': 'leader',
       'isAdmin': true,
     });
@@ -583,7 +598,13 @@ class _ContactSyncScreenState extends State<ContactSyncScreen> {
       return u.name.toLowerCase().contains(q) || u.mobile.contains(q);
     }).toList();
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_inGroupCreation,
+      onPopInvoked: (didPop) {
+        if (didPop) return;
+        Navigator.pop(context, _selected);
+      },
+      child: Scaffold(
       backgroundColor: const Color(0xFFFFE8D6),
       appBar: AppBar(
         systemOverlayStyle: SystemUiOverlayStyle.dark,
@@ -595,12 +616,18 @@ class _ContactSyncScreenState extends State<ContactSyncScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF2E2A36)),
-          onPressed: () => Navigator.pop(context, _selected),
+          onPressed: () async {
+            await _saveSelectedMembersLocally();
+            if (context.mounted) Navigator.pop(context, _selected);
+          },
         ),
         actions: [
           if (_inGroupCreation)
             TextButton(
-              onPressed: () => Navigator.pop(context, _selected),
+              onPressed: () async {
+                await _saveSelectedMembersLocally();
+                if (context.mounted) Navigator.pop(context, _selected);
+              },
               child: Text(
                 'Done',
                 style: GoogleFonts.outfit(color: const Color(0xFFFF7700), fontWeight: FontWeight.bold, fontSize: 16),
@@ -750,7 +777,11 @@ class _ContactSyncScreenState extends State<ContactSyncScreen> {
                         child: ListTile(
                           onTap: () {
                             if (_inGroupCreation) {
-                              _toggleMember(user);
+                              if (isRegistered) {
+                                _toggleMember(user);
+                              } else {
+                                _shareInvite(user);
+                              }
                             } else if (isRegistered) {
                               _openChatWithUser(user);
                             } else {
@@ -812,23 +843,41 @@ class _ContactSyncScreenState extends State<ContactSyncScreen> {
                                       'In Group',
                                       style: GoogleFonts.outfit(color: const Color(0xFF7A757F), fontSize: 12, fontWeight: FontWeight.w600),
                                     )
-                                  : ElevatedButton(
-                                      onPressed: () => _toggleMember(user),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: isSelected ? const Color(0xFFE8D2B8) : const Color(0xFFFF7700),
-                                        elevation: 0,
-                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                      ),
-                                      child: Text(
-                                        isSelected ? 'Remove' : 'Add',
-                                        style: GoogleFonts.outfit(
-                                          color: isSelected ? const Color(0xFF2E2A36) : Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12.5,
-                                        ),
-                                      ),
-                                    ))
+                                  : (isRegistered
+                                      ? ElevatedButton(
+                                          onPressed: () => _toggleMember(user),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: isSelected ? const Color(0xFFE8D2B8) : const Color(0xFFFF7700),
+                                            elevation: 0,
+                                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                          ),
+                                          child: Text(
+                                            isSelected ? 'Remove' : 'Add',
+                                            style: GoogleFonts.outfit(
+                                              color: isSelected ? const Color(0xFF2E2A36) : Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12.5,
+                                            ),
+                                          ),
+                                        )
+                                      : OutlinedButton.icon(
+                                          onPressed: () => _shareInvite(user),
+                                          icon: const Icon(Icons.share_rounded, size: 13, color: Color(0xFFFF7700)),
+                                          label: Text(
+                                            'Invite',
+                                            style: GoogleFonts.outfit(
+                                              color: const Color(0xFFFF7700),
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          style: OutlinedButton.styleFrom(
+                                            side: const BorderSide(color: Color(0xFFFF7700)),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                          ),
+                                        )))
                               : (isRegistered
                                   // Registered user: Message button
                                   ? ElevatedButton.icon(
@@ -874,7 +923,8 @@ class _ContactSyncScreenState extends State<ContactSyncScreen> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }
 

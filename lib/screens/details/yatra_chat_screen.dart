@@ -386,11 +386,14 @@ class _YatraChatScreenState extends State<YatraChatScreen> {
     return '$hour:$minute $ampm';
   }
 
+  Future<String> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token') ?? '';
+  }
+
   Future<void> _fetchMessages() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token') ?? '';
-
+      final token = await _getToken();
       if (token.isEmpty || widget.targetUserId.isEmpty) return;
 
       final isGroup = widget.chatType == YatraChatType.group;
@@ -400,15 +403,35 @@ class _YatraChatScreenState extends State<YatraChatScreen> {
 
       if (apiMessages.isNotEmpty && mounted) {
         setState(() {
-          _messages = apiMessages.map((m) => YatraChatMessage(
-            senderName: (m['isCurrentUser'] == true) ? 'You' : (m['senderName'] ?? widget.title),
-            text: m['content'] ?? m['text'] ?? '',
-            time: m['time'] ?? 'Now',
-            isCurrentUser: m['isCurrentUser'] ?? false,
-            avatarAsset: m['avatarUrl'] ?? widget.headerAvatarAsset,
-            readStatus: m['readStatus'] ?? 'sent',
-          )).toList();
+          _messages = apiMessages.map((m) {
+            final senderObj = m['senderId'];
+            final sId = senderObj is Map ? (senderObj['_id'] ?? senderObj['id'] ?? '').toString() : (senderObj?.toString() ?? '');
+            final isMe = (m['isCurrentUser'] == true) || (sId.isNotEmpty && sId != widget.targetUserId);
+
+            String timeStr = 'Now';
+            if (m['createdAt'] != null) {
+              try {
+                final dt = DateTime.parse(m['createdAt'].toString()).toLocal();
+                timeStr = _formatTime(dt);
+              } catch (_) {
+                timeStr = m['time']?.toString() ?? 'Now';
+              }
+            } else if (m['time'] != null) {
+              timeStr = m['time'].toString();
+            }
+
+            return YatraChatMessage(
+              senderName: isMe ? 'You' : (m['senderName'] ?? (senderObj is Map ? senderObj['name'] : null) ?? widget.title),
+              text: m['content'] ?? m['text'] ?? '',
+              time: timeStr,
+              isCurrentUser: isMe,
+              avatarAsset: isMe ? _currentUserPic : (m['avatarUrl'] ?? (senderObj is Map ? senderObj['profile_pic'] : null) ?? widget.headerAvatarAsset),
+              readStatus: m['readStatus'] ?? 'sent',
+              messageId: m['_id']?.toString() ?? '',
+            );
+          }).toList();
         });
+        _saveLocalMessages();
         WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
       }
     } catch (e) {
@@ -472,6 +495,19 @@ class _YatraChatScreenState extends State<YatraChatScreen> {
         journeyId: widget.journeyId,
         tempId: tempId,
       );
+
+      // Also ensure message is securely saved via HTTP API in case socket drops
+      _getToken().then((token) {
+        if (token.isNotEmpty) {
+          ApiService.sendPersonalMessage(
+            token,
+            targetUserId: widget.targetUserId,
+            content: text,
+            yatraId: widget.yatraId,
+            journeyId: widget.journeyId,
+          );
+        }
+      });
     }
 
     _messageController.clear();

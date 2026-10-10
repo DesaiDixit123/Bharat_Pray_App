@@ -151,7 +151,10 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
     final result = await Navigator.push<List<ContactUserModel>>(
       context,
       MaterialPageRoute(
-        builder: (context) => ContactSyncScreen(selectedMembers: _selectedMembers),
+        builder: (context) => ContactSyncScreen(
+          selectedMembers: _selectedMembers,
+          isGroupCreation: true,
+        ),
       ),
     );
 
@@ -203,7 +206,7 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
         'estimatedSteps': _estimatedSteps,
         'estimatedDays': _estimatedDays,
         'coverImage': coverBase64,
-        'inviteeIds': _selectedMembers.map((m) => m.id).toList(),
+        'inviteeIds': _selectedMembers.map((m) => m.id).where((id) => id.isNotEmpty).toList(),
       };
 
       final res = await ApiService.createYatraGroup(token, payload);
@@ -220,6 +223,36 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
         final String displayTitle = _nameController.text.trim().isNotEmpty
             ? _nameController.text.trim()
             : (selectedRouteName.isNotEmpty ? selectedRouteName : 'Yatra Group');
+
+        final String newGroupId = res['_id']?.toString() ?? 'group_${DateTime.now().millisecondsSinceEpoch}';
+        final memberMaps = _selectedMembers.map((m) => <String, dynamic>{
+          'id': m.id,
+          'userId': m.id,
+          'name': m.name,
+          'mobile': m.mobile,
+          'profilePic': m.profilePic,
+          'city': m.city,
+          'address': m.address,
+          'role': 'member',
+          'isAdmin': false,
+        }).toList();
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('latest_yatra_members', jsonEncode(memberMaps));
+
+        final existingJson = prefs.getString('active_yatra_groups');
+        List<dynamic> list = existingJson != null ? jsonDecode(existingJson) : [];
+        final newGroupMap = {
+          '_id': newGroupId,
+          'id': newGroupId,
+          'name': displayTitle,
+          'destination': selectedRouteName,
+          'memberCount': memberMaps.length + 1,
+          'members': memberMaps,
+          'updatedAt': DateTime.now().millisecondsSinceEpoch,
+        };
+        list.insert(0, newGroupMap);
+        await prefs.setString('active_yatra_groups', jsonEncode(list));
 
         Navigator.pushReplacement(
           context,
@@ -240,6 +273,7 @@ class _CreateYatraGroupScreenState extends State<CreateYatraGroupScreen> {
                           ? _selectedTemple!.image
                           : 'assets/images/somnath_temple_new.png'),
               isFromCreateGroup: true,
+              groupMembers: _selectedMembers,
             ),
           ),
         );

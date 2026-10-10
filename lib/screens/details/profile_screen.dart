@@ -18,6 +18,7 @@ import '../profile/terms_conditions_screen.dart';
 import 'create_mandal_post_screen.dart';
 import 'create_mandal_reel_screen.dart';
 import 'go_live_studio_screen.dart';
+import 'favourite_bhajans_screen.dart';
 import 'mandal_profile_screen.dart';
 import 'mandal_registration_screen.dart';
 import 'mandal_status_tab_content.dart';
@@ -756,6 +757,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           MaterialPageRoute(builder: (context) => const EditProfileScreen()),
                         );
                         if (updated == true) _loadProfileData();
+                      },
+                    ),
+                    const Divider(color: Color(0xFFEFE6DB), height: 1),
+                    _buildNavTile(
+                      icon: Icons.favorite_rounded,
+                      title: "Favourite Bhajans",
+                      subtitle: "View liked & saved devotional bhajans",
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const FavouriteBhajansScreen()),
+                        );
                       },
                     ),
                     const Divider(color: Color(0xFFEFE6DB), height: 1),

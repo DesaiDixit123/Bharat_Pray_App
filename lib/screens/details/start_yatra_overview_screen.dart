@@ -28,6 +28,7 @@ class StartYatraOverviewScreen extends StatefulWidget {
   final String imageAsset;
   final bool isFromCreateGroup;
   final List<dynamic>? routeTemples;
+  final List<dynamic>? groupMembers;
 
   const StartYatraOverviewScreen({
     super.key,
@@ -41,6 +42,7 @@ class StartYatraOverviewScreen extends StatefulWidget {
     required this.imageAsset,
     this.isFromCreateGroup = false,
     this.routeTemples,
+    this.groupMembers,
   });
 
   @override
@@ -206,6 +208,7 @@ class _StartYatraOverviewScreenState extends State<StartYatraOverviewScreen> {
           MaterialPageRoute(
             builder: (context) => YatraLiveSanghaScreen(
               journeyId: journeyId,
+              yatraId: widget.id,
               title: widget.title,
               distance: widget.distance,
               steps: widget.steps,
@@ -215,6 +218,7 @@ class _StartYatraOverviewScreenState extends State<StartYatraOverviewScreen> {
               isFromCreateGroup: widget.isFromCreateGroup,
               selectedTemples: _addedRouteTemples,
               routeTemples: widget.routeTemples,
+              groupMembers: widget.groupMembers,
               completedScreen: YatraCompletedScreen(
                 journeyId: journeyId,
                 title: widget.title,

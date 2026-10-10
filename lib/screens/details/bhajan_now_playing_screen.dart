@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -201,7 +205,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
 
   Future<void> _loadTokenAndSaveHistory() async {
     final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('auth_token') ?? '';
+    _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
 
     // Record play count immediately
     _recordPlayOnce();
@@ -242,7 +246,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
     try {
       final details = await ApiService.getBhajanDetails(_token, widget.currentTrack.id);
       final raw = details['bhajan'];
-        final map = raw is Map<String, dynamic> ? raw : details;
+      final map = raw is Map<String, dynamic> ? raw : details;
       final lyrics = (map['lyrics'] ?? '').toString().trim();
       if (!mounted || lyrics.isEmpty) return;
       setState(() {
@@ -254,44 +258,141 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
   }
 
   Future<void> _toggleLike() async {
-    if (_token.isEmpty || widget.currentTrack.id.isEmpty) return;
+    if (widget.currentTrack.id.isEmpty) return;
+    if (_token.isEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
+    }
+
+    final previousState = _isLiked;
+    setState(() => _isLiked = !previousState);
+
     try {
-      if (_isLiked) {
+      if (previousState) {
         await ApiService.unlikeBhajan(_token, widget.currentTrack.id);
       } else {
         await ApiService.likeBhajan(_token, widget.currentTrack.id);
       }
-      if (!mounted) return;
-      setState(() => _isLiked = !_isLiked);
     } catch (e) {
-      _showMessage('Unable to update like.');
+      if (mounted) {
+        setState(() => _isLiked = previousState);
+        _showMessage('Unable to update like on server.');
+      }
     }
   }
 
   Future<void> _toggleFavourite() async {
-    if (_token.isEmpty || widget.currentTrack.id.isEmpty) return;
+    if (widget.currentTrack.id.isEmpty) return;
+    if (_token.isEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
+    }
+
+    final previousState = _isFavourite;
+    setState(() => _isFavourite = !previousState);
+
     try {
-      if (_isFavourite) {
+      if (previousState) {
         await ApiService.removeFavouriteBhajan(_token, widget.currentTrack.id);
+        _showMessage('Removed from favourites.');
       } else {
         await ApiService.addFavouriteBhajan(_token, widget.currentTrack.id);
+        _showMessage('Added to favourites.');
       }
-      if (!mounted) return;
-      setState(() => _isFavourite = !_isFavourite);
     } catch (e) {
-      _showMessage('Unable to update favourite.');
+      if (mounted) {
+        setState(() => _isFavourite = previousState);
+        _showMessage('Unable to update favourite.');
+      }
     }
   }
 
   Future<void> _downloadTrack() async {
-    if (_token.isEmpty || widget.currentTrack.id.isEmpty) return;
+    if (widget.currentTrack.id.isEmpty) return;
+    if (_token.isEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
+    }
+
+    _showMessage('Downloading "${widget.currentTrack.title}"...');
+
     try {
-      await ApiService.downloadBhajan(_token, widget.currentTrack.id);
+      final streamUrl = await ApiService.fetchBhajanStreamUrl(_token, widget.currentTrack.id);
+      if (streamUrl.isEmpty || streamUrl.startsWith('blob:')) {
+        throw Exception('Audio stream URL is not valid for download.');
+      }
+
+      final response = await http.get(Uri.parse(streamUrl)).timeout(const Duration(seconds: 45));
+      if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
+        throw Exception('Failed to download audio content from server.');
+      }
+
+      final safeName = widget.currentTrack.title
+          .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+          .trim();
+      final fileName = '$safeName.mp3';
+
+      File? savedFile;
+      final List<String> possibleDirs = [
+        '/storage/emulated/0/Download',
+        '/storage/emulated/0/Music',
+        '/sdcard/Download',
+      ];
+      for (final dirPath in possibleDirs) {
+        try {
+          final dir = Directory(dirPath);
+          if (dir.existsSync()) {
+            final targetFile = File('${dir.path}/$fileName');
+            await targetFile.writeAsBytes(response.bodyBytes);
+            savedFile = targetFile;
+            break;
+          }
+        } catch (_) {}
+      }
+
+      if (savedFile == null) {
+        try {
+          final extDir = await getExternalStorageDirectory();
+          if (extDir != null) {
+            final targetFile = File('${extDir.path}/$fileName');
+            await targetFile.writeAsBytes(response.bodyBytes);
+            savedFile = targetFile;
+          }
+        } catch (_) {}
+      }
+
+      if (savedFile == null) {
+        final docDir = await getApplicationDocumentsDirectory();
+        final targetFile = File('${docDir.path}/$fileName');
+        await targetFile.writeAsBytes(response.bodyBytes);
+        savedFile = targetFile;
+      }
+
+      // Record download count on server
+      try {
+        await ApiService.downloadBhajan(_token, widget.currentTrack.id);
+      } catch (_) {}
+
       if (!mounted) return;
       setState(() => _isDownloaded = true);
-      _showMessage('Added to downloads.');
+
+      final filePath = savedFile.path;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Saved to Downloads: $fileName', style: GoogleFonts.outfit()),
+          backgroundColor: const Color(0xFF4CAF50),
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: 'Save / Share',
+            textColor: Colors.white,
+            onPressed: () {
+              Share.shareXFiles([XFile(filePath)], subject: fileName);
+            },
+          ),
+        ),
+      );
     } catch (e) {
-      _showMessage('Unable to download now.');
+      _showMessage('Download failed: ${e.toString().replaceFirst("Exception: ", "")}');
     }
   }
 
@@ -352,17 +453,12 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
                 child: _buildHeader(),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
-                child: _buildViewToggle(),
-              ),
               Expanded(
-                child: _activeView == _NowPlayingView.player ? _buildPlayerView() : _buildLyricsView(),
+                child: _buildPlayerView(),
               ),
-              if (_activeView == _NowPlayingView.lyrics) _buildLyricsMiniPlayer(),
             ],
           ),
         ),
@@ -522,16 +618,22 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
                 _actionItem(
                   _isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
                   _isLiked ? 'Liked' : 'Like',
+                  iconColor: _isLiked ? const Color(0xFFFF3B30) : const Color(0xFF8E7963),
+                  textColor: _isLiked ? const Color(0xFFFF3B30) : const Color(0xFF8E7963),
                   onTap: _toggleLike,
                 ),
                 _actionItem(
                   _isDownloaded ? Icons.download_done_rounded : Icons.download_rounded,
                   _isDownloaded ? 'Downloaded' : 'Download',
+                  iconColor: _isDownloaded ? const Color(0xFF4CAF50) : const Color(0xFF8E7963),
+                  textColor: _isDownloaded ? const Color(0xFF4CAF50) : const Color(0xFF8E7963),
                   onTap: _downloadTrack,
                 ),
                 _actionItem(
                   _isFavourite ? Icons.playlist_add_check_rounded : Icons.playlist_add_rounded,
                   _isFavourite ? 'Favourited' : 'Favourite',
+                  iconColor: _isFavourite ? const Color(0xFFFF7B0F) : const Color(0xFF8E7963),
+                  textColor: _isFavourite ? const Color(0xFFFF7B0F) : const Color(0xFF8E7963),
                   onTap: _toggleFavourite,
                 ),
                 _actionItem(Icons.share_rounded, 'Share', onTap: _shareTrack),
@@ -861,7 +963,13 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
     );
   }
 
-  Widget _actionItem(IconData icon, String label, {required VoidCallback onTap}) {
+  Widget _actionItem(
+    IconData icon,
+    String label, {
+    required VoidCallback onTap,
+    Color? iconColor,
+    Color? textColor,
+  }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -869,7 +977,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
         padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
         child: Column(
           children: [
-            Icon(icon, size: 23, color: const Color(0xFF8E7963)),
+            Icon(icon, size: 23, color: iconColor ?? const Color(0xFF8E7963)),
             const SizedBox(height: 4),
             SizedBox(
               width: 74,
@@ -879,8 +987,8 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
                 maxLines: 2,
                 style: GoogleFonts.outfit(
                   fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: const Color(0xFF8E7963),
+                  fontWeight: FontWeight.w600,
+                  color: textColor ?? const Color(0xFF8E7963),
                 ),
               ),
             ),
@@ -940,23 +1048,57 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
   Widget _buildTrackImage(
     String imagePath, {
     double fallbackIconSize = 64,
-    Color fallbackColor = Colors.white,
+    Color fallbackColor = const Color(0xFFFFF7EF),
   }) {
-    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+    String cleanPath = imagePath.trim();
+    if (cleanPath.contains('data:image')) {
+      final dataIdx = cleanPath.indexOf('data:image');
+      cleanPath = cleanPath.substring(dataIdx);
+    }
+
+    if (cleanPath.startsWith('data:image')) {
+      try {
+        final commaIdx = cleanPath.indexOf(',');
+        final base64Str = commaIdx != -1 ? cleanPath.substring(commaIdx + 1) : cleanPath;
+        final cleanBase64 = base64Str.replaceAll(RegExp(r'\s+'), '');
+        final bytes = base64Decode(cleanBase64);
+        return Image.memory(
+          bytes,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, error, stackTrace) => _fallbackTrackImage(fallbackIconSize, fallbackColor),
+        );
+      } catch (_) {
+        return _fallbackTrackImage(fallbackIconSize, fallbackColor);
+      }
+    }
+
+    if (cleanPath.startsWith('http://') || cleanPath.startsWith('https://')) {
       return Image.network(
-        imagePath,
+        cleanPath,
         fit: BoxFit.cover,
         errorBuilder: (_, error, stackTrace) => _fallbackTrackImage(fallbackIconSize, fallbackColor),
       );
     }
 
-    if (imagePath == 'assets/images/bhagavad_gita.png') {
+    if (cleanPath.startsWith('assets/')) {
       return Image.asset(
-        imagePath,
+        cleanPath,
         fit: BoxFit.cover,
         errorBuilder: (_, error, stackTrace) => _fallbackTrackImage(fallbackIconSize, fallbackColor),
       );
     }
+
+    try {
+      final file = File(cleanPath);
+      if (file.existsSync()) {
+        return Image.file(
+          file,
+          fit: BoxFit.cover,
+          errorBuilder: (_, error, stackTrace) => _fallbackTrackImage(fallbackIconSize, fallbackColor),
+        );
+      }
+    } catch (_) {}
 
     return _fallbackTrackImage(fallbackIconSize, fallbackColor);
   }
@@ -974,17 +1116,15 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
             color: const Color(0xFFFF7B0F),
             size: iconSize,
           ),
-          if (iconSize > 40) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Bhajan',
-              style: GoogleFonts.outfit(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFFFF7B0F),
-              ),
+          const SizedBox(height: 6),
+          Text(
+            'Bhajan',
+            style: GoogleFonts.outfit(
+              fontSize: iconSize > 40 ? 15 : 12,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFFFF7B0F),
             ),
-          ],
+          ),
         ],
       ),
     );

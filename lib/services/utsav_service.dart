@@ -839,12 +839,14 @@ class UtsavService {
 
   // ─── Backend Connectivity Helpers ─────────────────────────────────────────
 
-  static List<String> get _backendHosts => [
-    ApiService.baseUrl,
-    'http://127.0.0.1:3020',
-    'http://192.168.29.73:3020',
-    'http://10.0.2.2:3020',
-  ];
+  static List<String> get _backendHosts => ApiService.isLive
+      ? [ApiService.baseUrl]
+      : [
+          ApiService.baseUrl,
+          'http://127.0.0.1:3020',
+          'http://192.168.29.73:3020',
+          'http://10.0.2.2:3020',
+        ];
 
   static String resolveImageUrl(String? url, {String fallback = 'assets/images/devotional/navratri_garba_festival.jpg'}) {
     if (url == null || url.trim().isEmpty) return fallback;

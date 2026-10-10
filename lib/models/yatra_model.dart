@@ -433,6 +433,10 @@ class GroupMemberModel {
   final String name;
   final String mobile;
   final String profilePic;
+  final String city;
+  final double distanceCoveredKm;
+  final int steps;
+  final double progressPercent;
   final String role; // 'leader' (Owner) | 'admin' | 'member'
   final String invitationStatus; // 'accepted' | 'pending' | 'rejected'
   final String readyStatus; // 'ready' | 'not_ready'
@@ -445,6 +449,10 @@ class GroupMemberModel {
     required this.name,
     required this.mobile,
     required this.profilePic,
+    this.city = 'Gujarat, India',
+    this.distanceCoveredKm = 0.0,
+    this.steps = 0,
+    this.progressPercent = 0.0,
     required this.role,
     required this.invitationStatus,
     required this.readyStatus,
@@ -473,6 +481,16 @@ class GroupMemberModel {
       name: json['name']?.toString() ?? 'User',
       mobile: json['mobile']?.toString() ?? '',
       profilePic: ApiService.resolveImageUrl(json['profilePic']?.toString() ?? json['profile_pic']?.toString() ?? ''),
+      city: json['city']?.toString() ?? json['address']?.toString() ?? 'Gujarat, India',
+      distanceCoveredKm: (json['distanceCoveredKm'] is num)
+          ? (json['distanceCoveredKm'] as num).toDouble()
+          : (double.tryParse(json['distanceCoveredKm']?.toString() ?? '') ?? 0.0),
+      steps: (json['steps'] is num)
+          ? (json['steps'] as num).toInt()
+          : (int.tryParse(json['steps']?.toString() ?? '') ?? 0),
+      progressPercent: (json['progressPercent'] is num)
+          ? (json['progressPercent'] as num).toDouble()
+          : (double.tryParse(json['progressPercent']?.toString() ?? '') ?? 0.0),
       role: json['role']?.toString() ?? 'member',
       invitationStatus: json['invitationStatus']?.toString() ?? json['status']?.toString() ?? 'pending',
       readyStatus: json['readyStatus']?.toString() ?? 'not_ready',

@@ -99,8 +99,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final response = await ApiService.sendOtp(widget.phoneNumber);
-      final newOtp = response['Data']?['dev_mode_otp']?.toString();
+      await ApiService.sendOtp(widget.phoneNumber);
 
       _startTimer();
       for (final c in _controllers) {
@@ -108,10 +107,16 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       }
       _focusNodes[0].requestFocus();
 
-      if (newOtp != null && newOtp.isNotEmpty) {
-        setState(() {
-          _generatedOtp = newOtp;
-        });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'OTP resent successfully via SMS.',
+              style: GoogleFonts.outfit(color: Colors.white),
+            ),
+            backgroundColor: const Color(0xFFFF7A00),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -313,28 +318,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                   ),
                                   textAlign: TextAlign.center,
                                 ),
-                                if (_generatedOtp.isNotEmpty) ...[
-                                  const SizedBox(height: 12),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFF7700).withValues(alpha: 0.08),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: const Color(0xFFFF7700).withValues(alpha: 0.24),
-                                        width: 1.0,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      'Demo OTP: $_generatedOtp',
-                                      style: GoogleFonts.outfit(
-                                        color: const Color(0xFFFF7700),
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ),
-                                ],
+
                                 const SizedBox(height: 24),
 
                                 // 6-digit OTP boxes
