@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/saved_items_service.dart';
 import '../../services/utsav_service.dart';
 import 'mandal_profile_screen.dart';
@@ -40,14 +42,31 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
   List<Map<String, String>> _reels = [];
   bool _isLoading = true;
 
-  void _triggerHeartAnimation(String postId, Map<String, dynamic> post) {
+  void _triggerHeartAnimation(String postId, Map<String, dynamic> post) async {
+    final isLiked = _likedPosts[postId] ?? false;
+    final dynamic rawLikes = _likeCounts[postId] ?? post['likes'];
+    final currentLikes = (rawLikes is num)
+        ? rawLikes.toInt()
+        : int.tryParse(rawLikes?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '0') ?? 0;
+
     setState(() {
       _heartAnimatedPostId = postId;
-      if (!(_likedPosts[postId] ?? false)) {
+      if (!isLiked) {
+        final newCount = currentLikes + 1;
         _likedPosts[postId] = true;
-        _likeCounts[postId] = (_likeCounts[postId] ?? (post['likes'] as int? ?? 0)) + 1;
+        _likeCounts[postId] = newCount;
+        post['likes'] = newCount;
+        post['isLiked'] = true;
       }
     });
+    if (!isLiked) {
+      await UtsavService.setPostLiked(
+        postId,
+        true,
+        currentLikes + 1,
+        mandalName: (post['mandalName'] ?? '').toString(),
+      );
+    }
     Future.delayed(const Duration(milliseconds: 700), () {
       if (mounted) {
         setState(() => _heartAnimatedPostId = null);
@@ -75,11 +94,16 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
         final mName = (m['name'] ?? '').toString();
         final pList = await UtsavService.getMandalPosts(mName);
         for (final p in pList) {
+          final pImg = (p['imageUrl'] ?? p['image'] ?? '').toString();
           allPosts.add({
             ...p,
+            'image': pImg,
+            'imageUrl': pImg,
             'mandalName': mName,
             'logo': m['logo'] ?? m['imageUrl'],
-            'area': m['city'] ?? '',
+            'avatarUrl': m['logo'] ?? m['imageUrl'],
+            'area': m['city'] ?? m['location'] ?? '',
+            'location': m['city'] ?? m['location'] ?? '',
           });
         }
         final rList = await UtsavService.getMandalReels(mName);
@@ -90,10 +114,108 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
             'mandalName': mName,
             'thumbnailUrl': (r['thumbnailUrl'] ?? r['imageUrl'] ?? 'assets/images/devotional/navratri_garba_festival.jpg').toString(),
             'videoUrl': r['videoUrl']?.toString() ?? '',
-            'area': m['city']?.toString() ?? '',
+            'area': (m['city'] ?? m['location'] ?? '').toString(),
             'views': r['views']?.toString() ?? '1.2K',
+            'likes': (r['likes'] ?? '0').toString(),
           });
         }
+      }
+
+      // Dynamic inclusion of current user's registered mandal:
+      // If the mandal is approved, or if no other posts exist yet, always include the user's added posts dynamically
+      try {
+        final myReg = await UtsavService.getMyMandalRegistration();
+        if (myReg != null) {
+          final myStatus = (myReg['status'] ?? '').toString().toLowerCase();
+          final isApproved = myStatus == 'approved' || myStatus == 'active' || myReg['isAdminApproved'] == true;
+
+          final myMandalName = (myReg['mandalName'] ?? '').toString().trim();
+          if (myMandalName.isNotEmpty && (isApproved || allPosts.isEmpty)) {
+            List<Map<String, dynamic>> myPosts = await UtsavService.getMandalPosts(myMandalName);
+            if (myPosts.isEmpty) {
+              final prefs = await SharedPreferences.getInstance();
+              final raw = prefs.getString('my_mandal_posts');
+              if (raw != null && raw.isNotEmpty) {
+                try {
+                  final decoded = jsonDecode(raw) as List;
+                  myPosts = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+                } catch (_) {}
+              }
+            }
+
+            final logoImg = (myReg['logo'] ?? myReg['logoUrl'] ?? myReg['cover'] ?? myReg['coverUrl'] ?? '').toString();
+            final areaStr = (myReg['city'] ?? myReg['address'] ?? '').toString();
+
+            for (final p in myPosts) {
+              final pImg = (p['imageUrl'] ?? p['image'] ?? '').toString();
+              final pId = (p['id'] ?? '').toString();
+              if (!allPosts.any((existing) => (pId.isNotEmpty && existing['id']?.toString() == pId) || (pImg.isNotEmpty && (existing['imageUrl'] == pImg || existing['image'] == pImg)))) {
+                allPosts.insert(0, {
+                  ...p,
+                  'image': pImg,
+                  'imageUrl': pImg,
+                  'mandalName': myMandalName,
+                  'logo': logoImg.isNotEmpty ? logoImg : (p['logo'] ?? p['avatarUrl'] ?? ''),
+                  'avatarUrl': logoImg.isNotEmpty ? logoImg : (p['avatarUrl'] ?? p['logo'] ?? ''),
+                  'area': areaStr.isNotEmpty ? areaStr : (p['area'] ?? p['location'] ?? ''),
+                  'location': areaStr.isNotEmpty ? areaStr : (p['location'] ?? p['area'] ?? ''),
+                });
+              }
+            }
+
+            List<Map<String, dynamic>> myReels = await UtsavService.getMandalReels(myMandalName);
+            for (final r in myReels) {
+              final rId = r['id']?.toString() ?? '';
+              if (!allReels.any((existing) => rId.isNotEmpty && existing['id'] == rId)) {
+                allReels.insert(0, {
+                  'id': rId,
+                  'title': r['title']?.toString() ?? '',
+                  'mandalName': myMandalName,
+                  'thumbnailUrl': (r['thumbnailUrl'] ?? r['imageUrl'] ?? '').toString(),
+                  'videoUrl': r['videoUrl']?.toString() ?? '',
+                  'area': areaStr,
+                  'views': r['views']?.toString() ?? '0',
+                  'likes': (r['likes'] ?? '0').toString(),
+                });
+              }
+            }
+
+            if (!list.any((m) => (m['name'] ?? '').toString().trim().toLowerCase() == myMandalName.toLowerCase())) {
+              list.add({
+                '_id': myReg['_id'] ?? myReg['id'] ?? myReg['registrationId'] ?? 'my_mandal',
+                'name': myMandalName,
+                'city': areaStr,
+                'location': areaStr,
+                'avatarUrl': logoImg,
+                'coverUrl': myReg['cover'] ?? myReg['coverUrl'] ?? '',
+                'logo': logoImg,
+                'imageUrl': myReg['cover'] ?? myReg['coverUrl'] ?? '',
+                'status': myReg['status'] ?? 'Approved',
+                'isAdminApproved': isApproved,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        debugPrint('[FestivalActivityScreen] Error loading my approved mandal posts: $err');
+      }
+
+      // Sync persisted like states & counts for each post
+      for (final p in allPosts) {
+        final rawId = p['id']?.toString() ?? '';
+        final pId = rawId.isNotEmpty
+            ? rawId
+            : '${p['mandalName']}_${p['createdAt'] ?? p['timeAgo'] ?? p['time'] ?? 'p'}';
+        final savedLiked = await UtsavService.isPostLiked(pId);
+        final dynamic rawL = p['likes'];
+        final baseCount = (rawL is num)
+            ? rawL.toInt()
+            : int.tryParse(rawL?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '0') ?? 0;
+        final savedCount = await UtsavService.getPostLikeCount(pId, baseCount);
+        _likedPosts[pId] = savedLiked;
+        _likeCounts[pId] = savedCount;
+        p['likes'] = savedCount;
+        p['isLiked'] = savedLiked;
       }
 
       if (mounted) {
@@ -314,49 +436,52 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 24),
       children: [
         // Section: Popular Reels
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
-          child: Text(
-            'Popular Reels',
-            style: GoogleFonts.outfit(
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF2E2A36),
+        if (reels.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
+            child: Text(
+              'Popular Reels',
+              style: GoogleFonts.outfit(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF2E2A36),
+              ),
             ),
           ),
-        ),
-        SizedBox(
-          height: 210,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: reels.length,
-            itemBuilder: (context, index) => _buildReelThumbnail(reels[index], index, reels),
+          SizedBox(
+            height: 210,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: reels.length,
+              itemBuilder: (context, index) => _buildReelThumbnail(reels[index], index, reels),
+            ),
           ),
-        ),
-
-        const SizedBox(height: 22),
+          const SizedBox(height: 22),
+        ],
 
         // Section: Popular Posts
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-          child: Text(
-            'Popular Posts',
-            style: GoogleFonts.outfit(
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF2E2A36),
+        if (posts.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+            child: Text(
+              'Popular Posts',
+              style: GoogleFonts.outfit(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF2E2A36),
+              ),
             ),
           ),
-        ),
-        ...List.generate(
-          posts.length,
-          (i) => Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-            child: _buildPostCard(posts[i]),
+          ...List.generate(
+            posts.length,
+            (i) => Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+              child: _buildPostCard(posts[i]),
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -709,26 +834,32 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
   }
 
   Widget _buildPostCard(Map<String, dynamic> post) {
-    final postId = '${post['mandalName']}_${post['time']}';
-    final isLiked = _likedPosts[postId] ?? false;
-    final currentLikes = _likeCounts[postId] ?? (post['likes'] as int? ?? 0);
+    final rawId = post['id']?.toString() ?? '';
+    final postId = rawId.isNotEmpty
+        ? rawId
+        : '${post['mandalName']}_${post['createdAt'] ?? post['timeAgo'] ?? post['time'] ?? 'p'}';
+    final isLiked = _likedPosts[postId] ?? (post['isLiked'] == true);
+    final dynamic rawLikes = _likeCounts[postId] ?? post['likes'];
+    final currentLikes = (rawLikes is num)
+        ? rawLikes.toInt()
+        : int.tryParse(rawLikes?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '0') ?? 0;
     final isSaved = _savedPosts[postId] ?? false;
 
     // find matching mandal
     final mandal = _mandals.firstWhere(
       (m) => m['name'] == post['mandalName'],
       orElse: () => {
-        'name': post['mandalName'] as String? ?? 'Mandal',
-        'location': 'Gujarat, India',
-        'avatarUrl': post['avatarUrl'] as String? ?? 'assets/images/new_year_card.png',
+        'name': (post['mandalName'] as String?) ?? 'Mandal',
+        'location': (post['area'] ?? post['location'] ?? 'Gujarat, India') as String,
+        'avatarUrl': (post['avatarUrl'] ?? post['logo'] ?? 'assets/images/new_year_card.png') as String,
         'coverUrl': 'assets/images/somnath_hero.png',
       },
     );
-    final mandalLocation = (mandal['location'] as String?) ?? 'Gujarat, India';
-    final avatarUrl = (post['avatarUrl'] ?? mandal['avatarUrl'] ?? 'assets/images/new_year_card.png') as String;
-    final postImage = (post['image'] ?? 'assets/images/diwali_card.png') as String;
+    final mandalLocation = (post['location'] ?? post['area'] ?? mandal['location'] ?? mandal['city'] ?? 'Gujarat, India').toString();
+    final avatarUrl = (post['avatarUrl'] ?? post['logo'] ?? mandal['avatarUrl'] ?? mandal['logo'] ?? 'assets/images/new_year_card.png').toString();
+    final postImage = (post['imageUrl'] ?? post['image'] ?? post['photo'] ?? '').toString();
     final caption = (post['caption'] ?? '') as String;
-    final timeAgo = (post['time'] ?? 'Recently') as String;
+    final timeAgo = (post['timeAgo'] ?? post['time'] ?? 'Recently').toString();
 
     return Container(
       decoration: BoxDecoration(
@@ -756,10 +887,10 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (_) => MandalProfileScreen(
-                      mandalName: mandal['name'] as String,
-                      location: mandal['location'] as String,
-                      avatarUrl: mandal['avatarUrl'] as String,
-                      coverUrl: (mandal['coverUrl'] as String?) ?? 'assets/images/somnath_hero.png',
+                      mandalName: (mandal['name'] ?? post['mandalName'] ?? '').toString(),
+                      location: (mandal['location'] ?? mandal['city'] ?? post['area'] ?? '').toString(),
+                      avatarUrl: (mandal['avatarUrl'] ?? mandal['logo'] ?? avatarUrl).toString(),
+                      coverUrl: (mandal['coverUrl'] ?? mandal['imageUrl'] ?? '').toString(),
                     ),
                   ),
                 );
@@ -879,12 +1010,21 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
                     color: isLiked ? Colors.redAccent : const Color(0xFF2E2A36),
                     size: 24,
                   ),
-                  onPressed: () {
+                  onPressed: () async {
+                    final nowLiked = !isLiked;
+                    final newCount = (currentLikes + (nowLiked ? 1 : -1)).clamp(0, 9999999);
                     setState(() {
-                      final nowLiked = !isLiked;
                       _likedPosts[postId] = nowLiked;
-                      _likeCounts[postId] = currentLikes + (nowLiked ? 1 : -1);
+                      _likeCounts[postId] = newCount;
+                      post['likes'] = newCount;
+                      post['isLiked'] = nowLiked;
                     });
+                    await UtsavService.setPostLiked(
+                      postId,
+                      nowLiked,
+                      newCount,
+                      mandalName: (post['mandalName'] ?? '').toString(),
+                    );
                   },
                 ),
                 Text(

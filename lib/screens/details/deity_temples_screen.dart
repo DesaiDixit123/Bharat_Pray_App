@@ -8,6 +8,7 @@ import '../../services/api_service.dart';
 import '../../services/yatra_personal_chat_service.dart';
 import 'live_darshan_screen.dart';
 import 'messages_screen.dart';
+import '../../widgets/user_avatar.dart';
 
 class DeityTemplesScreen extends StatefulWidget {
   final String deityName;
@@ -167,51 +168,12 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
               top: 0,
               child: Row(
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: const Color(0xFFFF7700).withValues(alpha: 0.2),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: ClipOval(
-                      child: profilePicUrl.isNotEmpty
-                          ? Image.network(
-                              profilePicUrl,
-                              width: 48,
-                              height: 48,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Center(
-                                  child: Text(
-                                    _profileName.isNotEmpty ? _profileName[0].toUpperCase() : 'U',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: const Color(0xFFFF7700),
-                                    ),
-                                  ),
-                                );
-                              },
-                              loadingBuilder: (context, child, loadingProgress) {
-                                if (loadingProgress == null) return child;
-                                return const Center(child: CircularProgressIndicator(color: Color(0xFFFF7700), strokeWidth: 2));
-                              },
-                            )
-                          : Center(
-                              child: Text(
-                                _profileName.isNotEmpty ? _profileName[0].toUpperCase() : 'U',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: const Color(0xFFFF7700),
-                                ),
-                              ),
-                            ),
-                    ),
+                  UserAvatar(
+                    profilePic: _profilePic,
+                    userName: _profileName,
+                    size: 48,
+                    borderColor: const Color(0xFFFF7700).withValues(alpha: 0.2),
+                    borderWidth: 1.5,
                   ),
                   const SizedBox(width: 12),
                   Column(

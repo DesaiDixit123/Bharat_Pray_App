@@ -642,20 +642,40 @@ class UtsavService {
   // ─── Leaderboard ───────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> getLeaderboard() async {
-    try {
-      final uri = Uri.parse('${ApiService.baseUrl}/api/utsav/leaderboard');
-      final response = await http.get(uri).timeout(const Duration(seconds: 4));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['IsSuccess'] == true && data['Data'] != null) {
-          return Map<String, dynamic>.from(data['Data']);
+    for (final host in _backendHosts) {
+      try {
+        final uri = Uri.parse('$host/api/utsav/leaderboard');
+        final response = await http.get(uri).timeout(const Duration(seconds: 4));
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          if (data['IsSuccess'] == true && data['Data'] != null) {
+            final dataMap = Map<String, dynamic>.from(data['Data']);
+            final rankingsList = (dataMap['rankings'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+            if (rankingsList.isNotEmpty) {
+              return dataMap;
+            }
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
 
     final activeFestivals = await getFestivals(status: 'Active');
+    Map<String, dynamic>? activeFest = activeFestivals.isNotEmpty ? activeFestivals.first : null;
+
+    if (activeFest == null) {
+      final allFestivals = await getFestivals(status: 'ALL');
+      activeFest = allFestivals.firstWhere(
+        (f) => (f['name'] ?? '').toString().toLowerCase().contains('pre') && (f['name'] ?? '').toString().toLowerCase().contains('navratri'),
+        orElse: () => allFestivals.firstWhere(
+          (f) => (f['status'] ?? '').toString().toLowerCase() == 'active',
+          orElse: () => <String, dynamic>{},
+        ),
+      );
+      if (activeFest.isEmpty) activeFest = null;
+    }
+
     // If no festival is active right now, leaderboard is empty!
-    if (activeFestivals.isEmpty) {
+    if (activeFest == null) {
       return {
         'festival': null,
         'rankings': <Map<String, dynamic>>[],
@@ -664,11 +684,24 @@ class UtsavService {
     }
 
     final mandalsList = await getMandals();
-    final sorted = [...mandalsList]..sort((a, b) => ((b['votes'] ?? 0) as num).compareTo((a['votes'] ?? 0) as num));
+    final sorted = [...mandalsList]..sort((a, b) {
+      final vA = a['votes'] is num ? (a['votes'] as num).toInt() : int.tryParse(a['votes']?.toString() ?? '0') ?? 0;
+      final vB = b['votes'] is num ? (b['votes'] as num).toInt() : int.tryParse(b['votes']?.toString() ?? '0') ?? 0;
+      if (vB != vA) return vB.compareTo(vA);
+      final lA = int.tryParse(a['likes']?.toString() ?? '0') ?? 0;
+      final lB = int.tryParse(b['likes']?.toString() ?? '0') ?? 0;
+      return lB.compareTo(lA);
+    });
+
+    for (int i = 0; i < sorted.length; i++) {
+      sorted[i]['rank'] = i + 1;
+      sorted[i]['badge'] = i == 0 ? '🏆 #1' : (i == 1 ? '🥈 #2' : (i == 2 ? '🥉 #3' : '#${i + 1}'));
+    }
+
     final topThree = sorted.take(3).toList();
 
     return {
-      'festival': activeFestivals.first,
+      'festival': activeFest,
       'rankings': sorted,
       'topThree': topThree,
     };
@@ -791,19 +824,132 @@ class UtsavService {
     await prefs.setString('utsav_cached_mandals', jsonEncode(updated));
   }
 
-  static Future<void> likeMandal(String mandalName) async {
+  static Future<bool> isPostLiked(String postId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('utsav_post_liked_$postId') ?? false;
+  }
+
+  static Future<int> getPostLikeCount(String postId, int fallback) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('utsav_post_like_count_$postId') ?? fallback;
+  }
+
+  static Future<void> setPostLiked(String postId, bool isLiked, int count, {String? mandalName}) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('utsav_post_liked_$postId', isLiked);
+    await prefs.setInt('utsav_post_like_count_$postId', count);
+
+    // Update post in saved mandal posts
+    if (mandalName != null && mandalName.trim().isNotEmpty) {
+      final list = await getMandalPosts(mandalName);
+      bool modified = false;
+      for (final p in list) {
+        if (p['id']?.toString() == postId) {
+          p['likes'] = count;
+          p['isLiked'] = isLiked;
+          modified = true;
+          break;
+        }
+      }
+      if (modified) {
+        final key = _mandalPostsKey(mandalName);
+        final jsonStr = jsonEncode(list);
+        await prefs.setString(key, jsonStr);
+
+        final myReg = await getMyMandalRegistration();
+        final regName = (myReg?['mandalName'] ?? '').toString().trim().toLowerCase();
+        final qName = mandalName.trim().toLowerCase();
+        if (myReg != null && (regName == qName || qName == 'mandal' || qName.isEmpty || qName.contains('khodal'))) {
+          await prefs.setString('my_mandal_posts', jsonStr);
+          if (regName.isNotEmpty) {
+            await prefs.setString(_mandalPostsKey(regName), jsonStr);
+          }
+        }
+      }
+
+      // Also update in reels if it was a reel
+      final reelsList = await getMandalReels(mandalName);
+      bool reelModified = false;
+      for (final r in reelsList) {
+        if (r['id']?.toString() == postId) {
+          r['likes'] = count.toString();
+          r['isLiked'] = isLiked;
+          reelModified = true;
+          break;
+        }
+      }
+      if (reelModified) {
+        final rKey = _mandalReelsKey(mandalName);
+        final rJson = jsonEncode(reelsList);
+        await prefs.setString(rKey, rJson);
+        final myReg = await getMyMandalRegistration();
+        final regName = (myReg?['mandalName'] ?? '').toString().trim().toLowerCase();
+        final qName = mandalName.trim().toLowerCase();
+        if (myReg != null && (regName == qName || qName == 'mandal' || qName.isEmpty || qName.contains('khodal'))) {
+          await prefs.setString('my_mandal_reels', rJson);
+          if (regName.isNotEmpty) {
+            await prefs.setString(_mandalReelsKey(regName), rJson);
+          }
+        }
+      }
+
+      // Sync mandal's total likes
+      await updateMandalLikeCount(mandalName, delta: isLiked ? 1 : -1);
+    }
+  }
+
+  static Future<bool> isMandalLiked(String mandalName) async {
+    final prefs = await SharedPreferences.getInstance();
+    final clean = mandalName.trim().toLowerCase();
+    return prefs.getBool('utsav_mandal_liked_$clean') ?? false;
+  }
+
+  static Future<int> toggleLikeMandal(String mandalName) async {
+    final prefs = await SharedPreferences.getInstance();
+    final clean = mandalName.trim().toLowerCase();
+    final wasLiked = prefs.getBool('utsav_mandal_liked_$clean') ?? false;
+    final nowLiked = !wasLiked;
+    await prefs.setBool('utsav_mandal_liked_$clean', nowLiked);
+
+    return await updateMandalLikeCount(mandalName, delta: nowLiked ? 1 : -1);
+  }
+
+  static Future<int> updateMandalLikeCount(String mandalName, {int delta = 1}) async {
     final prefs = await SharedPreferences.getInstance();
     final list = await getMandals();
+    final q = mandalName.trim().toLowerCase();
+    int updatedLikes = 0;
+    bool changed = false;
+
     final updated = list.map((m) {
-      if ((m['name'] ?? '').toString().trim() == mandalName.trim()) {
+      final mName = (m['name'] ?? '').toString().trim().toLowerCase();
+      if (mName == q || (q.contains('khodal') && mName.contains('khodal'))) {
         final copy = Map<String, dynamic>.from(m);
-        final l = int.tryParse(copy['likes']?.toString() ?? '0') ?? 0;
-        copy['likes'] = '${l + 1}';
+        final currentL = int.tryParse(copy['likes']?.toString() ?? '0') ?? 0;
+        final newL = (currentL + delta).clamp(0, 9999999);
+        copy['likes'] = '$newL';
+        updatedLikes = newL;
+        changed = true;
         return copy;
       }
       return m;
     }).toList();
-    await prefs.setString('utsav_cached_mandals', jsonEncode(updated));
+
+    if (changed) {
+      await prefs.setString('utsav_cached_mandals', jsonEncode(updated));
+    }
+
+    // Notify backend
+    try {
+      final body = {'mandalName': mandalName, 'change': delta};
+      _postToBackends('/api/utsav/mandal/like', body);
+    } catch (_) {}
+
+    return updatedLikes;
+  }
+
+  static Future<void> likeMandal(String mandalName) async {
+    await updateMandalLikeCount(mandalName, delta: 1);
   }
 
   static Future<void> shareMandal(String mandalName) async {

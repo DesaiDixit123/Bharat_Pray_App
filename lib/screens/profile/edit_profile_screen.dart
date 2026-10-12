@@ -63,14 +63,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
-  String _getProfilePicUrl() {
-    if (_localImagePath != null) return _localImagePath!;
-    if (_profilePic.isEmpty) {
-      return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=60';
+  ImageProvider _getProfilePicProvider() {
+    if (_localImagePath != null && File(_localImagePath!).existsSync()) {
+      return FileImage(File(_localImagePath!));
     }
-    if (_profilePic.startsWith('http')) return _profilePic;
-    final baseDomain = ApiService.baseUrl.replaceAll('/user', '');
-    return '$baseDomain/uploads/$_profilePic';
+    if (_profilePic.startsWith('/') || _profilePic.startsWith('file://')) {
+      final local = _profilePic.replaceFirst('file://', '');
+      if (File(local).existsSync()) {
+        return FileImage(File(local));
+      }
+    }
+    final url = ApiService.resolveImageUrl(_profilePic);
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return NetworkImage(url);
+    }
+    return const NetworkImage('https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=60');
   }
 
   Future<void> _saveProfile() async {
@@ -80,20 +87,44 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     try {
       final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
       final name = _nameController.text.trim();
       final email = _emailController.text.trim();
       final phone = _phoneController.text.trim();
       final bio = _bioController.text.trim();
+
+      String savedProfilePic = _profilePic;
+
+      // 1. Upload to server if token is present
+      if (token.isNotEmpty) {
+        try {
+          final serverRes = await ApiService.updateProfile(
+            token,
+            name: name,
+            email: email,
+            phone: phone,
+            bio: bio,
+            gender: _gender,
+            profilePicFile: _localImagePath != null ? File(_localImagePath!) : null,
+          );
+          if (serverRes['profile_pic'] != null && serverRes['profile_pic'].toString().isNotEmpty) {
+            savedProfilePic = serverRes['profile_pic'].toString();
+          }
+        } catch (apiErr) {
+          debugPrint('[EditProfile] Server update error: $apiErr');
+        }
+      }
+
+      if (_localImagePath != null && savedProfilePic == _profilePic) {
+        savedProfilePic = _localImagePath!;
+      }
 
       await prefs.setString('user_name', name);
       await prefs.setString('user_email', email);
       await prefs.setString('user_phone', phone);
       await prefs.setString('user_bio', bio);
       await prefs.setString('user_gender', _gender);
-
-      if (_localImagePath != null) {
-        await prefs.setString('profile_pic', _localImagePath!);
-      }
+      await prefs.setString('profile_pic', savedProfilePic);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -179,9 +210,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                     child: CircleAvatar(
                       radius: 54,
-                      backgroundImage: _localImagePath != null
-                          ? FileImage(File(_localImagePath!)) as ImageProvider
-                          : NetworkImage(_getProfilePicUrl()),
+                      backgroundColor: const Color(0xFFFFE6D5),
+                      backgroundImage: _getProfilePicProvider(),
                     ),
                   ),
                   GestureDetector(

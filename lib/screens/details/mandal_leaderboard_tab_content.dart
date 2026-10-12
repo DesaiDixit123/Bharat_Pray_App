@@ -31,6 +31,7 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
 
   bool _hasEndedFestival = false;
   Map<String, dynamic>? _completedFestival;
+  final Map<String, bool> _likedMandals = {};
 
   @override
   void initState() {
@@ -59,6 +60,15 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
           _rankings = list;
           final top = (data['topThree'] as List?)?.cast<Map<String, dynamic>>() ?? [];
           _topThree = top.isNotEmpty ? top : (_rankings.take(3).toList());
+
+          for (final m in _rankings) {
+            final n = (m['name'] ?? '').toString();
+            if (n.isNotEmpty) {
+              UtsavService.isMandalLiked(n).then((val) {
+                if (mounted) setState(() => _likedMandals[n] = val);
+              });
+            }
+          }
 
           _hasEndedFestival = completedList.isNotEmpty;
           _completedFestival = completedList.isNotEmpty ? completedList.first : null;
@@ -94,6 +104,9 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
     DateTime? endDate;
     if (endStr != null && endStr.isNotEmpty) {
       endDate = DateTime.tryParse(endStr);
+      if (endDate != null && endDate.hour == 0 && endDate.minute == 0 && endDate.second == 0) {
+        endDate = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+      }
     }
 
     if (endDate == null) return;
@@ -386,6 +399,7 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
                 score,
                 imageUrl: item['imageUrl']?.toString(),
                 isUserMandal: isUserMandal,
+                item: item,
               );
             }),
         ],
@@ -445,6 +459,7 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
     String score, {
     String? imageUrl,
     bool isUserMandal = false,
+    Map<String, dynamic>? item,
   }) {
     return GestureDetector(
       onTap: () {
@@ -569,6 +584,33 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
                 color: const Color(0xFFFF7700),
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            // Heart / Like Mandal Button
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: () async {
+                  final updatedLikes = await UtsavService.toggleLikeMandal(name);
+                  final nowLiked = await UtsavService.isMandalLiked(name);
+                  setState(() {
+                    _likedMandals[name] = nowLiked;
+                    if (item != null) {
+                      item['likes'] = '$updatedLikes';
+                    }
+                  });
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(4.0),
+                  child: Icon(
+                    (_likedMandals[name] ?? false) ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                    color: (_likedMandals[name] ?? false) ? Colors.redAccent : const Color(0xFFB59E83),
+                    size: 21,
+                  ),
+                ),
               ),
             ),
           ],

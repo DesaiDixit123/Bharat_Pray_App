@@ -11,6 +11,7 @@ import '../../services/utsav_service.dart';
 import '../login_screen.dart';
 import '../profile/change_password_screen.dart';
 import '../profile/edit_profile_screen.dart';
+import '../../widgets/user_avatar.dart';
 import '../profile/help_support_screen.dart';
 import '../profile/privacy_policy_screen.dart';
 import '../profile/saved_items_screen.dart';
@@ -313,15 +314,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  String _getProfilePicUrl(String storedPath) {
-    if (storedPath.isEmpty) {
-      return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=60';
+  ImageProvider _getProfilePicProvider(String storedPath) {
+    final clean = storedPath.trim();
+    if (clean.isEmpty) {
+      return const NetworkImage('https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=60');
     }
-    if (storedPath.startsWith('http') || storedPath.startsWith('/')) {
-      return storedPath;
+    if (clean.startsWith('/') || clean.startsWith('file://')) {
+      final local = clean.replaceFirst('file://', '');
+      if (File(local).existsSync()) {
+        return FileImage(File(local));
+      }
     }
-    final baseDomain = ApiService.baseUrl.replaceAll('/user', '');
-    return '$baseDomain/uploads/$storedPath';
+    final url = ApiService.resolveImageUrl(clean);
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return NetworkImage(url);
+    }
+    return const NetworkImage('https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=60');
   }
 
   void _showLogoutConfirmDialog() {
@@ -454,7 +462,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Container(
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(color: const Color(0xFFFF7700), width: 2.5),
                             boxShadow: [
                               BoxShadow(
                                 color: const Color(0xFFFF7700).withValues(alpha: 0.15),
@@ -462,9 +469,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ],
                           ),
-                          child: CircleAvatar(
-                            radius: 52,
-                            backgroundImage: NetworkImage(_getProfilePicUrl(_profilePic)),
+                          child: UserAvatar(
+                            profilePic: _profilePic,
+                            userName: _userName,
+                            size: 104,
+                            fontSize: 36,
+                            borderColor: const Color(0xFFFF7700),
+                            borderWidth: 2.5,
                           ),
                         ),
                         GestureDetector(

@@ -456,10 +456,16 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
     for (var r in _reels) {
       final saved = await SavedItemsService.isReelSaved(r.id);
       r.isSaved = saved;
+      final isLiked = await UtsavService.isPostLiked(r.id);
+      r.isLiked = isLiked;
+      r.likes = await UtsavService.getPostLikeCount(r.id, r.likes);
     }
     for (var p in _posts) {
       final saved = await SavedItemsService.isPostSaved(p.id);
       p.isSaved = saved;
+      final isLiked = await UtsavService.isPostLiked(p.id);
+      p.isLiked = isLiked;
+      p.likes = await UtsavService.getPostLikeCount(p.id, p.likes);
     }
     if (mounted) setState(() {});
   }
@@ -983,28 +989,24 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _mandalName,
-                          style: GoogleFonts.outfit(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF2E2A36),
-                          ),
-                        ),
-                        Text(
-                          _mandalTag,
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            color: const Color(0xFF2E2A36).withOpacity(0.6),
-                          ),
-                        ),
-                      ],
+                    Text(
+                      _mandalName,
+                      style: GoogleFonts.outfit(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF2E2A36),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _mandalTag,
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: const Color(0xFF2E2A36).withOpacity(0.6),
+                      ),
                     ),
                   ],
                 ),
@@ -2331,7 +2333,7 @@ class _MandalPostsFeedScreenState extends State<MandalPostsFeedScreen> {
     }
   }
 
-  void _triggerHeartAnimation(String postId, PostItem post) {
+  void _triggerHeartAnimation(String postId, PostItem post) async {
     setState(() {
       _heartAnimatedPostId = postId;
       if (!post.isLiked) {
@@ -2339,6 +2341,9 @@ class _MandalPostsFeedScreenState extends State<MandalPostsFeedScreen> {
         post.likes += 1;
       }
     });
+    if (post.isLiked) {
+      await UtsavService.setPostLiked(post.id, true, post.likes, mandalName: widget.mandalName);
+    }
     Future.delayed(const Duration(milliseconds: 700), () {
       if (mounted) {
         setState(() => _heartAnimatedPostId = null);
@@ -2562,11 +2567,14 @@ class _MandalPostsFeedScreenState extends State<MandalPostsFeedScreen> {
                                 color: post.isLiked ? Colors.redAccent : const Color(0xFF2E2A36),
                                 size: 24,
                               ),
-                              onPressed: () {
+                              onPressed: () async {
+                                final nowLiked = !post.isLiked;
+                                final newLikes = (post.likes + (nowLiked ? 1 : -1)).clamp(0, 9999999);
                                 setState(() {
-                                  post.isLiked = !post.isLiked;
-                                  post.likes += post.isLiked ? 1 : -1;
+                                  post.isLiked = nowLiked;
+                                  post.likes = newLikes;
                                 });
+                                await UtsavService.setPostLiked(post.id, nowLiked, newLikes, mandalName: widget.mandalName);
                               },
                             ),
                             Text(
@@ -2968,11 +2976,14 @@ class _SingleReelViewState extends State<_SingleReelView> {
                     color: widget.reel.isLiked ? Colors.red : Colors.white,
                     size: 32,
                   ),
-                  onPressed: () {
+                  onPressed: () async {
+                    final nowLiked = !widget.reel.isLiked;
+                    final newLikes = (widget.reel.likes + (nowLiked ? 1 : -1)).clamp(0, 9999999);
                     setState(() {
-                      widget.reel.isLiked = !widget.reel.isLiked;
-                      widget.reel.likes += widget.reel.isLiked ? 1 : -1;
+                      widget.reel.isLiked = nowLiked;
+                      widget.reel.likes = newLikes;
                     });
+                    await UtsavService.setPostLiked(widget.reel.id, nowLiked, newLikes, mandalName: widget.mandalName);
                   },
                 ),
                 Text(

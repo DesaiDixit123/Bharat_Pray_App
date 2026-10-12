@@ -23,6 +23,7 @@ import '../../animations/jap/jap_animation_type.dart';
 import '../../animations/jap/jap_mantra_helper.dart';
 import '../../animations/jap/premium_jap_animator.dart';
 import '../../animations/jap/jap_animation_selector_sheet.dart';
+import '../../widgets/user_avatar.dart';
 
 // ─────────────────────────────────────────────
 // Main Jap List Screen
@@ -98,90 +99,39 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       debugPrint('[JapCounterScreen] Error fetching remote japs: $e');
     }
 
-    // 3. Load custom user Japs: first auto-sync local ones, then fetch server ones
+    // 3. Load user's custom Japs from backend and offline cache
     List<JapConfig> customJaps = [];
     try {
-      final customJapsRaw = await JapOfflineRepository.getCustomJaps();
-
-      // If user is logged in, upload any local custom japs that haven't been pushed to server yet
       if (_token.isNotEmpty) {
-        for (final localCustom in customJapsRaw) {
-          final localId = (localCustom['id'] ?? localCustom['_id'] ?? '').toString();
-          if (localId.startsWith('custom_')) {
-            try {
-              final coverPath = (localCustom['thumbnail'] ?? '').toString();
-              final godPath = (localCustom['darshanImage'] ?? '').toString();
-              final audioPath = (localCustom['shlokAudio'] ?? '').toString();
-              if (File(coverPath).existsSync() && File(godPath).existsSync()) {
-                final serverRes = await ApiService.createCustomJap(
-                  _token,
-                  name: (localCustom['name'] ?? 'My Custom Jap').toString(),
-                  coverImageFile: File(coverPath),
-                  godImageFile: File(godPath),
-                  audioFile: audioPath.isNotEmpty && File(audioPath).existsSync() ? File(audioPath) : null,
-                  targetCount: (localCustom['targetCount'] as num?)?.toInt() ?? 108,
-                  particleShape: (localCustom['particleShape'] ?? 'auto').toString(),
-                );
-                final newId = (serverRes['_id'] ?? serverRes['id'])?.toString();
-                if (newId != null && newId.length == 24) {
-                  await JapOfflineRepository.removeCustomJap(localId);
-                  localCustom['id'] = newId;
-                  localCustom['_id'] = newId;
-                  if (serverRes['thumbnail'] != null && serverRes['thumbnail'].toString().isNotEmpty) {
-                    localCustom['thumbnail'] = serverRes['thumbnail'];
-                  }
-                  if (serverRes['darshanImage'] != null && serverRes['darshanImage'].toString().isNotEmpty) {
-                    localCustom['darshanImage'] = serverRes['darshanImage'];
-                  }
-                  if (serverRes['shlokAudio'] != null && serverRes['shlokAudio'].toString().isNotEmpty) {
-                    localCustom['shlokAudio'] = serverRes['shlokAudio'];
-                  }
-                  await JapOfflineRepository.saveCustomJap(localCustom);
-
-                  // Migrate local progress
-                  final oldProgress = await JapOfflineRepository.getProgress(localId);
-                  if (oldProgress['count']! > 0 || oldProgress['completedMalas']! > 0) {
-                    await JapOfflineRepository.saveProgress(
-                      japId: newId,
-                      count: oldProgress['count']!,
-                      completedMalas: oldProgress['completedMalas']!,
-                    );
-                    final total = (oldProgress['completedMalas']! * ((localCustom['targetCount'] as num?)?.toInt() ?? 108)) + oldProgress['count']!;
-                    await ApiService.syncJapProgress(_token, newId, total);
-                  }
-                }
-              }
-            } catch (syncErr) {
-              debugPrint('[JapCounterScreen] Auto-sync custom jap error: $syncErr');
-            }
-          }
+        final serverCustoms = await ApiService.getMyCustomJaps(_token);
+        final serverIds = <String>{};
+        for (final sc in serverCustoms) {
+          final cfg = JapConfig.fromJson(sc);
+          customJaps.add(cfg);
+          serverIds.add(cfg.id);
         }
 
-        // Fetch remote custom japs from server
-        try {
-          final serverCustoms = await ApiService.getMyCustomJaps(_token);
-          for (final sc in serverCustoms) {
-            final scConfig = JapConfig.fromJson(sc);
-            customJaps.add(scConfig);
+        // If a custom jap was deleted on server (by Admin or user), prune it locally so it disappears from user app too
+        final localCustomsRaw = await JapOfflineRepository.getCustomJaps();
+        for (final raw in localCustomsRaw) {
+          final localId = (raw['id'] ?? raw['_id'] ?? '').toString();
+          if (localId.length == 24 && !serverIds.contains(localId)) {
+            await JapOfflineRepository.removeCustomJap(localId);
           }
-        } catch (e) {
-          debugPrint('[JapCounterScreen] Error fetching server custom japs: $e');
         }
       }
-
-      // Re-read local custom japs
-      final reloadedCustoms = await JapOfflineRepository.getCustomJaps();
-      for (final raw in reloadedCustoms) {
+      final localCustoms = await JapOfflineRepository.getCustomJaps();
+      for (final raw in localCustoms) {
         final cfg = JapConfig.fromJson(raw);
         if (!customJaps.any((c) => c.id == cfg.id)) {
           customJaps.add(cfg);
         }
       }
     } catch (e) {
-      debugPrint('[JapCounterScreen] Error loading local custom japs: $e');
+      debugPrint('[JapCounterScreen] Error loading custom japs: $e');
     }
 
-    // 4. Combine and overlay local cached progress (prioritize remote/admin japs)
+    // 4. Combine remote admin japs and user custom japs
     final combined = [
       ...remoteJaps,
       ...customJaps.where((c) => !remoteJaps.any((r) => r.id == c.id)),
@@ -366,9 +316,18 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       );
 
       // Trigger cloud sync if remote
+      if (_token.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
+      }
       if (_token.isNotEmpty && entry.id.isNotEmpty && entry.id.length == 24) {
         try {
-          await ApiService.syncJapProgress(_token, entry.id, updatedProgress);
+          await ApiService.syncJapProgress(
+            _token,
+            entry.id,
+            updatedProgress % entry.targetCount,
+            completedMalas: updatedProgress ~/ entry.targetCount,
+          );
           await JapOfflineRepository.markSynced(entry.id);
         } catch (e) {
           debugPrint('[JapCounterScreen] Background sync error: $e');
@@ -389,6 +348,10 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       String resolvedThumbnail = result.coverImagePath;
       String resolvedDarshan = result.godImagePath;
       String resolvedAudio = result.audioFilePath;
+      if (_token.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
+      }
 
       if (_token.isNotEmpty) {
         showDialog(
@@ -529,61 +492,12 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
               child: Row(
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFFFFE6D5),
-                      border: Border.all(
-                        color: const Color(0xFFFF7700).withValues(alpha: 0.2),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: ClipOval(
-                      child: _profilePic.isNotEmpty
-                          ? Image.network(
-                              _resolveProfilePic(_profilePic),
-                              width: 48,
-                              height: 48,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Center(
-                                  child: Text(
-                                    _profileName.isNotEmpty
-                                        ? _profileName[0].toUpperCase()
-                                        : 'U',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: const Color(0xFFFF7700),
-                                    ),
-                                  ),
-                                );
-                              },
-                              loadingBuilder: (context, child, loadingProgress) {
-                                if (loadingProgress == null) return child;
-                                return const Center(
-                                  child: CircularProgressIndicator(
-                                    color: Color(0xFFFF7700),
-                                    strokeWidth: 2,
-                                  ),
-                                );
-                              },
-                            )
-                          : Center(
-                              child: Text(
-                                _profileName.isNotEmpty
-                                    ? _profileName[0].toUpperCase()
-                                    : 'U',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: const Color(0xFFFF7700),
-                                ),
-                              ),
-                            ),
-                    ),
+                  UserAvatar(
+                    profilePic: _profilePic,
+                    userName: _profileName,
+                    size: 48,
+                    borderColor: const Color(0xFFFF7700).withValues(alpha: 0.2),
+                    borderWidth: 1.5,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1080,6 +994,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   late int _target;
   int _completedMalas = 0;
   JapLifecycle _lifecycle = JapLifecycle.idle;
+  Timer? _syncDebounceTimer;
 
   JapLifecycle get lifecycle => _lifecycle;
 
@@ -1449,6 +1364,8 @@ class _JapDetailScreenState extends State<JapDetailScreen>
 
   @override
   void dispose() {
+    _syncDebounceTimer?.cancel();
+    _triggerBackgroundSync();
     _premiumAnimController.dispose();
     _videoController?.dispose();
     _audioPlayer.dispose();
@@ -1536,7 +1453,11 @@ class _JapDetailScreenState extends State<JapDetailScreen>
         completedMalas: _completedMalas,
       );
 
-      // Milestone background cloud sync (at 27, 54, 81, 108)
+      // Immediate debounce sync on tap (syncs after 1.5s of inactivity or on milestones)
+      _syncDebounceTimer?.cancel();
+      _syncDebounceTimer = Timer(const Duration(milliseconds: 1500), () {
+        _triggerBackgroundSync();
+      });
       if (_count % 27 == 0 || _count >= _target) {
         _triggerBackgroundSync();
       }
@@ -1651,12 +1572,13 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   void _triggerBackgroundSync() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token') ?? '';
+      final token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
       if (token.isNotEmpty && widget.entry.id.length == 24) {
         await ApiService.syncJapProgress(
           token,
           widget.entry.id,
-          _totalProgress,
+          _count,
+          completedMalas: _completedMalas,
         );
         await JapOfflineRepository.markSynced(widget.entry.id);
       }

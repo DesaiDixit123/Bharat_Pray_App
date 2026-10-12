@@ -377,4 +377,19 @@ class JapOfflineRepository {
     }
     return [];
   }
+
+  /// Remove/clear all user custom Japs completely
+  static Future<void> clearAllCustomJaps() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_customJapsKey);
+      final customKeys = prefs.getKeys().where((k) => k.contains('custom_')).toList();
+      for (final key in customKeys) {
+        await prefs.remove(key);
+      }
+      debugPrint('[JapOfflineRepository] Cleared all local custom japs and keys successfully');
+    } catch (e) {
+      debugPrint('[JapOfflineRepository] Error clearing custom Japs: $e');
+    }
+  }
 }

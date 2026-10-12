@@ -18,6 +18,7 @@ import 'profile_screen.dart';
 import 'messages_screen.dart';
 import 'notification_screen.dart';
 import '../../services/yatra_personal_chat_service.dart';
+import '../../widgets/user_avatar.dart';
 
 // Using YatraModel from api_service.dart
 
@@ -265,45 +266,12 @@ class _YatraScreenState extends State<YatraScreen> {
                 MaterialPageRoute(builder: (context) => const ProfileScreen()),
               ).then((_) => _loadProfileData());
             },
-            child: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: const Color(0xFFFF7A00).withValues(alpha: 0.2),
-                  width: 1.5,
-                ),
-              ),
-              child: ClipOval(
-                child: resolvedPic.isNotEmpty
-                    ? Image.network(
-                        resolvedPic,
-                        width: 48,
-                        height: 48,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Center(
-                          child: Text(
-                            _profileName.isNotEmpty ? _profileName[0].toUpperCase() : 'U',
-                            style: GoogleFonts.outfit(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFFFF7700),
-                            ),
-                          ),
-                        ),
-                      )
-                    : Center(
-                        child: Text(
-                          _profileName.isNotEmpty ? _profileName[0].toUpperCase() : 'U',
-                          style: GoogleFonts.outfit(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFFFF7700),
-                          ),
-                        ),
-                      ),
-              ),
+            child: UserAvatar(
+              profilePic: _profilePic,
+              userName: _profileName,
+              size: 48,
+              borderColor: const Color(0xFFFF7A00).withValues(alpha: 0.2),
+              borderWidth: 1.5,
             ),
           ),
           const SizedBox(width: 12),

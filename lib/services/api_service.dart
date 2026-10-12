@@ -370,6 +370,51 @@ class ApiService {
     return UserModel.fromJson(data['Data']);
   }
 
+  // POST /user/profile/update
+  static Future<Map<String, dynamic>> updateProfile(
+    String token, {
+    String? name,
+    String? email,
+    String? phone,
+    String? bio,
+    String? gender,
+    File? profilePicFile,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/user/profile/update');
+      final request = http.MultipartRequest('POST', uri);
+
+      request.headers['Authorization'] = 'Bearer $token';
+      if (name != null && name.trim().isNotEmpty) request.fields['name'] = name.trim();
+      if (email != null && email.trim().isNotEmpty) request.fields['email'] = email.trim();
+      if (phone != null && phone.trim().isNotEmpty) request.fields['phone'] = phone.trim();
+      if (bio != null) request.fields['bio'] = bio;
+      if (gender != null) request.fields['gender'] = gender;
+
+      if (profilePicFile != null && profilePicFile.existsSync()) {
+        final stream = http.ByteStream(profilePicFile.openRead());
+        final length = await profilePicFile.length();
+        final multipartFile = http.MultipartFile(
+          'profile_pic',
+          stream,
+          length,
+          filename: 'profile_pic.png',
+        );
+        request.files.add(multipartFile);
+      }
+
+      _logApiCall('POST (Multipart)', uri, headers: request.headers);
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 45));
+      final response = await http.Response.fromStream(streamedResponse);
+      _logApiResponse('POST (Multipart)', uri, response);
+      final res = _processResponse(response);
+      return res['Data'] is Map ? Map<String, dynamic>.from(res['Data']) : {};
+    } catch (e) {
+      print('[API ERROR] updateProfile | $e');
+      rethrow;
+    }
+  }
+
   // GET /user/darshan/home
   static Future<Map<String, dynamic>> getDarshanHome(String token) async {
     final response = await _safeGet(
