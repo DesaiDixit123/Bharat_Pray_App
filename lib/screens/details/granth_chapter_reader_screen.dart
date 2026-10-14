@@ -422,17 +422,24 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     final h = size.height;
 
     final bool isAnimatingOrDragging = progress > 0 || _isDragging || _isClosingBook;
-    final int basePageIndex = !isAnimatingOrDragging ? _currentPage : (_turnForward ? (_currentPage + 1) : _currentPage);
+    final bool isClosingToCover = isAnimatingOrDragging && !_turnForward && _currentPage == 1;
+
+    final int basePageIndex = !isAnimatingOrDragging 
+        ? _currentPage 
+        : (_turnForward ? (_currentPage + 1) : (isClosingToCover ? 1 : _currentPage));
+        
     final int topPageIndex = _isClosingBook 
         ? (totalPages - 1) 
-        : (!isAnimatingOrDragging ? _currentPage : (_turnForward ? _currentPage : (_currentPage - 1)));
+        : (!isAnimatingOrDragging 
+            ? _currentPage 
+            : (_turnForward ? _currentPage : (isClosingToCover ? 0 : _currentPage - 1)));
 
     // Pages are always rendered at the FULL book width (w x h)
     final Widget? basePage = _isClosingBook ? null : _getPage(basePageIndex, w, h);
     final Widget? topPage = _getPage(topPageIndex, w, h);
 
     final bool isTurning = (progress > 0 || _isDragging || _isClosingBook) && topPage != null;
-    final bool isFrontCoverTurn = (topPageIndex == 0) && !_isClosingBook; 
+    final bool isFrontCoverTurn = ((topPageIndex == 0) || isClosingToCover) && !_isClosingBook; 
 
     // Dynamic Thickness Calculation
     final double maxStackW = 10.0;
@@ -828,25 +835,28 @@ class _TruePagePeelWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // F = fold crease X position: starts at rightmost edge, moves left as user swipes
-    final double F = forward ? width * (1.0 - progress) : width * progress;
+    // p represents the forward peel state (0.0 = flat frontPage, 1.0 = fully turned).
+    // When moving backward, we are reversing that exact page animation from left to right:
+    // p smoothly goes from 1.0 (turned over to the left) down to 0.0 (un-peeled, flat on the right).
+    final double p = forward ? progress : (1.0 - progress);
+
+    // F = fold crease X position
+    final double F = width * (1.0 - p);
     // backLeft = left edge of the folded flap (mirrors around F)
     final double backLeft = (2 * F - width).clamp(-width, width);
     
     // Slight diagonal (conical) lift — peaks at midpoint of swipe
-    final double liftAngle = math.sin(progress * math.pi) * 0.05; // ~2.9 degrees
+    final double liftAngle = math.sin(p * math.pi) * 0.05; // ~2.9 degrees
 
-    // Allow the peel widget to overflow to the left so the page can physically land on the left cover!
-    // We clip top/bottom strictly to height, but allow left to go to -width.
     return ClipRect(
       clipper: _OverflowClipper(-width, width * 2, height),
       child: Stack(
         children: [
-          // 1. Base Page (the next page, revealed as the front page peels away)
+          // 1. Base Page (underneath)
           Positioned.fill(child: basePage),
 
           // 2. Drop shadow cast by the fold crease onto the base page
-          if (progress > 0.01 && progress < 0.99)
+          if (p > 0.01 && p < 0.99)
             Positioned(
               left: F, top: 0, bottom: 0,
               width: math.min(50.0, width - F),
@@ -866,7 +876,7 @@ class _TruePagePeelWidget extends StatelessWidget {
               ),
             ),
 
-          // 3. Flat left portion of the front page (not yet peeled)
+          // 3. Flat left portion of the front page
           if (F > 0)
             ClipRect(
               clipper: _RectClipper(0, F),
@@ -874,14 +884,14 @@ class _TruePagePeelWidget extends StatelessWidget {
             ),
 
           // 4. The folded flap — back side shows actual page content (bleed-through)
-          if (progress > 0.01 && progress < 0.99 && F > backLeft)
+          if (p > 0.01 && p < 0.99 && F > backLeft)
             Transform(
               // Rotate around the fold crease at x=F
               alignment: Alignment(F / width * 2 - 1, 0), // normalize to [-1,1]
               transform: Matrix4.identity()
                 ..setEntry(3, 2, 0.001) // slight 3D perspective
-                ..rotateY(math.pi - progress * math.pi * 0.18) // slight tilt = feels 3D
-                ..rotateZ(forward ? -liftAngle : liftAngle), // diagonal corner lift
+                ..rotateY(math.pi - p * math.pi * 0.18) // 3D curl angle
+                ..rotateZ(-liftAngle), // diagonal corner lift
               child: ClipRect(
                 clipper: _RectClipper(F > 0 ? F : 0, width),
                 child: Stack(
@@ -998,6 +1008,9 @@ class _VersePage extends StatelessWidget {
       }
     }
 
+    final topSafePadding = MediaQuery.paddingOf(context).top;
+    final contentTopPadding = math.max(16.0, topSafePadding + 18.0);
+
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Container(
@@ -1010,56 +1023,80 @@ class _VersePage extends StatelessWidget {
             borderRadius: BorderRadius.circular(4),
             border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.22), width: 0.8),
           ),
-          padding: const EdgeInsets.all(16),
-          child: LayoutBuilder(
-            builder: (context, constraints) => SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('❖ ──── ', style: GoogleFonts.outfit(color: const Color(0xFFC59239), fontSize: 10)),
-                    Text('ॐ', style: GoogleFonts.notoSerifDevanagari(fontSize: 18, color: const Color(0xFF5C1405), fontWeight: FontWeight.bold)),
-                    Text(' ──── ❖', style: GoogleFonts.outfit(color: const Color(0xFFC59239), fontSize: 10)),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text('Verse ${verseIndex + 1}',
-                    style: GoogleFonts.outfit(color: const Color(0xFF8B6048), fontSize: 11, fontWeight: FontWeight.w500)),
-                const SizedBox(height: 14),
-                if (sanskritText.isNotEmpty) ...[
-                  Text(sanskritText, textAlign: TextAlign.center,
-                      style: GoogleFonts.notoSerifDevanagari(fontSize: 19, height: 1.8, color: const Color(0xFF4A1005), fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 16),
-                ],
-                if (transliterationText.isNotEmpty) ...[
-                  Text(transliterationText, textAlign: TextAlign.center,
-                      style: GoogleFonts.outfit(fontSize: 14, height: 1.6, color: bodyColor.withValues(alpha: 0.85), fontStyle: FontStyle.italic, fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 16),
-                ],
-                if (rawHindi.isNotEmpty) ...[
-                  _divider('भावार्थ', devanagari: true),
-                  const SizedBox(height: 8),
-                  Text(rawHindi, textAlign: TextAlign.center,
-                      style: GoogleFonts.notoSerifDevanagari(fontSize: 16, height: 1.7, color: bodyColor.withValues(alpha: 0.95), fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 16),
-                ],
-                if (rawEnglish.isNotEmpty) ...[
-                  _divider('English Translation'),
-                  const SizedBox(height: 8),
-                  Text(rawEnglish, textAlign: TextAlign.center,
-                      style: GoogleFonts.outfit(fontSize: 14.5, height: 1.65, color: bodyColor.withValues(alpha: 0.92), fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 12),
-                ],
-              ],
+          child: Stack(
+            children: [
+              // Main scrollable verse content
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: LayoutBuilder(
+                  builder: (context, constraints) => SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: EdgeInsets.only(top: contentTopPadding, bottom: 24),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: math.max(0, constraints.maxHeight - (contentTopPadding + 24)),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text('❖ ──── ', style: GoogleFonts.outfit(color: const Color(0xFFC59239), fontSize: 10)),
+                              Text('ॐ', style: GoogleFonts.notoSerifDevanagari(fontSize: 18, color: const Color(0xFF5C1405), fontWeight: FontWeight.bold)),
+                              Text(' ──── ❖', style: GoogleFonts.outfit(color: const Color(0xFFC59239), fontSize: 10)),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text('Verse ${verseIndex + 1}',
+                              style: GoogleFonts.outfit(color: const Color(0xFF8B6048), fontSize: 11, fontWeight: FontWeight.w500)),
+                          const SizedBox(height: 14),
+                          if (sanskritText.isNotEmpty) ...[
+                            Text(sanskritText, textAlign: TextAlign.center,
+                                style: GoogleFonts.notoSerifDevanagari(fontSize: 19, height: 1.8, color: const Color(0xFF4A1005), fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 16),
+                          ],
+                          if (transliterationText.isNotEmpty) ...[
+                            Text(transliterationText, textAlign: TextAlign.center,
+                                style: GoogleFonts.outfit(fontSize: 14, height: 1.6, color: bodyColor.withValues(alpha: 0.85), fontStyle: FontStyle.italic, fontWeight: FontWeight.w500)),
+                            const SizedBox(height: 16),
+                          ],
+                          if (rawHindi.isNotEmpty) ...[
+                            _divider('भावार्थ', devanagari: true),
+                            const SizedBox(height: 8),
+                            Text(rawHindi, textAlign: TextAlign.center,
+                                style: GoogleFonts.notoSerifDevanagari(fontSize: 16, height: 1.7, color: bodyColor.withValues(alpha: 0.95), fontWeight: FontWeight.w500)),
+                            const SizedBox(height: 16),
+                          ],
+                          if (rawEnglish.isNotEmpty) ...[
+                            _divider('English Translation'),
+                            const SizedBox(height: 8),
+                            Text(rawEnglish, textAlign: TextAlign.center,
+                                style: GoogleFonts.outfit(fontSize: 14.5, height: 1.65, color: bodyColor.withValues(alpha: 0.92), fontWeight: FontWeight.w500)),
+                            const SizedBox(height: 12),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
+
+              // Printed BharatPray Logo inside the top-right corner of the yellow line
+              Positioned(
+                top: 10,
+                right: 10,
+                child: IgnorePointer(
+                  child: Image.asset(
+                    'assets/images/app_logo.png',
+                    width: 64,
+                    height: 56,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
