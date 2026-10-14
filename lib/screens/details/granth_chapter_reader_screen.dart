@@ -122,48 +122,46 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-        systemNavigationBarColor: Color(0xFFFFE8D6),
-        systemNavigationBarIconBrightness: Brightness.dark,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.black,
+        systemNavigationBarIconBrightness: Brightness.light,
       ),
       child: Scaffold(
-        backgroundColor: const Color(0xFFFFE8D6),
-        appBar: AppBar(
-          systemOverlayStyle: const SystemUiOverlayStyle(
-            statusBarColor: Colors.transparent,
-            statusBarIconBrightness: Brightness.dark,
-          ),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          centerTitle: true,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF2E2A36)),
-            onPressed: () => Navigator.pop(context),
-          ),
-          title: Text(
-            '$granthTitle - $chapterTitle',
-            style: GoogleFonts.outfit(color: const Color(0xFF2E2A36), fontWeight: FontWeight.w700, fontSize: 17),
-          ),
-          actions: [
-            IconButton(
-              onPressed: () => setState(() => _sepiaMode = !_sepiaMode),
-              icon: const Icon(Icons.palette_outlined, color: Color(0xFF2E2A36)),
-              tooltip: 'Toggle Parchment Theme',
+        backgroundColor: const Color(0xFF1E0A03), // Match cover to eliminate flash
+        // No AppBar — fully immersive fullscreen
+        body: Stack(
+          children: [
+            // Full-screen book viewer
+            Positioned.fill(
+              child: _isLoadingPages
+                  ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF8C1A)))
+                  : _BookViewer(
+                      granth: widget.granth,
+                      granthTitle: granthTitle,
+                      chapterTitle: chapterTitle,
+                      verses: _verses,
+                      sepiaMode: _sepiaMode,
+                    ),
+            ),
+            // Floating back arrow (top-left)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              left: 8,
+              child: Material(
+                color: Colors.black.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(24),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(24),
+                  onTap: () => Navigator.pop(context),
+                  child: const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                  ),
+                ),
+              ),
             ),
           ],
-        ),
-        body: SafeArea(
-          top: false,
-          child: _isLoadingPages
-              ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF8C1A)))
-              : _BookViewer(
-                  granth: widget.granth,
-                  granthTitle: granthTitle,
-                  chapterTitle: chapterTitle,
-                  verses: _verses,
-                  sepiaMode: _sepiaMode,
-                ),
         ),
       ),
     );
@@ -200,19 +198,13 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
   double _dragProgress = 0.0; // 0.0 to 1.0
   bool _isDragging = false;
   bool _isClosingBook = false;
+  // Pending drag: touch started but no movement yet — avoids blink on hold
+  bool _pendingDrag = false;
 
   late AnimationController _turnCtrl;
   late Animation<double> _turnAnim;
 
   int get totalPages => widget.verses.length + 2;
-
-  @override
-  void initState() {
-    super.initState();
-    _turnCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 650));
-    _turnAnim = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _turnCtrl, curve: Curves.easeInOutSine));
-    _turnAnim.addStatusListener(_onAnimStatus);
-  }
 
   @override
   void dispose() { _turnCtrl.dispose(); super.dispose(); }
@@ -285,19 +277,30 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
 
   void _onHorizontalDragStart(DragStartDetails d) {
     if (_isTurning || _isClosingBook) return;
-    setState(() { 
-      _isDragging = true; 
-      _dragProgress = 0; 
-      // Sanitize turn direction so we don't try to turn backward from page 0 (causes null crash on long press)
-      if (_currentPage <= 0) _turnForward = true;
-      if (_currentPage >= totalPages - 1) _turnForward = false;
-    });
+    // Just mark pending — no setState here to avoid blink-on-hold
+    _pendingDrag = true;
+    // Pre-sanitize direction
+    if (_currentPage <= 0) _turnForward = true;
+    if (_currentPage >= totalPages - 1) _turnForward = false;
   }
 
   void _onHorizontalDragUpdate(DragUpdateDetails d) {
-    if (!_isDragging || _isTurning) return;
+    if (_isTurning) return;
     final width = context.size?.width ?? 350;
     final delta = -(d.primaryDelta! / width);
+
+    // Activate drag only on first real movement, with correct direction from the start
+    if (!_isDragging && _pendingDrag) {
+      if (delta > 0 && _currentPage >= totalPages - 1) return;
+      if (delta < 0 && _currentPage <= 0) return;
+      setState(() {
+        _isDragging = true;
+        _dragProgress = 0;
+        _turnForward = delta > 0; // Set direction from actual movement — prevents stale-direction flash
+      });
+      return; // Wait for next update to avoid processing delta in the same frame
+    }
+    if (!_isDragging) return;
     
     // Don't drag forward on back cover
     if (delta > 0 && _currentPage >= totalPages - 1) return;
@@ -312,6 +315,7 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
   }
 
   void _onHorizontalDragEnd(DragEndDetails d) {
+    _pendingDrag = false;
     if (!_isDragging) return;
     setState(() => _isDragging = false);
     
@@ -355,120 +359,27 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // ── Top Progress ──────────────────────────────────────────────────
-        if (_currentPage > 0 && _currentPage < totalPages - 1) ...[
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Page $_currentPage', style: GoogleFonts.outfit(color: const Color(0xFF8B6048), fontSize: 12)),
-                Text('${widget.verses.length} pages', style: GoogleFonts.outfit(color: const Color(0xFF8B6048), fontSize: 12)),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: widget.verses.isEmpty ? 0 : (_currentPage - 1) / widget.verses.length,
-                backgroundColor: const Color(0xFFD4C5A9).withValues(alpha: 0.4),
-                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFF8C1A)),
-                minHeight: 3,
-              ),
-            ),
-          ),
-        ] else
-          const SizedBox(height: 28), // Placeholder
+  void initState() {
+    super.initState();
+    _turnCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 650));
+    _turnAnim = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _turnCtrl, curve: Curves.easeInOutSine));
+    _turnAnim.addStatusListener(_onAnimStatus);
+  }
 
-        // ── Book Canvas ───────────────────────────────────────────────────
-        Expanded(
-          child: Center(
-            child: Padding(
-              // Keep padding on left so the open book "V style" left pages have room to bleed
-              padding: const EdgeInsets.only(left: 20),
-              child: GestureDetector(
-                onHorizontalDragStart: _onHorizontalDragStart,
-                onHorizontalDragUpdate: _onHorizontalDragUpdate,
-                onHorizontalDragEnd: _onHorizontalDragEnd,
-                child: AnimatedBuilder(
-                  animation: _turnCtrl,
-                  builder: (context, _) {
-                    final progress = _isTurning ? _turnAnim.value : _dragProgress;
-                    return _build3DBookCanvas(progress);
-                  },
-                ),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        
-        // ── Controls ──────────────────────────────────────────────────────
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          switchInCurve: Curves.easeOutCubic,
-          switchOutCurve: Curves.easeInCubic,
-          transitionBuilder: (child, animation) {
-            return FadeTransition(
-              opacity: animation,
-              child: ScaleTransition(
-                scale: Tween<double>(begin: 0.9, end: 1.0).animate(animation),
-                child: child,
-              ),
-            );
-          },
-          child: (_currentPage > 0 && !(_currentPage == 1 && _isTurning && !_turnForward))
-              ? Padding(
-                  key: const ValueKey('nav_controls'),
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        onPressed: () => _triggerTurn(forward: false),
-                        icon: const Icon(Icons.chevron_left_rounded, color: Color(0xFF2E2A36), size: 36),
-                      ),
-                      const SizedBox(width: 24),
-                      IconButton(
-                        onPressed: _currentPage < totalPages - 1 ? () => _triggerTurn(forward: true) : null,
-                        icon: Icon(Icons.chevron_right_rounded,
-                            color: _currentPage < totalPages - 1 ? const Color(0xFF2E2A36) : Colors.grey.shade400, size: 36),
-                      ),
-                    ],
-                  ),
-                )
-              : Padding(
-                  key: const ValueKey('open_button'),
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                  child: GestureDetector(
-                    onTap: () => _triggerTurn(forward: true),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(colors: [Color(0xFFFF8C1A), Color(0xFFD45B00)]),
-                        borderRadius: BorderRadius.circular(30),
-                        boxShadow: [BoxShadow(color: const Color(0xFFFF8C1A).withValues(alpha: 0.4), blurRadius: 18, offset: const Offset(0, 6))],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.menu_book_rounded, color: Colors.white, size: 20),
-                          const SizedBox(width: 10),
-                          Text('Open Book', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16, letterSpacing: 0.5)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-        ),
-        const SizedBox(height: 16),
-      ],
+  @override
+  Widget build(BuildContext context) {
+    // Full-screen: book fills the entire display
+    return GestureDetector(
+      onHorizontalDragStart: _onHorizontalDragStart,
+      onHorizontalDragUpdate: _onHorizontalDragUpdate,
+      onHorizontalDragEnd: _onHorizontalDragEnd,
+      child: AnimatedBuilder(
+        animation: _turnCtrl,
+        builder: (context, _) {
+          final progress = _isTurning ? _turnAnim.value : _dragProgress;
+          return _build3DBookCanvas(progress);
+        },
+      ),
     );
   }
 
@@ -506,8 +417,9 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
 
   Widget _build3DBookCanvas(double progress) {
     final size = MediaQuery.of(context).size;
-    final w = size.width * 0.82;  // the original full book width
-    final h = size.height * 0.65;
+    // Full-screen: use full width and height
+    final w = size.width;
+    final h = size.height;
 
     final bool isAnimatingOrDragging = progress > 0 || _isDragging || _isClosingBook;
     final int basePageIndex = !isAnimatingOrDragging ? _currentPage : (_turnForward ? (_currentPage + 1) : _currentPage);
@@ -555,7 +467,7 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
             Transform(
               alignment: Alignment.centerLeft,
               transform: Matrix4.identity()
-                ..setEntry(3, 2, 0.001) // Standard perspective
+                ..setEntry(3, 2, 0.0006) // Reduced perspective for natural full-screen 3D feel
                 ..rotateY(turnAngle),
               child: isFrontVisible 
                   ? _wrapPage(topPageIndex, topPage!) 
@@ -596,11 +508,16 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     
     final Widget? activeLeftPeekPage = _getStaticLeftPage(leftStaticIndex, w, h);
     bool showLeftPeek = activeLeftPeekPage != null && leftStaticIndex >= 0;
-    
-    // If the cover is actively swinging, hide the static left page, because the swinging cover ITSELF handles the visual on the left!
-    if (isAnimatingOrDragging && isFrontCoverTurn) {
-      showLeftPeek = false;
-    }
+    // Note: do NOT suppress showLeftPeek during front cover turn — we use opacity to fade the spine shadow in smoothly
+
+    // Compute spine shadow opacity: fades in as cover opens, instant on static pages
+    final bool isCoverOpening = isAnimatingOrDragging && isFrontCoverTurn && _turnForward;
+    final bool isCoverClosing = isAnimatingOrDragging && isFrontCoverTurn && !_turnForward;
+    final double spineOpacity = showLeftPeek
+        ? 1.0                              // Static: full opacity
+        : (isCoverOpening ? progress       // Fades IN with the cover swing
+            : (isCoverClosing ? (1.0 - progress) // Fades OUT when closing back to cover
+                : 0.0));
 
     return SizedBox(
       width: w,
@@ -615,7 +532,13 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
               left: -w, top: 0, bottom: 0, width: w,
               child: _wrapPage(0, _buildInsideCover(w, h), isLeft: true),
             ),
-          if (_currentPage < totalPages - 1 && !_isClosingBook)
+          // Back-cover inner layer: only needed during cover/close animations, never during static reading
+          if ((_currentPage < totalPages - 1) && !_isClosingBook && (isAnimatingOrDragging && isFrontCoverTurn))
+            Positioned(
+              left: 0, top: 0, bottom: 0, width: w,
+              child: _wrapPage(totalPages - 1, _buildInsideCover(w, h), isLeft: false),
+            ),
+          if (_isClosingBook)
             Positioned(
               left: 0, top: 0, bottom: 0, width: w,
               child: _wrapPage(totalPages - 1, _buildInsideCover(w, h), isLeft: false),
@@ -638,37 +561,39 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
               child: _buildRightPageStack(),
             ),
 
-          // ── 2. Left Pages Stack (Fore-edge) ──
-          if (leftStackW > 0.5 && _currentPage > 0 && !(isAnimatingOrDragging && isFrontCoverTurn))
-            Positioned(
-              left: -w + 12 - leftStackW,
-              top: 12, bottom: 12, width: leftStackW,
-              child: _buildLeftPageStack(),
-            ),
-
           // ── 3. Content (The Current Page & Turning Engine) ──
           // Always full width — the size never changes!
           Positioned.fill(
             child: content,
           ),
 
-          // ── 4. Deep Spine Crease Shadow ──
-          if (showLeftPeek)
+          // ── 4. Left Pages Stack (Fore-edge) — rendered ON TOP of content at left edge ──
+          // Shows the thickness of already-read pages like a real open book
+          if (leftStackW > 0.5 && _currentPage > 0 && !(isAnimatingOrDragging && isFrontCoverTurn))
             Positioned(
-              left: peekSliver - 12,
-              top: 0, bottom: 0, width: 24,
+              left: 0,
+              top: 12, bottom: 12, width: leftStackW,
+              child: IgnorePointer(child: _buildLeftPageStack()),
+            ),
+
+          // ── 5. Deep Spine Crease Shadow — fades in with cover animation ──
+          if (spineOpacity > 0)
+            Positioned(
+              left: leftStackW,
+              top: 0, bottom: 0, width: 18,
               child: IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.black.withValues(alpha: 0.0),
-                        Colors.black.withValues(alpha: 0.55),
-                        Colors.black.withValues(alpha: 0.0),
-                      ],
-                      stops: const [0.0, 0.5, 1.0],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
+                child: Opacity(
+                  opacity: spineOpacity.clamp(0.0, 1.0),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.black.withValues(alpha: 0.5),
+                          Colors.black.withValues(alpha: 0.0),
+                        ],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
                     ),
                   ),
                 ),
@@ -686,11 +611,11 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
         ? BorderRadius.only(topLeft: radius, bottomLeft: radius)
         : BorderRadius.only(topRight: radius, bottomRight: radius);
 
-    // Inner paper pages are slightly smaller than the covers to show the hardcover borders (squares)
+    // In full-screen mode keep inner pages nearly flush — only tiny margin so pages feel large
     final margin = isCover ? EdgeInsets.zero : EdgeInsets.only(
-      top: 12, bottom: 12, 
-      left: isLeft ? 12 : 0, 
-      right: isLeft ? 0 : 12
+      top: 4, bottom: 4,
+      left: isLeft ? 4 : 0,
+      right: isLeft ? 0 : 4
     );
 
     return Container(
@@ -1086,11 +1011,15 @@ class _VersePage extends StatelessWidget {
             border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.22), width: 0.8),
           ),
           padding: const EdgeInsets.all(16),
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
+          child: LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -1128,6 +1057,8 @@ class _VersePage extends StatelessWidget {
                   const SizedBox(height: 12),
                 ],
               ],
+                ),
+              ),
             ),
           ),
         ),
