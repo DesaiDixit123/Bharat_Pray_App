@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -27,12 +28,184 @@ class GranthChapterReaderScreen extends StatefulWidget {
 class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   List<Map<String, String>> _verses = [];
   bool _isLoadingPages = true;
-  bool _sepiaMode = true;
+  final bool _sepiaMode = true;
+
+  // ── Audio / Karaoke state ──────────────────────────────────────────────────
+  final GlobalKey<_BookViewerState> _bookViewerKey = GlobalKey<_BookViewerState>();
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  String? _audioUrl;
+  bool _isPlaying = false;
+  bool _isLoadingAudio = false;
+  Duration _audioDuration = Duration.zero;
+  Duration _audioPosition = Duration.zero;
+
+  // Karaoke: flat list of all words across all verses, in order.
+  List<_KaraokeWord> _allWords = [];
+
+  // Per-verse word start offsets in _allWords.
+  List<int> _verseWordOffsets = [];
+
+  // The global word index that is currently highlighted.
+  int _highlightedWordIndex = -1;
+
+  StreamSubscription? _durationSub;
+  StreamSubscription? _positionSub;
+  StreamSubscription? _completeSub;
+  StreamSubscription? _stateSub;
 
   @override
   void initState() {
     super.initState();
     _loadChapterPagesAndVerses();
+    _initAudioListeners();
+  }
+
+  void _initAudioListeners() {
+    _durationSub = _audioPlayer.onDurationChanged.listen((d) {
+      if (mounted) setState(() => _audioDuration = d);
+    });
+    _positionSub = _audioPlayer.onPositionChanged.listen((p) {
+      if (!mounted) return;
+      _audioPosition = p;
+      _updateKaraokeHighlight(p);
+    });
+    _completeSub = _audioPlayer.onPlayerComplete.listen((_) {
+      if (mounted) setState(() { _isPlaying = false; _highlightedWordIndex = -1; });
+    });
+    _stateSub = _audioPlayer.onPlayerStateChanged.listen((state) {
+      if (mounted) setState(() => _isPlaying = state == PlayerState.playing);
+    });
+  }
+
+  void _updateKaraokeHighlight(Duration position) {
+    if (_allWords.isEmpty || _audioDuration.inMilliseconds <= 0) return;
+    final fraction = (position.inMilliseconds / _audioDuration.inMilliseconds).clamp(0.0, 1.0);
+    final idx = (fraction * _allWords.length).floor().clamp(0, _allWords.length - 1);
+    if (idx != _highlightedWordIndex) {
+      setState(() => _highlightedWordIndex = idx);
+
+      // Auto-turn book to the page containing this currently-recited verse
+      final targetVerse = _allWords[idx].verseIndex;
+      final targetPage = targetVerse + 1; // 1-indexed (0 is cover)
+      _bookViewerKey.currentState?.autoTurnToPage(targetPage);
+    }
+  }
+
+  void _buildKaraokeWordList() {
+    final allWords = <_KaraokeWord>[];
+    final offsets = <int>[];
+    final wordPattern = RegExp(r'[^\s।॥\n\r,.:;!?]+');
+
+    for (int vi = 0; vi < _verses.length; vi++) {
+      offsets.add(allWords.length);
+      // Highlight the primary verse text added from the admin panel:
+      // typically sanskrit/shloka text; if empty, fallback to hindi or english
+      String text = (_verses[vi]['sanskrit'] ?? '').trim();
+      if (text.isEmpty) text = (_verses[vi]['hindi'] ?? '').trim();
+      if (text.isEmpty) text = (_verses[vi]['english'] ?? '').trim();
+      if (text.isEmpty) continue;
+
+      final matches = wordPattern.allMatches(text);
+      for (final m in matches) {
+        final w = m.group(0) ?? '';
+        if (w.isNotEmpty) {
+          allWords.add(_KaraokeWord(word: w, verseIndex: vi));
+        }
+      }
+    }
+    _allWords = allWords;
+    _verseWordOffsets = offsets;
+  }
+
+  Future<void> _loadAudio() async {
+    if (_isLoadingAudio) return;
+    setState(() => _isLoadingAudio = true);
+
+    String? foundUrl;
+
+    // 1. Check chapter object directly for audio URL
+    final direct = (widget.chapter['audioUrl'] ?? widget.chapter['audio'] ?? widget.chapter['streamUrl'] ?? widget.chapter['fileUrl'])?.toString().trim();
+    if (direct != null && direct.isNotEmpty) {
+      final resolved = ApiService.resolveImageUrl(direct);
+      if (resolved.isNotEmpty) foundUrl = resolved;
+    }
+
+    // 2. Fetch chapter audio from backend
+    final chapterId = (widget.chapter['_id'] ?? widget.chapter['id'] ?? '').toString();
+    if (foundUrl == null && chapterId.isNotEmpty) {
+      try {
+        final audios = await ApiService.getAudioByChapter(chapterId);
+        if (audios.isNotEmpty) {
+          final first = Map<String, dynamic>.from(audios.first as Map);
+          final raw = (first['audioUrl'] ?? first['url'] ?? first['streamUrl'] ?? first['fileUrl'] ?? '').toString();
+          final resolved = raw.isNotEmpty ? ApiService.resolveImageUrl(raw) : '';
+          if (resolved.isNotEmpty) foundUrl = resolved;
+        }
+      } catch (_) {}
+    }
+
+    // 3. Check verse-level audio
+    if (foundUrl == null) {
+      for (final v in _verses) {
+        final va = (v['audio'] ?? '').trim();
+        if (va.isNotEmpty) {
+          final resolved = ApiService.resolveImageUrl(va);
+          if (resolved.isNotEmpty) {
+            foundUrl = resolved;
+            break;
+          }
+        }
+      }
+    }
+
+    // 4. Default devotional chant audio so karaoke works seamlessly out of the box even before custom upload
+    if (foundUrl == null || foundUrl.isEmpty) {
+      foundUrl = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3';
+    }
+
+    if (mounted) {
+      setState(() {
+        _audioUrl = foundUrl;
+        _isLoadingAudio = false;
+      });
+    }
+  }
+
+  Future<void> _togglePlayPause() async {
+    if (_audioUrl == null) {
+      // No audio loaded yet — show a snackbar
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No audio available for this chapter.', style: GoogleFonts.outfit(color: Colors.white)),
+            backgroundColor: const Color(0xFF5C1405),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+      return;
+    }
+    if (_isPlaying) {
+      await _audioPlayer.pause();
+    } else {
+      if (_audioPosition == Duration.zero || _audioPosition >= _audioDuration) {
+        // Fresh start
+        await _audioPlayer.play(UrlSource(_audioUrl!));
+      } else {
+        await _audioPlayer.resume();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _durationSub?.cancel();
+    _positionSub?.cancel();
+    _completeSub?.cancel();
+    _stateSub?.cancel();
+    _audioPlayer.dispose();
+    super.dispose();
   }
 
   Future<void> _loadChapterPagesAndVerses() async {
@@ -110,7 +283,12 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     }
 
     if (mounted) {
-      setState(() { _verses = parsedVerses; _isLoadingPages = false; });
+      setState(() {
+        _verses = parsedVerses;
+        _isLoadingPages = false;
+      });
+      _buildKaraokeWordList();
+      _loadAudio(); // Fire-and-forget
     }
   }
 
@@ -118,6 +296,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   Widget build(BuildContext context) {
     final granthTitle = (widget.granth['name'] ?? widget.granth['title'] ?? 'Granth').toString();
     final chapterTitle = (widget.chapter['title'] ?? widget.chapter['name'] ?? 'Chapter').toString();
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -128,8 +307,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
         systemNavigationBarIconBrightness: Brightness.light,
       ),
       child: Scaffold(
-        backgroundColor: const Color(0xFF1E0A03), // Match cover to eliminate flash
-        // No AppBar — fully immersive fullscreen
+        backgroundColor: const Color(0xFF1E0A03),
         body: Stack(
           children: [
             // Full-screen book viewer
@@ -137,13 +315,18 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
               child: _isLoadingPages
                   ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF8C1A)))
                   : _BookViewer(
+                      key: _bookViewerKey,
                       granth: widget.granth,
                       granthTitle: granthTitle,
                       chapterTitle: chapterTitle,
                       verses: _verses,
                       sepiaMode: _sepiaMode,
+                      highlightedWordIndex: _highlightedWordIndex,
+                      verseWordOffsets: _verseWordOffsets,
+                      allWordCount: _allWords.length,
                     ),
             ),
+
             // Floating back arrow (top-left)
             Positioned(
               top: MediaQuery.of(context).padding.top + 8,
@@ -161,9 +344,123 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
                 ),
               ),
             ),
+
+            // ── Sacred Floating Play/Pause Button ──────────────────────────
+            if (!_isLoadingPages)
+              Positioned(
+                bottom: bottomPadding + 28,
+                right: 20,
+                child: _KaraokePlayFab(
+                  isPlaying: _isPlaying,
+                  isLoading: _isLoadingAudio,
+                  hasAudio: _audioUrl != null,
+                  onTap: _togglePlayPause,
+                ),
+              ),
           ],
         ),
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KARAOKE DATA MODELS
+// ─────────────────────────────────────────────────────────────────────────────
+class _KaraokeWord {
+  const _KaraokeWord({required this.word, required this.verseIndex});
+  final String word;
+  final int verseIndex;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SACRED FLOATING PLAY/PAUSE FAB
+// ─────────────────────────────────────────────────────────────────────────────
+class _KaraokePlayFab extends StatefulWidget {
+  const _KaraokePlayFab({
+    required this.isPlaying,
+    required this.isLoading,
+    required this.hasAudio,
+    required this.onTap,
+  });
+  final bool isPlaying;
+  final bool isLoading;
+  final bool hasAudio;
+  final VoidCallback onTap;
+
+  @override
+  State<_KaraokePlayFab> createState() => _KaraokePlayFabState();
+}
+
+class _KaraokePlayFabState extends State<_KaraokePlayFab> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))
+      ..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 0.92, end: 1.08).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool pulsing = widget.isPlaying;
+    return AnimatedBuilder(
+      animation: _pulseAnim,
+      builder: (context, child) {
+        final scale = pulsing ? _pulseAnim.value : 1.0;
+        return Transform.scale(
+          scale: scale,
+          child: GestureDetector(
+            onTap: widget.onTap,
+            child: Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const RadialGradient(
+                  colors: [Color(0xFFFF8C1A), Color(0xFFB85C00)],
+                  center: Alignment(-0.3, -0.3),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFF8C1A).withValues(alpha: pulsing ? 0.7 : 0.4),
+                    blurRadius: pulsing ? 22 : 14,
+                    spreadRadius: pulsing ? 4 : 2,
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: widget.isLoading
+                    ? const SizedBox(
+                        width: 24, height: 24,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                      )
+                    : Icon(
+                        widget.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 30,
+                      ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -174,11 +471,15 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
 // ─────────────────────────────────────────────────────────────────────────────
 class _BookViewer extends StatefulWidget {
   const _BookViewer({
+    super.key,
     required this.granth,
     required this.granthTitle,
     required this.chapterTitle,
     required this.verses,
     required this.sepiaMode,
+    required this.highlightedWordIndex,
+    required this.verseWordOffsets,
+    required this.allWordCount,
   });
 
   final Map<String, dynamic> granth;
@@ -186,6 +487,9 @@ class _BookViewer extends StatefulWidget {
   final String chapterTitle;
   final List<Map<String, String>> verses;
   final bool sepiaMode;
+  final int highlightedWordIndex;
+  final List<int> verseWordOffsets;
+  final int allWordCount;
 
   @override
   State<_BookViewer> createState() => _BookViewerState();
@@ -240,6 +544,16 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     }
   }
 
+  void autoTurnToPage(int targetPage) {
+    if (_currentPage == targetPage || _isTurning || _isClosingBook) return;
+    if (targetPage < 0 || targetPage >= totalPages) return;
+    if (targetPage > _currentPage) {
+      _triggerTurn(forward: true, durationMs: 550);
+    } else if (targetPage < _currentPage) {
+      _triggerTurn(forward: false, durationMs: 550);
+    }
+  }
+
   void _triggerTurn({required bool forward, int? durationMs}) {
     if (_isTurning || _isClosingBook) return;
     if (forward && _currentPage >= totalPages) return;
@@ -277,11 +591,8 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
 
   void _onHorizontalDragStart(DragStartDetails d) {
     if (_isTurning || _isClosingBook) return;
-    // Just mark pending — no setState here to avoid blink-on-hold
     _pendingDrag = true;
-    // Pre-sanitize direction
-    if (_currentPage <= 0) _turnForward = true;
-    if (_currentPage >= totalPages - 1) _turnForward = false;
+    _isDragging = false;
   }
 
   void _onHorizontalDragUpdate(DragUpdateDetails d) {
@@ -289,67 +600,58 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     final width = context.size?.width ?? 350;
     final delta = -(d.primaryDelta! / width);
 
-    // Activate drag only on first real movement, with correct direction from the start
+    // Lock direction on first decisive movement — avoids direction jitter
     if (!_isDragging && _pendingDrag) {
-      if (delta > 0 && _currentPage >= totalPages - 1) return;
-      if (delta < 0 && _currentPage <= 0) return;
+      if (delta.abs() < 0.003) return;
+      final bool forward = delta > 0;
+      if (forward && _currentPage >= totalPages - 1) return;
+      if (!forward && _currentPage <= 0) return;
       setState(() {
         _isDragging = true;
-        _dragProgress = 0;
-        _turnForward = delta > 0; // Set direction from actual movement — prevents stale-direction flash
+        _pendingDrag = false;
+        _turnForward = forward;
+        _dragProgress = 0.0;
       });
-      return; // Wait for next update to avoid processing delta in the same frame
+      return;
     }
     if (!_isDragging) return;
-    
-    // Don't drag forward on back cover
-    if (delta > 0 && _currentPage >= totalPages - 1) return;
-    // Don't drag backward on front cover
-    if (delta < 0 && _currentPage <= 0) return;
-    
-    if (delta > 0 && _currentPage < totalPages) {
-      setState(() { _turnForward = true; _dragProgress = (_dragProgress + delta * 1.5).clamp(0.0, 0.99); });
-    } else if (delta < 0 && _currentPage > 0) {
-      setState(() { _turnForward = false; _dragProgress = (_dragProgress - delta * 1.5).clamp(0.0, 0.99); });
-    }
+
+    // Advance or retreat smoothly along the locked gesture direction
+    final double step = _turnForward ? delta : -delta;
+    setState(() {
+      _dragProgress = (_dragProgress + step * 1.35).clamp(0.0, 0.99);
+    });
   }
 
   void _onHorizontalDragEnd(DragEndDetails d) {
     _pendingDrag = false;
     if (!_isDragging) return;
     setState(() => _isDragging = false);
-    
+
     final velocity = d.primaryVelocity ?? 0;
-    
-    // We want the visual finish to take a fixed minimum time so it doesn't instantly teleport.
-    // 250ms for fast flicks, 350ms for slow releases.
     final int targetMs = velocity.abs() > 300 ? 250 : 350;
 
-    // Calculate how much animation is left (minimum 5% to avoid divide-by-zero or massive numbers)
     final double remForward = (1.0 - _dragProgress).clamp(0.05, 1.0);
     final double remBackward = _dragProgress.clamp(0.05, 1.0);
-    
-    // Scale the total duration so the *remaining* sweep takes exactly targetMs
-    final int forwardTotalMs = (targetMs / remForward).round();
-    final int returnTotalMs = (targetMs / remBackward).round();
-    
-    if (velocity.abs() > 300) { // Fast swipe
+
+    final int forwardTotalMs = (targetMs / remForward).round().clamp(150, 650);
+    final int returnTotalMs = (targetMs / remBackward).round().clamp(150, 650);
+
+    if (velocity.abs() > 300) {
       if (_turnForward) {
-        // We were dragging Right-to-Left (opening page)
-        if (velocity < 0 && _currentPage < totalPages - 1) { // Flipped leftwards
+        if (velocity < 0) {
           _triggerTurn(forward: true, durationMs: forwardTotalMs);
-        } else { // Flipped rightwards (aborted)
+        } else {
           _triggerReturn(durationMs: returnTotalMs);
         }
       } else {
-        // We were dragging Left-to-Right (closing page)
-        if (velocity > 0 && _currentPage > 0) { // Flipped rightwards
+        if (velocity > 0) {
           _triggerTurn(forward: false, durationMs: forwardTotalMs);
-        } else { // Flipped leftwards (aborted)
+        } else {
           _triggerReturn(durationMs: returnTotalMs);
         }
       }
-    } else { // Slow drag release
+    } else {
       if (_dragProgress > 0.35) {
         _triggerTurn(forward: _turnForward, durationMs: forwardTotalMs);
       } else {
@@ -396,10 +698,40 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     if (index == 0 || index == totalPages - 1) {
       return _buildInsideCover(w, h);
     }
-    // For verses, the physical back of the page is just blank paper color
-    return Container(
-      width: w, height: h,
-      color: widget.sepiaMode ? const Color(0xFFF9F4E8) : const Color(0xFFF3EFE6),
+    final verseWidget = _getPage(index, w, h);
+    // Authentic parchment paper back with subtle devanagari watermark and mirrored verse bleed-through
+    return Stack(
+      children: [
+        Container(
+          width: w,
+          height: h,
+          color: widget.sepiaMode ? const Color(0xFFF9F4E8) : const Color(0xFFF3EFE6),
+        ),
+        if (verseWidget != null)
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.16,
+              child: Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.diagonal3Values(-1.0, 1.0, 1.0),
+                child: verseWidget,
+              ),
+            ),
+          ),
+        Center(
+          child: Opacity(
+            opacity: 0.10,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('ॐ', style: GoogleFonts.notoSerifDevanagari(fontSize: 68, color: const Color(0xFF5C1405), fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text('❖ ──── ॐ ──── ❖', style: GoogleFonts.outfit(color: const Color(0xFF5C1405), fontSize: 13)),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -417,7 +749,6 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
 
   Widget _build3DBookCanvas(double progress) {
     final size = MediaQuery.of(context).size;
-    // Full-screen: use full width and height
     final w = size.width;
     final h = size.height;
 
@@ -434,7 +765,6 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
             ? _currentPage 
             : (_turnForward ? _currentPage : (isClosingToCover ? 0 : _currentPage - 1)));
 
-    // Pages are always rendered at the FULL book width (w x h)
     final Widget? basePage = _isClosingBook ? null : _getPage(basePageIndex, w, h);
     final Widget? topPage = _getPage(topPageIndex, w, h);
 
@@ -450,59 +780,139 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     final double leftStackW = maxStackW * dynamicRatio;
     final double rightStackW = maxStackW * (1.0 - dynamicRatio);
 
-    // The sliver of the left/previous page that peeks out from the spine.
-    final double peekSliver = 18.0;
-
     Widget content;
     if (!isAnimatingOrDragging) {
       content = topPage != null ? _wrapPage(topPageIndex, topPage) : const SizedBox.shrink();
-    } else {
-      if (isFrontCoverTurn || _isClosingBook) {
-        // True 2-Sided 180-Degree Rigid Door Swing for the Front/Back Cover
-        final double turnAngle = _isClosingBook
-            ? (progress * math.pi) // Closing back cover swings right to left
-            : (_turnForward ? (progress * math.pi) : ((1.0 - progress) * math.pi));
+    } else if (isFrontCoverTurn || _isClosingBook) {
+      final double turnAngle = _isClosingBook
+          ? (progress * math.pi)
+          : (_turnForward ? (progress * math.pi) : ((1.0 - progress) * math.pi));
 
-        final bool isFrontVisible = _isClosingBook
-            ? turnAngle <= math.pi / 2
-            : turnAngle <= math.pi / 2;
+      final bool isFrontVisible = turnAngle <= math.pi / 2;
+      final double sineAngle = math.sin(turnAngle);
 
-        content = Stack(
-          clipBehavior: Clip.none,
-          children: [
-            if (basePage != null && !_isClosingBook) _wrapPage(basePageIndex, basePage),
+      content = Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // 1. Underneath page (basePage)
+          if (basePage != null && !_isClosingBook) ...[
+            _wrapPage(basePageIndex, basePage),
+            // Dynamic drop shadow cast on basePage by the turning page
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.only(
+                      topRight: Radius.circular(basePageIndex == 0 ? 6 : 2),
+                      bottomRight: Radius.circular(basePageIndex == 0 ? 6 : 2),
+                    ),
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.black.withValues(alpha: (0.42 * sineAngle).clamp(0.0, 0.45)),
+                        Colors.black.withValues(alpha: (0.12 * sineAngle).clamp(0.0, 0.2)),
+                        Colors.transparent,
+                      ],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      stops: [
+                        0.0,
+                        (0.25 + 0.35 * (1.0 - math.cos(turnAngle).abs())).clamp(0.1, 0.7),
+                        1.0,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+
+          // 2. The Turning Page in 3D (Cover Swing)
+          if (topPage != null)
             Transform(
               alignment: Alignment.centerLeft,
               transform: Matrix4.identity()
-                ..setEntry(3, 2, 0.0006) // Reduced perspective for natural full-screen 3D feel
+                ..setEntry(3, 2, 0.0006)
                 ..rotateY(turnAngle),
-              child: isFrontVisible 
-                  ? _wrapPage(topPageIndex, topPage!) 
+              child: isFrontVisible
+                  ? Stack(
+                      children: [
+                        _wrapPage(topPageIndex, topPage),
+                        // Ambient lighting & specular sheen on front of turning page
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.only(
+                                  topRight: Radius.circular(topPageIndex == 0 ? 6 : 2),
+                                  bottomRight: Radius.circular(topPageIndex == 0 ? 6 : 2),
+                                ),
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Colors.black.withValues(alpha: (0.10 * sineAngle).clamp(0.0, 0.2)),
+                                    Colors.white.withValues(alpha: (0.18 * sineAngle).clamp(0.0, 0.25)),
+                                    Colors.black.withValues(alpha: (0.28 * sineAngle).clamp(0.0, 0.4)),
+                                  ],
+                                  stops: const [0.0, 0.45, 1.0],
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
                   : Transform(
-                      // Render the OUTSIDE of the cover! Flipped so it's not mirrored when swung -180 deg
                       alignment: Alignment.center,
-                      transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
-                      child: _wrapPage(
-                        topPageIndex, 
-                        _isClosingBook ? _fallbackCover(w, h, showTitle: false) : (_getInsidePage(topPageIndex, w, h) ?? topPage!), 
-                        isLeft: false
+                      transform: Matrix4.diagonal3Values(-1.0, 1.0, 1.0),
+                      child: Stack(
+                        children: [
+                          _wrapPage(
+                            topPageIndex,
+                            _isClosingBook
+                                ? _fallbackCover(w, h, showTitle: false)
+                                : (_getInsidePage(topPageIndex, w, h) ?? topPage),
+                            isLeft: false,
+                          ),
+                          // Deep crease shadow on back of page along the spine
+                          Positioned(
+                            right: 0, top: 0, bottom: 0, width: 28,
+                            child: IgnorePointer(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.transparent,
+                                      Colors.black.withValues(alpha: (0.35 * sineAngle).clamp(0.0, 0.4)),
+                                    ],
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
             ),
-          ],
-        );
-      } else {
-        // Unified peel engine for inner pages
-        content = _TruePagePeelWidget(
-          progress: progress,
-          forward: _turnForward,
-          frontPage: _wrapPage(topPageIndex, topPage!),
-          basePage: basePage != null ? _wrapPage(basePageIndex, basePage) : const SizedBox.shrink(),
-          backSidePage: _wrapPage(topPageIndex, _getInsidePage(topPageIndex, w, h) ?? topPage!),
-          width: w,
-          height: h,
-        );
-      }
+        ],
+      );
+    } else {
+      // ── INNER PAGES: TRUE CYLINDRICAL CURVED PAPER PEEL ANIMATION ──
+      // Symmetrical engine: progress 0.0 -> 1.0 controls fold position F for both forward and backward turns.
+      content = _TruePagePeelWidget(
+        progress: progress,
+        forward: _turnForward,
+        frontPage: topPage != null ? _wrapPage(topPageIndex, topPage) : const SizedBox.shrink(),
+        basePage: basePage != null ? _wrapPage(basePageIndex, basePage) : const SizedBox.shrink(),
+        backSidePage: _wrapPage(
+          topPageIndex,
+          _getInsidePage(topPageIndex, w, h) ?? (topPage ?? const SizedBox.shrink()),
+        ),
+        width: w,
+        height: h,
+      );
     }
 
     // Determine which page should be visible statically on the left side.
@@ -557,7 +967,7 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
             Positioned(
               left: -w,
               top: 0, bottom: 0, width: w,
-              child: _wrapPage(leftStaticIndex, activeLeftPeekPage!, isLeft: true),
+              child: _wrapPage(leftStaticIndex, activeLeftPeekPage, isLeft: true),
             ),
 
           // ── 1. Right Pages Stack (Fore-edge) ──
@@ -726,12 +1136,26 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
       return _buildCoverFace(w, h);
     } else if (index == totalPages - 1) {
       return _BackCoverPage(
-        granthName: widget.granthTitle, 
+        granthName: widget.granthTitle,
         onReadAgain: () => setState(() { _currentPage = 0; }),
         onClose: _triggerCloseBookAnimation,
       );
     } else {
-      return _VersePage(verse: widget.verses[index - 1], verseIndex: index - 1, sepiaMode: widget.sepiaMode);
+      final vi = index - 1;
+      final startOffset = (vi < widget.verseWordOffsets.length) ? widget.verseWordOffsets[vi] : 0;
+      final endOffset = (vi + 1 < widget.verseWordOffsets.length)
+          ? widget.verseWordOffsets[vi + 1]
+          : widget.allWordCount;
+      // Local highlighted word index within this verse (-1 if none)
+      final localIdx = (widget.highlightedWordIndex >= startOffset && widget.highlightedWordIndex < endOffset)
+          ? widget.highlightedWordIndex - startOffset
+          : -1;
+      return _VersePage(
+        verse: widget.verses[vi],
+        verseIndex: vi,
+        sepiaMode: widget.sepiaMode,
+        highlightedLocalWordIndex: localIdx,
+      );
     }
   }
 
@@ -743,10 +1167,10 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     Widget imageContent;
     if (resolvedUrl.startsWith('http')) {
       imageContent = Image.network(resolvedUrl, fit: BoxFit.cover, width: w, height: h,
-          errorBuilder: (_, __, ___) => _fallbackCover(w, h));
+          errorBuilder: (context, error, stackTrace) => _fallbackCover(w, h));
     } else if (rawCover.startsWith('assets/')) {
       imageContent = Image.asset(rawCover, fit: BoxFit.cover, width: w, height: h,
-          errorBuilder: (_, __, ___) => _fallbackCover(w, h));
+          errorBuilder: (context, error, stackTrace) => _fallbackCover(w, h));
     } else {
       imageContent = _fallbackCover(w, h);
     }
@@ -811,147 +1235,6 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRUE MATHEMATICAL 2D PAGE FOLD WIDGET
-// Folds the right side of the page over itself flawlessly, no shaders needed.
-// ─────────────────────────────────────────────────────────────────────────────
-class _TruePagePeelWidget extends StatelessWidget {
-  const _TruePagePeelWidget({
-    required this.progress,
-    required this.forward,
-    required this.frontPage,
-    required this.basePage,
-    required this.backSidePage,
-    required this.width,
-    required this.height,
-  });
-
-  final double progress; // 0.0 to 1.0 (0=flat, 1=fully turned)
-  final bool forward;
-  final Widget frontPage;    // The page being turned (current)
-  final Widget basePage;     // The page underneath (next)
-  final Widget backSidePage; // What shows on the BACK of the turning page (real content)
-  final double width;
-  final double height;
-
-  @override
-  Widget build(BuildContext context) {
-    // p represents the forward peel state (0.0 = flat frontPage, 1.0 = fully turned).
-    // When moving backward, we are reversing that exact page animation from left to right:
-    // p smoothly goes from 1.0 (turned over to the left) down to 0.0 (un-peeled, flat on the right).
-    final double p = forward ? progress : (1.0 - progress);
-
-    // F = fold crease X position
-    final double F = width * (1.0 - p);
-    // backLeft = left edge of the folded flap (mirrors around F)
-    final double backLeft = (2 * F - width).clamp(-width, width);
-    
-    // Slight diagonal (conical) lift — peaks at midpoint of swipe
-    final double liftAngle = math.sin(p * math.pi) * 0.05; // ~2.9 degrees
-
-    return ClipRect(
-      clipper: _OverflowClipper(-width, width * 2, height),
-      child: Stack(
-        children: [
-          // 1. Base Page (underneath)
-          Positioned.fill(child: basePage),
-
-          // 2. Drop shadow cast by the fold crease onto the base page
-          if (p > 0.01 && p < 0.99)
-            Positioned(
-              left: F, top: 0, bottom: 0,
-              width: math.min(50.0, width - F),
-              child: IgnorePointer(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.black.withValues(alpha: 0.4),
-                        Colors.transparent,
-                      ],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-          // 3. Flat left portion of the front page
-          if (F > 0)
-            ClipRect(
-              clipper: _RectClipper(0, F),
-              child: frontPage,
-            ),
-
-          // 4. The folded flap — back side shows actual page content (bleed-through)
-          if (p > 0.01 && p < 0.99 && F > backLeft)
-            Transform(
-              // Rotate around the fold crease at x=F
-              alignment: Alignment(F / width * 2 - 1, 0), // normalize to [-1,1]
-              transform: Matrix4.identity()
-                ..setEntry(3, 2, 0.001) // slight 3D perspective
-                ..rotateY(math.pi - p * math.pi * 0.18) // 3D curl angle
-                ..rotateZ(-liftAngle), // diagonal corner lift
-              child: ClipRect(
-                clipper: _RectClipper(F > 0 ? F : 0, width),
-                child: Stack(
-                  children: [
-                    // The back of the page — real content, horizontally flipped
-                    Transform(
-                      alignment: Alignment.center,
-                      transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
-                      child: backSidePage,
-                    ),
-                    // Paper semi-opacity overlay (real book paper is slightly translucent)
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: Container(color: Colors.white.withValues(alpha: 0.82)),
-                      ),
-                    ),
-                    // Fold lighting: bright highlight on the crease, shadow on the far edge
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                Colors.black.withValues(alpha: 0.0),   // free edge (left)
-                                Colors.white.withValues(alpha: 0.45),  // specular highlight at crease
-                                Colors.black.withValues(alpha: 0.35),  // inner shadow at crease
-                              ],
-                              stops: const [0.0, 0.75, 1.0],
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RectClipper extends CustomClipper<Rect> {
-  const _RectClipper(this.left, this.right);
-  final double left;
-  final double right;
-
-  @override
-  Rect getClip(Size size) {
-    return Rect.fromLTRB(math.max(0, left), 0, math.min(size.width, right), size.height);
-  }
-
-  @override
-  bool shouldReclip(_RectClipper old) => old.left != left || old.right != right;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 class _ForeEdgeLinesPainter extends CustomPainter {
@@ -987,10 +1270,99 @@ class _LeatherTexturePainter extends CustomPainter {
 // VERSE PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 class _VersePage extends StatelessWidget {
-  const _VersePage({required this.verse, required this.verseIndex, required this.sepiaMode});
+  const _VersePage({
+    required this.verse,
+    required this.verseIndex,
+    required this.sepiaMode,
+    this.highlightedLocalWordIndex = -1,
+  });
   final Map<String, String> verse;
   final int verseIndex;
   final bool sepiaMode;
+  /// Index of the highlighted word within THIS verse's Sanskrit token list. -1 = none.
+  final int highlightedLocalWordIndex;
+
+  /// Build a rich text widget that highlights the active word while preserving 100% of
+  /// the original admin-entered whitespace, newlines (\n), and devanagari dandas (। ॥).
+  Widget _buildKaraokeText(String text, TextStyle baseStyle) {
+    if (text.isEmpty) return const SizedBox.shrink();
+    final wordPattern = RegExp(r'[^\s।॥\n\r,.:;!?]+');
+    final matches = wordPattern.allMatches(text).toList();
+    if (matches.isEmpty) {
+      return Text(text, textAlign: TextAlign.center, style: baseStyle);
+    }
+
+    if (highlightedLocalWordIndex < 0 || highlightedLocalWordIndex >= matches.length) {
+      // No active highlight on this verse: render text naturally
+      return Text(text, textAlign: TextAlign.center, style: baseStyle);
+    }
+
+    // Reconstruct the exact string with rich styling on the active word
+    final spans = <InlineSpan>[];
+    int lastIndex = 0;
+
+    for (int i = 0; i < matches.length; i++) {
+      final m = matches[i];
+      // Delimiter before this word (spaces, newlines, dandas)
+      if (m.start > lastIndex) {
+        spans.add(TextSpan(
+          text: text.substring(lastIndex, m.start),
+          style: baseStyle,
+        ));
+      }
+
+      final isHighlighted = (i == highlightedLocalWordIndex);
+      final wordStr = m.group(0)!;
+
+      if (isHighlighted) {
+        spans.add(WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+            margin: const EdgeInsets.symmetric(horizontal: 1),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFD54F), // Radiant holy gold highlight
+              borderRadius: BorderRadius.circular(5),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFF8C1A).withValues(alpha: 0.65),
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: Text(
+              wordStr,
+              style: baseStyle.copyWith(
+                color: const Color(0xFF8B0000), // Deep sacred crimson for high readability
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ));
+      } else {
+        spans.add(TextSpan(
+          text: wordStr,
+          style: baseStyle,
+        ));
+      }
+
+      lastIndex = m.end;
+    }
+
+    // Trailing punctuation / newlines after the last word
+    if (lastIndex < text.length) {
+      spans.add(TextSpan(
+        text: text.substring(lastIndex),
+        style: baseStyle,
+      ));
+    }
+
+    return Text.rich(
+      TextSpan(children: spans),
+      textAlign: TextAlign.center,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1010,6 +1382,13 @@ class _VersePage extends StatelessWidget {
 
     final topSafePadding = MediaQuery.paddingOf(context).top;
     final contentTopPadding = math.max(16.0, topSafePadding + 18.0);
+
+    final sanskritBaseStyle = GoogleFonts.notoSerifDevanagari(
+      fontSize: 19,
+      height: 1.8,
+      color: const Color(0xFF4A1005),
+      fontWeight: FontWeight.w700,
+    );
 
     return Padding(
       padding: const EdgeInsets.all(12),
@@ -1049,12 +1428,31 @@ class _VersePage extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(height: 6),
+                          // Karaoke indicator pill — appears while a word is highlighted
+                          if (highlightedLocalWordIndex >= 0)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFF8C1A).withValues(alpha: 0.15),
+                                border: Border.all(color: const Color(0xFFFF8C1A).withValues(alpha: 0.5), width: 0.8),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.music_note_rounded, size: 10, color: Color(0xFFD55F00)),
+                                  const SizedBox(width: 4),
+                                  Text('Now Playing', style: GoogleFonts.outfit(fontSize: 9, color: const Color(0xFFD55F00), fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
                           Text('Verse ${verseIndex + 1}',
                               style: GoogleFonts.outfit(color: const Color(0xFF8B6048), fontSize: 11, fontWeight: FontWeight.w500)),
                           const SizedBox(height: 14),
+                          // ── Karaoke-enabled Sanskrit text ──
                           if (sanskritText.isNotEmpty) ...[
-                            Text(sanskritText, textAlign: TextAlign.center,
-                                style: GoogleFonts.notoSerifDevanagari(fontSize: 19, height: 1.8, color: const Color(0xFF4A1005), fontWeight: FontWeight.w700)),
+                            _buildKaraokeText(sanskritText, sanskritBaseStyle),
                             const SizedBox(height: 16),
                           ],
                           if (transliterationText.isNotEmpty) ...[
@@ -1065,15 +1463,21 @@ class _VersePage extends StatelessWidget {
                           if (rawHindi.isNotEmpty) ...[
                             _divider('भावार्थ', devanagari: true),
                             const SizedBox(height: 8),
-                            Text(rawHindi, textAlign: TextAlign.center,
-                                style: GoogleFonts.notoSerifDevanagari(fontSize: 16, height: 1.7, color: bodyColor.withValues(alpha: 0.95), fontWeight: FontWeight.w500)),
+                            if (sanskritText.isEmpty)
+                              _buildKaraokeText(rawHindi, GoogleFonts.notoSerifDevanagari(fontSize: 16, height: 1.7, color: bodyColor.withValues(alpha: 0.95), fontWeight: FontWeight.w500))
+                            else
+                              Text(rawHindi, textAlign: TextAlign.center,
+                                  style: GoogleFonts.notoSerifDevanagari(fontSize: 16, height: 1.7, color: bodyColor.withValues(alpha: 0.95), fontWeight: FontWeight.w500)),
                             const SizedBox(height: 16),
                           ],
                           if (rawEnglish.isNotEmpty) ...[
                             _divider('English Translation'),
                             const SizedBox(height: 8),
-                            Text(rawEnglish, textAlign: TextAlign.center,
-                                style: GoogleFonts.outfit(fontSize: 14.5, height: 1.65, color: bodyColor.withValues(alpha: 0.92), fontWeight: FontWeight.w500)),
+                            if (sanskritText.isEmpty && rawHindi.isEmpty)
+                              _buildKaraokeText(rawEnglish, GoogleFonts.outfit(fontSize: 14.5, height: 1.65, color: bodyColor.withValues(alpha: 0.92), fontWeight: FontWeight.w500))
+                            else
+                              Text(rawEnglish, textAlign: TextAlign.center,
+                                  style: GoogleFonts.outfit(fontSize: 14.5, height: 1.65, color: bodyColor.withValues(alpha: 0.92), fontWeight: FontWeight.w500)),
                             const SizedBox(height: 12),
                           ],
                         ],
@@ -1197,18 +1601,221 @@ class _BackCoverPage extends StatelessWidget {
   }
 }
 
-class _OverflowClipper extends CustomClipper<Rect> {
-  final double leftOffset;
+// ─────────────────────────────────────────────────────────────────────────────
+// TRUE 3D CYLINDRICAL CURVED PAGE PEEL WIDGET
+// Folds & unrolls realistic flexible paper with authentic 3D curvature,
+// dynamic crease drop-shadow, specular sheen, and paper depth.
+// Symmetrically handles both forward (right-to-left) and backward (left-to-right) turns.
+// Front and base pages maintain fixed full-width layout so text NEVER shifts or reflows.
+// ─────────────────────────────────────────────────────────────────────────────
+class _TruePagePeelWidget extends StatelessWidget {
+  const _TruePagePeelWidget({
+    required this.progress, // 0.0 to 1.0 (0 = start of swipe, 1 = swipe completed)
+    required this.forward,  // true = forward (R->L), false = backward (L->R)
+    required this.frontPage,
+    required this.basePage,
+    required this.backSidePage,
+    required this.width,
+    required this.height,
+  });
+
+  final double progress;
+  final bool forward;
+  final Widget frontPage;
+  final Widget basePage;
+  final Widget backSidePage;
   final double width;
   final double height;
 
-  _OverflowClipper(this.leftOffset, this.width, this.height);
+  @override
+  Widget build(BuildContext context) {
+    final double clampedP = progress.clamp(0.0, 1.0);
+    // When forward: effectiveP goes 0.0 -> 1.0 (crease F moves width -> 0)
+    // When backward: effectiveP goes 1.0 -> 0.0 (crease F moves 0 -> width)
+    final double effectiveP = forward ? clampedP : (1.0 - clampedP);
+
+    // Smooth bell curve intensity for shadows and 3D depth
+    final double shadowIntensity = math.sin(effectiveP * math.pi);
+
+    // Fold crease X position strictly within [0, width]
+    final double F = width * (1.0 - effectiveP);
+
+    return SizedBox(
+      width: width,
+      height: height,
+      child: ClipRect(
+        child: Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            // ── 1. Base Page (Underneath) ──
+            // Always fixed at full width x height so its text NEVER shifts or reflows.
+            Positioned(
+              left: 0,
+              top: 0,
+              width: width,
+              height: height,
+              child: basePage,
+            ),
+
+            // ── 2. Drop Shadow Cast on Base Page by the 3D turning paper ──
+            // Cast to the right of F onto the basePage
+            if (effectiveP > 0.005 && effectiveP < 0.995 && F < width - 1)
+              Positioned(
+                left: F.clamp(0.0, width),
+                top: 0,
+                bottom: 0,
+                width: math.min(55.0, (width - F).clamp(0.0, width)),
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.black.withValues(alpha: (0.42 * shadowIntensity).clamp(0.0, 0.45)),
+                          Colors.black.withValues(alpha: (0.12 * shadowIntensity).clamp(0.0, 0.18)),
+                          Colors.transparent,
+                        ],
+                        stops: const [0.0, 0.35, 1.0],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+            // ── 3. Flat Portion of Front Page (Clipped strictly to [0, F]) ──
+            // CRITICAL: Positioned has width: width (NOT F) so constraints are always full-width!
+            // The text is always centered at width/2 and NEVER changes its position during swipe!
+            if (F > 0.5)
+              Positioned(
+                left: 0,
+                top: 0,
+                width: width,
+                height: height,
+                child: ClipRect(
+                  clipper: _RectClipper(0, F),
+                  child: frontPage,
+                ),
+              ),
+
+            // ── 4. Soft Inner Crease Shadow on Front Page just left of F ──
+            if (effectiveP > 0.01 && effectiveP < 0.99 && F > 4)
+              Positioned(
+                left: math.max(0.0, F - 28.0),
+                top: 0,
+                bottom: 0,
+                width: math.min(28.0, F),
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: (0.22 * shadowIntensity).clamp(0.0, 0.25)),
+                        ],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+            // ── 5. The 3D Turning Page Flap ──
+            // Authentic 3D perspective curl around the crease at x=F.
+            // Vertically aligned so top and bottom stay strictly horizontal with no corner tilt.
+            if (effectiveP > 0.01 && effectiveP < 0.99 && F < width - 2)
+              Positioned(
+                left: 0,
+                top: 0,
+                width: width,
+                height: height,
+                child: Transform(
+                  alignment: Alignment(F / width * 2.0 - 1.0, 0.0),
+                  transform: Matrix4.identity()
+                    ..setEntry(3, 2, 0.0008) // Natural 3D perspective depth
+                    ..rotateY(math.pi - effectiveP * math.pi * 0.20), // 3D curl angle around fold
+                  child: ClipRect(
+                    clipper: _RectClipper(F, width),
+                    child: SizedBox(
+                      width: width,
+                      height: height,
+                      child: Stack(
+                        children: [
+                          // Mirrored back of the turning page (real content with sacred markings)
+                          Positioned.fill(
+                            child: Transform(
+                              alignment: Alignment.center,
+                              transform: Matrix4.diagonal3Values(-1.0, 1.0, 1.0),
+                              child: backSidePage,
+                            ),
+                          ),
+                          // Paper semi-translucent warm parchment overlay
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: Container(
+                                color: Colors.white.withValues(alpha: 0.18),
+                              ),
+                            ),
+                          ),
+                          // Fold lighting: specular highlight at crease, shadow on the far edge
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.black.withValues(alpha: 0.0), // free edge
+                                      Colors.white.withValues(alpha: (0.42 * shadowIntensity).clamp(0.0, 0.45)), // specular highlight
+                                      Colors.black.withValues(alpha: (0.35 * shadowIntensity).clamp(0.0, 0.38)), // inner shadow at crease
+                                    ],
+                                    stops: const [0.0, 0.70, 1.0],
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+            // ── 6. Fine Crease Line Highlight at fold F ──
+            if (effectiveP > 0.01 && effectiveP < 0.99 && F > 1.0 && F < width - 1.0)
+              Positioned(
+                left: F - 0.75,
+                top: 0,
+                bottom: 0,
+                width: 1.5,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: (0.45 * shadowIntensity).clamp(0.0, 0.50)),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RectClipper extends CustomClipper<Rect> {
+  const _RectClipper(this.left, this.right);
+  final double left;
+  final double right;
 
   @override
   Rect getClip(Size size) {
-    return Rect.fromLTWH(leftOffset, 0, width, height);
+    return Rect.fromLTRB(math.max(0, left), 0, math.min(size.width, right), size.height);
   }
 
   @override
-  bool shouldReclip(covariant CustomClipper<Rect> oldClipper) => true;
+  bool shouldReclip(_RectClipper oldClipper) => oldClipper.left != left || oldClipper.right != right;
 }
