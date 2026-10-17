@@ -29,6 +29,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   List<Map<String, String>> _verses = [];
   bool _isLoadingPages = true;
   final bool _sepiaMode = true;
+  final bool _showAudioPlayerFab = false; // Hidden for now
 
   // ── Audio / Karaoke state ──────────────────────────────────────────────────
   final GlobalKey<_BookViewerState> _bookViewerKey = GlobalKey<_BookViewerState>();
@@ -345,8 +346,8 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
               ),
             ),
 
-            // ── Sacred Floating Play/Pause Button ──────────────────────────
-            if (!_isLoadingPages)
+            // ── Sacred Floating Play/Pause Button (Hidden for now) ─────────
+            if (_showAudioPlayerFab && !_isLoadingPages)
               Positioned(
                 bottom: bottomPadding + 28,
                 right: 20,

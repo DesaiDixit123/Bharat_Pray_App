@@ -7,7 +7,6 @@ import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/jap_models.dart';
 import '../../models/particles.dart';
@@ -1000,6 +999,8 @@ class _JapDetailScreenState extends State<JapDetailScreen>
 
   late List<int> _shuffledIndices;
   late List<Offset> _jitteredPoints;
+  double _currentCanvasWidth = 393.0;
+  double _currentCanvasHeight = 852.0;
 
   late final AudioPlayer _audioPlayer;
   late final AnimationController _revealController;
@@ -1018,9 +1019,10 @@ class _JapDetailScreenState extends State<JapDetailScreen>
 
   ImageProvider? _imageProvider;
 
-  VideoPlayerController? _videoController;
+  int _animKey = 0;
   bool _isVideoPlaying = false;
-  String _currentVideoAsset = '';
+  String _currentAnimationAsset = '';
+  Timer? _videoAnimTimer;
 
   // Premium Devotional Animation System State
   late JapAnimationType _activeAnimationType;
@@ -1033,15 +1035,15 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   String _resolveAnimationVideo() {
     switch (_activeAnimationType) {
       case JapAnimationType.dhupVideo:
-        return 'assets/videos/dhup_animation.mp4';
+        return 'assets/videos/dhup_animation.webp';
       case JapAnimationType.ramVideo:
-        return 'assets/videos/ram-ram-animation.mp4';
+        return 'assets/videos/ram-ram-animation.webp';
       case JapAnimationType.lotusVideo:
-        return 'assets/videos/lotus-animation.mp4';
+        return 'assets/videos/lotus-animation.webp';
       case JapAnimationType.peacockVideo:
-        return 'assets/videos/peakok-feather.mp4';
+        return 'assets/videos/peakok-feather.webp';
       case JapAnimationType.aartiVideo:
-        return 'assets/videos/arati-animation.mp4';
+        return 'assets/videos/arati-animation.webp';
       default:
         break;
     }
@@ -1050,44 +1052,30 @@ class _JapDetailScreenState extends State<JapDetailScreen>
     final name = widget.entry.name.toLowerCase();
 
     if (shape == 'ram' || shape.contains('ram') || name.contains('ram') || name.contains('raghav') || name.contains('sita')) {
-      return 'assets/videos/ram-ram-animation.mp4';
+      return 'assets/videos/ram-ram-animation.webp';
     }
     if (shape == 'peakok' || shape.contains('peakok') || shape.contains('peacock') || shape.contains('radhe') || shape.contains('krishna') ||
         name.contains('radha') || name.contains('krishna') || name.contains('kanha') || name.contains('govind') || name.contains('mor') || name.contains('pankh')) {
-      return 'assets/videos/peakok-feather.mp4';
+      return 'assets/videos/peakok-feather.webp';
     }
     if (shape == 'dhup' || shape.contains('dhup') || shape.contains('dhoop') || shape.contains('shiva') ||
         name.contains('shiva') || name.contains('shiv') || name.contains('mahadev') || name.contains('shankar') || name.contains('bhole')) {
-      return 'assets/videos/dhup_animation.mp4';
+      return 'assets/videos/dhup_animation.webp';
     }
     if (shape == 'arati' || shape.contains('arati') || shape.contains('aarti') || shape.contains('durga') || shape.contains('hanuman') ||
         name.contains('aarti') || name.contains('arati') || name.contains('diya') || name.contains('durga') || name.contains('mata') || name.contains('ambe') || name.contains('mandir') || name.contains('temple')) {
-      return 'assets/videos/arati-animation.mp4';
+      return 'assets/videos/arati-animation.webp';
     }
     if (shape == 'lotus' || shape.contains('lotus') || shape.contains('om') || shape.contains('ganesh') || shape.contains('navkar') ||
         name.contains('ganesh') || name.contains('ganpati') || name.contains('lakshmi') || name.contains('laxmi') || name.contains('lotus') || name.contains('kamal')) {
-      return 'assets/videos/lotus-animation.mp4';
+      return 'assets/videos/lotus-animation.webp';
     }
 
-    return 'assets/videos/dhup_animation.mp4';
+    return 'assets/videos/dhup_animation.webp';
   }
 
   void _initVideoAnimation() {
-    _videoController?.dispose();
-    _currentVideoAsset = _resolveAnimationVideo();
-    _videoController = VideoPlayerController.asset(_currentVideoAsset)
-      ..initialize().then((_) {
-        if (mounted) setState(() {});
-      }).catchError((err) {
-        debugPrint('[JapVideo] Error initializing $_currentVideoAsset: $err');
-      })
-      ..setLooping(false);
-
-    if (widget.entry.shlokAudioUrl != null && widget.entry.shlokAudioUrl!.isNotEmpty) {
-      _videoController?.setVolume(0.0);
-    } else {
-      _videoController?.setVolume(1.0);
-    }
+    _currentAnimationAsset = _resolveAnimationVideo();
   }
 
   Future<void> _loadSavedAnimationPreference() async {
@@ -1116,6 +1104,11 @@ class _JapDetailScreenState extends State<JapDetailScreen>
         } catch (_) {}
         if (selected.isVideo) {
           _initVideoAnimation();
+          if (mounted && _currentAnimationAsset.isNotEmpty) {
+            try {
+              precacheImage(AssetImage(_currentAnimationAsset), context);
+            } catch (_) {}
+          }
         }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1154,15 +1147,16 @@ class _JapDetailScreenState extends State<JapDetailScreen>
     return List.generate(_target, (i) => i)..shuffle(rng);
   }
 
-  List<Offset> _generateJitteredPoints(int malaSeed) {
+  List<Offset> _generateJitteredPoints(int malaSeed, [double width = 393.0, double height = 852.0]) {
     final rng = math.Random(widget.entry.name.hashCode ^ (malaSeed + 123));
     List<Offset> points = [];
 
-    final int cols = math.max(1, math.sqrt(_target / 1.47).round());
+    final double aspect = width / height;
+    final int cols = math.max(1, math.sqrt(_target * aspect).round());
     final int rows = (_target / cols).ceil();
 
-    final double cellWidth = 353.0 / cols;
-    final double cellHeight = 520.0 / rows;
+    final double cellWidth = width / cols;
+    final double cellHeight = height / rows;
 
     for (int i = 0; i < _target; i++) {
       final col = i % cols;
@@ -1176,8 +1170,8 @@ class _JapDetailScreenState extends State<JapDetailScreen>
 
       points.add(
         Offset(
-          (cellCenterX + dx).clamp(25.0, 328.0),
-          (cellCenterY + dy).clamp(30.0, 490.0),
+          (cellCenterX + dx).clamp(cellWidth * 0.15, width - cellWidth * 0.15),
+          (cellCenterY + dy).clamp(cellHeight * 0.15, height - cellHeight * 0.15),
         ),
       );
     }
@@ -1219,7 +1213,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
 
     _revealController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 650),
     );
 
     _completionController = AnimationController(
@@ -1246,7 +1240,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   }
 
   void _tryUnlockTap() {
-    if (!_isRevealAnimating && !_isAudioPlaying && !_isVideoPlaying && !_isPremiumAnimPlaying && _count < _target) {
+    if (!_isRevealAnimating && _count < _target) {
       if (mounted) {
         setState(() => _canTap = true);
       }
@@ -1255,11 +1249,15 @@ class _JapDetailScreenState extends State<JapDetailScreen>
 
   void _resetMala() {
     if (mounted) {
-      _videoController?.pause();
-      _videoController?.seekTo(Duration.zero);
+      _videoAnimTimer?.cancel();
+      _videoAnimTimer = null;
+      if (_currentAnimationAsset.isNotEmpty) {
+        PaintingBinding.instance.imageCache.evict(AssetImage(_currentAnimationAsset));
+      }
       _premiumAnimController.reset();
       HapticFeedback.mediumImpact();
       setState(() {
+        _animKey++;
         _count = 0;
         _completedMalas = 0;
         _canTap = true;
@@ -1271,7 +1269,7 @@ class _JapDetailScreenState extends State<JapDetailScreen>
         _showContinueButton = false;
         _lifecycle = JapLifecycle.started;
         _shuffledIndices = _buildShuffled(0);
-        _jitteredPoints = _generateJitteredPoints(0);
+        _jitteredPoints = _generateJitteredPoints(0, _currentCanvasWidth, _currentCanvasHeight);
         _embers.clear();
         _petals.clear();
         _glowRings.clear();
@@ -1335,12 +1333,27 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   }
 
   void _updateParticlesNoSetState() {
-    // Particle animations removed
+    _glowRings.removeWhere((r) => !r.update());
+    _tapSparks.removeWhere((s) => !s.update());
+    _floatingOms.removeWhere((o) => !o.update());
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final screenSize = MediaQuery.sizeOf(context);
+    if (screenSize.width > 0 &&
+        screenSize.height > 0 &&
+        ((screenSize.width - _currentCanvasWidth).abs() > 1.0 ||
+            (screenSize.height - _currentCanvasHeight).abs() > 1.0)) {
+      _currentCanvasWidth = screenSize.width;
+      _currentCanvasHeight = screenSize.height;
+      _jitteredPoints = _generateJitteredPoints(
+        _completedMalas,
+        _currentCanvasWidth,
+        _currentCanvasHeight,
+      );
+    }
     if (_imageProvider == null) {
       final defaultAsset = JapConfig.defaultDeityImage(widget.entry.name);
       final path = widget.entry.darshanImageUrl.isNotEmpty
@@ -1360,14 +1373,19 @@ class _JapDetailScreenState extends State<JapDetailScreen>
         precacheImage(_imageProvider!, context);
       } catch (_) {}
     }
+    if (_currentAnimationAsset.isNotEmpty) {
+      try {
+        precacheImage(AssetImage(_currentAnimationAsset), context);
+      } catch (_) {}
+    }
   }
 
   @override
   void dispose() {
+    _videoAnimTimer?.cancel();
     _syncDebounceTimer?.cancel();
     _triggerBackgroundSync();
     _premiumAnimController.dispose();
-    _videoController?.dispose();
     _audioPlayer.dispose();
     _revealController.dispose();
     _completionController.dispose();
@@ -1406,100 +1424,81 @@ class _JapDetailScreenState extends State<JapDetailScreen>
     final tileIdx = _shuffledIndices[revealPos];
     final revealPt = _jitteredPoints[tileIdx];
 
+    // 4. Update count and start serene reveal immediately!
     setState(() {
-      _canTap = false;
-      _isAudioPlaying = true;
-      _buttonScale = 0.82;
+      _count = math.min(_count + 1, _target);
+      _revealingTile = tileIdx;
       _currentRevealPoint = revealPt;
-      _revealingTile = null; // Do not unmask tile until animation completes!
+      _isRevealAnimating = true;
+      _canTap = false;
+      _buttonScale = 0.94;
+      _lifecycle = _count >= _target ? JapLifecycle.completed : JapLifecycle.inProgress;
     });
 
-    // Tactile Button spring animation
-    Future.delayed(const Duration(milliseconds: 70), () {
-      if (mounted) setState(() => _buttonScale = 1.12);
+    // Gentle tactile button response
+    Future.delayed(const Duration(milliseconds: 90), () {
+      if (mounted) setState(() => _buttonScale = 1.03);
     });
-    Future.delayed(const Duration(milliseconds: 150), () {
+    Future.delayed(const Duration(milliseconds: 200), () {
       if (mounted) setState(() => _buttonScale = 1.0);
     });
 
-    // Helper: Reveals tile and updates count strictly AFTER animation completes
-    void completeChantAndReveal() {
+    // 6. Launch smooth sacred unmasking aperture bloom immediately!
+    _revealController.forward(from: 0.0).then((_) {
       if (!mounted) return;
       setState(() {
-        _count = math.min(_count + 1, _target);
-        _revealingTile = tileIdx;
-        _isRevealAnimating = true;
-        _lifecycle = _count >= _target
-            ? JapLifecycle.completed
-            : JapLifecycle.inProgress;
-        _isPremiumAnimPlaying = false;
-        _isVideoPlaying = false;
+        _revealingTile = null;
+        _isRevealAnimating = false;
       });
+      _tryUnlockTap();
+    });
 
-      // Soft feathered unmasking animation
-      _revealController.forward(from: 0.0).then((_) {
-        if (!mounted) return;
-        setState(() {
-          _revealingTile = null;
-          _isRevealAnimating = false;
-        });
-        _tryUnlockTap();
-      });
-
-      // Persistence to local cache
-      JapOfflineRepository.saveProgress(
-        japId: widget.entry.id,
-        count: _count,
-        completedMalas: _completedMalas,
-      );
-
-      // Immediate debounce sync on tap (syncs after 1.5s of inactivity or on milestones)
-      _syncDebounceTimer?.cancel();
-      _syncDebounceTimer = Timer(const Duration(milliseconds: 1500), () {
-        _triggerBackgroundSync();
-      });
-      if (_count % 27 == 0 || _count >= _target) {
-        _triggerBackgroundSync();
-      }
-    }
-
-    // 3b. Trigger Animation: Video vs New Premium Devotional Animation
+    // 7. Concurrent Devotional Animation (Video/WebP vs Premium Devotional Animation)
     if (_activeAnimationType.isVideo) {
-      final ctrl = _videoController;
-      if (ctrl != null && ctrl.value.isInitialized) {
-        ctrl.seekTo(Duration.zero).then((_) {
-          ctrl.play();
-        });
-        setState(() {
-          _isVideoPlaying = true;
-        });
+      _videoAnimTimer?.cancel();
+      if (_currentAnimationAsset.isNotEmpty) {
+        PaintingBinding.instance.imageCache.evict(AssetImage(_currentAnimationAsset));
       }
-
-      // Video completes after duration -> then reveal!
-      Future.delayed(const Duration(milliseconds: 3500), () {
+      setState(() {
+        _animKey++;
+        _isVideoPlaying = true;
+      });
+      _videoAnimTimer = Timer(const Duration(milliseconds: 3800), () {
         if (mounted) {
-          _videoController?.pause();
-          completeChantAndReveal();
+          setState(() => _isVideoPlaying = false);
         }
       });
     } else {
-      // Premium Devotional Animation (Duration: ~3.0 seconds)
       _animSeed = math.Random().nextDouble();
-
-      // Resolve devotional mantra for text-based animations
       if (_activeAnimationType == JapAnimationType.mantraLight) {
         _currentMantra = JapMantraHelper.getRandomMantra(widget.entry.name);
       } else {
         _currentMantra = '';
       }
-
       setState(() {
         _isPremiumAnimPlaying = true;
       });
-      // Animation plays first -> when completed, the tile reveals!
       _premiumAnimController.forward(from: 0.0).then((_) {
-        completeChantAndReveal();
+        if (mounted) {
+          setState(() => _isPremiumAnimPlaying = false);
+        }
       });
+    }
+
+    // Persistence to local cache
+    JapOfflineRepository.saveProgress(
+      japId: widget.entry.id,
+      count: _count,
+      completedMalas: _completedMalas,
+    );
+
+    // Immediate debounce sync on tap (syncs after 1.5s of inactivity or on milestones)
+    _syncDebounceTimer?.cancel();
+    _syncDebounceTimer = Timer(const Duration(milliseconds: 1500), () {
+      _triggerBackgroundSync();
+    });
+    if (_count % 27 == 0 || _count >= _target) {
+      _triggerBackgroundSync();
     }
 
     // 8. Audio playback
@@ -1606,7 +1605,11 @@ class _JapDetailScreenState extends State<JapDetailScreen>
       _petals.clear();
       // Rebuild grid with new seed so shape positions shuffle for the new mala
       _shuffledIndices = _buildShuffled(_completedMalas);
-      _jitteredPoints = _generateJitteredPoints(_completedMalas);
+      _jitteredPoints = _generateJitteredPoints(
+        _completedMalas,
+        _currentCanvasWidth,
+        _currentCanvasHeight,
+      );
     });
     _completionController.value = 0.0;
   }
@@ -1616,6 +1619,19 @@ class _JapDetailScreenState extends State<JapDetailScreen>
     final pack = widget.entry.effectPack;
     final isCompleted = _completedMalas > 0 || _count >= _target;
     final bool isBusy = _isAudioPlaying || !_canTap;
+    final screenSize = MediaQuery.sizeOf(context);
+    if (screenSize.width > 0 &&
+        screenSize.height > 0 &&
+        (screenSize.width != _currentCanvasWidth ||
+            screenSize.height != _currentCanvasHeight)) {
+      _currentCanvasWidth = screenSize.width;
+      _currentCanvasHeight = screenSize.height;
+      _jitteredPoints = _generateJitteredPoints(
+        _completedMalas,
+        screenSize.width,
+        screenSize.height,
+      );
+    }
 
     return PopScope(
       canPop: false,
@@ -1624,510 +1640,602 @@ class _JapDetailScreenState extends State<JapDetailScreen>
         Navigator.pop(context, _totalProgress);
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFFFFF0E6),
+        backgroundColor: Colors.black,
         body: Stack(
+          fit: StackFit.expand,
           children: [
-            // Background Divine Painter
+            // ── Layer 1: Edge-to-Edge Darshan & Unmasking Canvas (Tap anywhere to chant) ──
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _increment,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Unmasked Base Deity Image (Full Screen Edge-to-Edge)
+                    if (_imageProvider != null)
+                      Image(
+                        image: _imageProvider!,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                        errorBuilder: (context, error, stackTrace) => Image.asset(
+                          JapConfig.defaultDeityImage(widget.entry.name),
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: double.infinity,
+                        ),
+                      ),
+
+                    // Interactive Mask & Reveal Painter (Reveals tile-by-tile over full screen)
+                    AnimatedBuilder(
+                      animation: Listenable.merge([
+                        _revealController,
+                        _completionController,
+                        _ambientController,
+                      ]),
+                      builder: (ctx, _) {
+                        return CustomPaint(
+                          size: Size.infinite,
+                          painter: DivineCardPainter(
+                            jitteredPoints: _jitteredPoints,
+                            shuffledIndices: _shuffledIndices,
+                            count: _count,
+                            target: _target,
+                            revealingTileIndex: _revealingTile,
+                            currentRevealProgress: _revealController.value,
+                            completionFadeProgress: _completionController.value,
+                            glowRings: _glowRings,
+                            tapSparks: _tapSparks,
+                            spiralSparks: _spiralSparks,
+                            floatingOms: _floatingOms,
+                            mistParticles: _mistParticles,
+                            smokePuffs: _smokePuffs,
+                            tapPetals: _tapPetals,
+                            divineSymbolParticles: _divineSymbolParticles,
+                            timeSeconds: _ambientController.value * 10.0,
+                            isCompleted: isCompleted,
+                            effectPack: widget.entry.effectPack,
+                          ),
+                        );
+                      },
+                    ),
+
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Layer 2: Ambient Background Divine Rays/Particles ──
             AnimatedBuilder(
               animation: _ambientController,
               builder: (ctx, _) {
-                return CustomPaint(
-                  size: MediaQuery.of(context).size,
-                  painter: DivineBackgroundPainter(
-                    timeSeconds: _ambientController.value * 10.0,
-                    isCompleted: isCompleted,
-                    progressPct: _count / _target,
+                return IgnorePointer(
+                  child: CustomPaint(
+                    size: screenSize,
+                    painter: DivineBackgroundPainter(
+                      timeSeconds: _ambientController.value * 10.0,
+                      isCompleted: isCompleted,
+                      progressPct: _count / _target,
+                    ),
                   ),
                 );
               },
             ),
 
-            SafeArea(
-              child: Column(
-                children: [
-                  // App Bar
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    child: Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => Navigator.pop(context, _totalProgress),
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: const Color(0xFFC8A882),
-                                width: 1.0,
-                              ),
-                            ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.arrow_back_ios_new_rounded,
-                                color: Color(0xFFC8A882),
-                                size: 16,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            widget.entry.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.outfit(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                              color: const Color(0xFF2E2A36),
-                            ),
-                          ),
-                        ),
-                        // Top Bar: Effect & Reset Buttons
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            GestureDetector(
-                              onTap: _openAnimationSelector,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: const Color(0xFFC8A882),
-                                    width: 1.2,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.auto_awesome,
-                                      size: 13,
-                                      color: Color(0xFFFF7700),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Effect',
-                                      style: GoogleFonts.outfit(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                        color: const Color(0xFF2E2A36),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: _resetMala,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: pack.primaryColor,
-                                    width: 1.2,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.refresh_rounded,
-                                      size: 14,
-                                      color: pack.primaryColor,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Reset',
-                                      style: GoogleFonts.outfit(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                        color: pack.primaryColor,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+            // ── Layer 3: Top Ambient Scrim Gradient ──
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 140,
+              child: IgnorePointer(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.78),
+                        Colors.black.withValues(alpha: 0.35),
+                        Colors.transparent,
                       ],
                     ),
                   ),
+                ),
+              ),
+            ),
 
-                  // Center Darshan Card with Unmasking Canvas & Divine Chant Typography Overlay
-                  Expanded(
-                    child: Center(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: _increment,
+            // ── Layer 4: Floating Top Navigation & Actions Bar ──
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.pop(context, _totalProgress),
                         child: Container(
-                          width: 353,
-                          height: 520,
+                          width: 40,
+                          height: 40,
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(32),
+                            color: Colors.black.withValues(alpha: 0.45),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.35),
+                              width: 1.0,
+                            ),
                             boxShadow: [
                               BoxShadow(
-                                color: pack.primaryColor.withValues(alpha: 0.15),
-                                blurRadius: 24,
-                                offset: const Offset(0, 8),
+                                color: Colors.black.withValues(alpha: 0.3),
+                                blurRadius: 8,
                               ),
                             ],
                           ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(32),
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                // Unmasked Darshan Image (Base)
-                                if (_imageProvider != null)
-                                  Image(
-                                    image: _imageProvider!,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => Image.asset(
-                                      JapConfig.defaultDeityImage(widget.entry.name),
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-
-                                // Interactive Mask & Reveal Painter (Reveals tile-by-tile)
-                                AnimatedBuilder(
-                                  animation: Listenable.merge([
-                                    _revealController,
-                                    _completionController,
-                                    _ambientController,
-                                  ]),
-                                  builder: (ctx, _) {
-                                    return CustomPaint(
-                                      painter: DivineCardPainter(
-                                        jitteredPoints: _jitteredPoints,
-                                        shuffledIndices: _shuffledIndices,
-                                        count: _count,
-                                        target: _target,
-                                        revealingTileIndex: _revealingTile,
-                                        currentRevealProgress:
-                                            _revealController.value,
-                                        completionFadeProgress:
-                                            _completionController.value,
-                                        glowRings: _glowRings,
-                                        tapSparks: _tapSparks,
-                                        spiralSparks: _spiralSparks,
-                                        floatingOms: _floatingOms,
-                                        mistParticles: _mistParticles,
-                                        smokePuffs: _smokePuffs,
-                                        tapPetals: _tapPetals,
-                                        divineSymbolParticles: _divineSymbolParticles,
-                                        timeSeconds:
-                                            _ambientController.value * 10.0,
-                                        isCompleted: isCompleted,
-                                        effectPack: widget.entry.effectPack,
-                                      ),
-                                    );
-                                  },
-                                ),
-
-                                // 4-Second Devotional Video Animation Layer
-                                if (_videoController != null &&
-                                    _videoController!.value.isInitialized)
-                                  Positioned.fill(
-                                    child: AnimatedOpacity(
-                                      opacity: _isVideoPlaying ? 1.0 : 0.0,
-                                      duration: const Duration(milliseconds: 200),
-                                      child: IgnorePointer(
-                                        child: BlendedLayer(
-                                          blendMode: BlendMode.screen,
-                                          child: FittedBox(
-                                            fit: BoxFit.cover,
-                                            child: SizedBox(
-                                              width: _videoController!.value.size.width,
-                                              height: _videoController!.value.size.height,
-                                              child: VideoPlayer(_videoController!),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-
-                                // New Premium Devotional Animation Layer (10 Options)
-                                AnimatedBuilder(
-                                  animation: _premiumAnimController,
-                                  builder: (ctx, _) {
-                                    return Positioned.fill(
-                                      child: PremiumJapAnimator(
-                                        animationType: _activeAnimationType,
-                                        progress: _premiumAnimController.value,
-                                        isPlaying: _isPremiumAnimPlaying,
-                                        deityName: widget.entry.name,
-                                        currentMantra: _currentMantra,
-                                        revealPoint: _currentRevealPoint ?? const Offset(176, 260),
-                                        seed: _animSeed,
-                                      ),
-                                    );
-                                  },
-                                ),
-
-                              // Completion Blessing Banner Overlay
-                              if (_showContinueButton)
-                                Positioned(
-                                  bottom: 24,
-                                  left: 20,
-                                  right: 20,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 18,
-                                      vertical: 16,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.92,
-                                      ),
-                                      borderRadius: BorderRadius.circular(24),
-                                      border: Border.all(
-                                        color: const Color(0xFFFF7700),
-                                        width: 1.5,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(0xFFFF7700).withValues(
-                                            alpha: 0.25,
-                                          ),
-                                          blurRadius: 18,
-                                          offset: const Offset(0, 4),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          pack.blessingTitle,
-                                          textAlign: TextAlign.center,
-                                          style: GoogleFonts.outfit(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: const Color(0xFFFF7700),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          pack.blessingSubtitle,
-                                          textAlign: TextAlign.center,
-                                          style: GoogleFonts.outfit(
-                                            fontSize: 12,
-                                            color: const Color(
-                                              0xFF2E2A36,
-                                            ).withValues(alpha: 0.8),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 12),
-                                        GestureDetector(
-                                          onTap: () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) =>
-                                                    DarshanRuntimeScreen(
-                                                      config: widget.entry,
-                                                      sessionController:
-                                                          JapSessionController(
-                                                            config:
-                                                                widget.entry,
-                                                            initialCount: widget
-                                                                .entry
-                                                                .targetCount,
-                                                          ),
-                                                    ),
-                                              ),
-                                            );
-                                          },
-                                          child: Container(
-                                            width: double.infinity,
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 10,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              gradient: const LinearGradient(
-                                                colors: [
-                                                  Color(0xFFFF9933),
-                                                  Color(0xFFFF6600),
-                                                ],
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(30),
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: const Color(0xFFFF7700)
-                                                      .withValues(alpha: 0.35),
-                                                  blurRadius: 10,
-                                                  offset: const Offset(0, 3),
-                                                ),
-                                              ],
-                                            ),
-                                            child: Center(
-                                              child: Text(
-                                                'View Divine Darshan 🙏',
-                                                style: GoogleFonts.outfit(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 13,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
+                          child: const Center(
+                            child: Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          widget.entry.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: Colors.white,
+                            shadows: const [
+                              Shadow(
+                                color: Colors.black87,
+                                blurRadius: 8,
+                                offset: Offset(0, 1),
+                              ),
                             ],
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                ),
-
-                  // Bottom Chant Controls
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 16,
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          widget.entry.shlokText,
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.notoSerifDevanagari(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFF2E2A36),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Center Chant Bead Button with Count & Audio Playing Disabled State
-                        Transform.scale(
-                          scale: _buttonScale,
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: _increment,
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              width: 90,
-                              height: 90,
+                      // Top Bar: Effect & Reset Buttons
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GestureDetector(
+                            onTap: _openAnimationSelector,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: RadialGradient(
-                                  colors: isBusy
-                                      ? [
-                                          const Color(0xFFFF7700).withValues(alpha: 0.7),
-                                          const Color(0xFFFF9933).withValues(alpha: 0.85),
-                                        ]
-                                      : const [
-                                          Color(0xFFFF9933),
-                                          Color(0xFFFF6600),
-                                        ],
-                                  center: const Alignment(-0.2, -0.3),
+                                color: Colors.black.withValues(alpha: 0.45),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: const Color(0xFFFF9933).withValues(alpha: 0.7),
+                                  width: 1.2,
                                 ),
-                                border: isBusy
-                                    ? Border.all(
-                                        color: Colors.white.withValues(alpha: 0.8),
-                                        width: 2.5,
-                                      )
-                                    : null,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFFFF7700).withValues(
-                                      alpha: isBusy ? 0.65 : 0.45,
-                                    ),
-                                    blurRadius: isBusy ? 24 : 20,
-                                    offset: const Offset(0, 6),
+                                    color: Colors.black.withValues(alpha: 0.25),
+                                    blurRadius: 6,
                                   ),
                                 ],
                               ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  if (isBusy)
-                                    const Icon(
-                                      Icons.graphic_eq_rounded,
-                                      color: Colors.white,
-                                      size: 26,
-                                    )
-                                  else
-                                    SvgPicture.string(
-                                      '''<svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z" fill="white"/>
-<circle cx="12" cy="12" r="5" fill="white"/>
-</svg>''',
-                                      width: 24,
-                                      height: 24,
-                                    ),
-                                  const SizedBox(height: 2),
+                                  const Icon(
+                                    Icons.auto_awesome,
+                                    size: 13,
+                                    color: Color(0xFFFF9933),
+                                  ),
+                                  const SizedBox(width: 4),
                                   Text(
-                                    '$_count / $_target',
+                                    'Effect',
                                     style: GoogleFonts.outfit(
-                                      fontSize: 13,
                                       fontWeight: FontWeight.bold,
+                                      fontSize: 12,
                                       color: Colors.white,
-                                      shadows: [
-                                        const Shadow(
-                                          color: Colors.black38,
-                                          blurRadius: 4,
-                                          offset: Offset(0, 1),
-                                        ),
-                                      ],
                                     ),
                                   ),
                                 ],
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 10),
-                        GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: _increment,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
-                              child: Text(
-                                isBusy
-                                    ? '🔊 Chanting Shlok...'
-                                    : isCompleted
-                                        ? 'Mala Complete! Tap for Next Mala'
-                                        : 'Tap to Chant Mantra',
-                                key: ValueKey<String>(
-                                  isBusy ? 'busy' : (isCompleted ? 'comp' : 'tap'),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: _resetMala,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.45),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.4),
+                                  width: 1.2,
                                 ),
-                                style: GoogleFonts.outfit(
-                                  fontSize: 13,
-                                  fontWeight: isBusy ? FontWeight.bold : FontWeight.w600,
-                                  color: isBusy
-                                      ? const Color(0xFFFF7700)
-                                      : const Color(0xFF2E2A36).withValues(alpha: 0.7),
-                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.25),
+                                    blurRadius: 6,
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.refresh_rounded,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Reset',
+                                    style: GoogleFonts.outfit(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                        ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // ── Layer 5: Bottom Ambient Scrim Gradient ──
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 280,
+              child: IgnorePointer(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.94),
+                        Colors.black.withValues(alpha: 0.70),
+                        Colors.black.withValues(alpha: 0.25),
+                        Colors.transparent,
                       ],
                     ),
                   ),
-                ],
+                ),
+              ),
+            ),
+
+            // ── Layer 5.5: Devotional Animations (Positioned clearly above orange circle button) ──
+            if (_isVideoPlaying && _currentAnimationAsset.isNotEmpty)
+              Positioned(
+                top: 70 + MediaQuery.paddingOf(context).top,
+                bottom: 210 + MediaQuery.paddingOf(context).bottom,
+                left: 16,
+                right: 16,
+                child: IgnorePointer(
+                  child: Image.asset(
+                    _currentAnimationAsset,
+                    key: ValueKey<int>(_animKey),
+                    fit: BoxFit.contain,
+                    alignment: Alignment.center,
+                    gaplessPlayback: false,
+                  ),
+                ),
+              ),
+
+            // Premium Devotional Animation Layer (10 Options)
+            AnimatedBuilder(
+              animation: _premiumAnimController,
+              builder: (ctx, _) {
+                final double topInset = 70 + MediaQuery.paddingOf(context).top;
+                final double bottomInset = 210 + MediaQuery.paddingOf(context).bottom;
+                final double visibleHeight = math.max(100.0, screenSize.height - topInset - bottomInset);
+                return Positioned(
+                  top: topInset,
+                  bottom: bottomInset,
+                  left: 16,
+                  right: 16,
+                  child: IgnorePointer(
+                    child: PremiumJapAnimator(
+                      animationType: _activeAnimationType,
+                      progress: _premiumAnimController.value,
+                      isPlaying: _isPremiumAnimPlaying,
+                      deityName: widget.entry.name,
+                      currentMantra: _currentMantra,
+                      revealPoint: _currentRevealPoint != null
+                          ? Offset(
+                              _currentRevealPoint!.dx,
+                              (_currentRevealPoint!.dy - topInset).clamp(0.0, visibleHeight),
+                            )
+                          : Offset(screenSize.width / 2, visibleHeight / 2),
+                      seed: _animSeed,
+                    ),
+                  ),
+                );
+              },
+            ),
+
+            // ── Layer 6: Completion Blessing Banner Overlay ──
+            if (_showContinueButton)
+              Positioned(
+                bottom: 175,
+                left: 20,
+                right: 20,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 16,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.95),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: const Color(0xFFFF7700),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFF7700).withValues(alpha: 0.35),
+                        blurRadius: 18,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        pack.blessingTitle,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFFFF7700),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        pack.blessingSubtitle,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          color: const Color(0xFF2E2A36).withValues(alpha: 0.8),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => DarshanRuntimeScreen(
+                                config: widget.entry,
+                                sessionController: JapSessionController(
+                                  config: widget.entry,
+                                  initialCount: widget.entry.targetCount,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [
+                                Color(0xFFFF9933),
+                                Color(0xFFFF6600),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(30),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFFF7700).withValues(alpha: 0.35),
+                                blurRadius: 10,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Center(
+                            child: Text(
+                              'View Divine Darshan 🙏',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            // ── Layer 7: Floating Bottom Chant Controls ──
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.only(
+                    left: 24,
+                    right: 24,
+                    bottom: 12,
+                    top: 8,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Sacred Shlok / Mantra
+                      Text(
+                        widget.entry.shlokText,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.notoSerifDevanagari(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFFFFD54F),
+                          shadows: const [
+                            Shadow(
+                              color: Colors.black,
+                              blurRadius: 10,
+                              offset: Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Center Chant Bead Button with Count
+                      Transform.scale(
+                        scale: _buttonScale,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _increment,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: 90,
+                            height: 90,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                colors: isBusy
+                                    ? [
+                                        const Color(0xFFFF7700).withValues(alpha: 0.7),
+                                        const Color(0xFFFF9933).withValues(alpha: 0.85),
+                                      ]
+                                    : const [
+                                        Color(0xFFFF9933),
+                                        Color(0xFFFF6600),
+                                      ],
+                                center: const Alignment(-0.2, -0.3),
+                              ),
+                              border: Border.all(
+                                color: isBusy
+                                    ? Colors.white.withValues(alpha: 0.8)
+                                    : const Color(0xFFFFE082),
+                                width: 2.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFFF7700).withValues(
+                                    alpha: isBusy ? 0.75 : 0.55,
+                                  ),
+                                  blurRadius: isBusy ? 28 : 22,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (isBusy)
+                                  const Icon(
+                                    Icons.graphic_eq_rounded,
+                                    color: Colors.white,
+                                    size: 26,
+                                  )
+                                else
+                                  SvgPicture.string(
+                                    '''<svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z" fill="white"/>
+<circle cx="12" cy="12" r="5" fill="white"/>
+</svg>''',
+                                    width: 24,
+                                    height: 24,
+                                  ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '$_count / $_target',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                    shadows: const [
+                                      Shadow(
+                                        color: Colors.black45,
+                                        blurRadius: 4,
+                                        offset: Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _increment,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 4,
+                            horizontal: 12,
+                          ),
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 200),
+                            child: Text(
+                              isBusy
+                                  ? '🔊 Chanting Shlok...'
+                                  : isCompleted
+                                      ? 'Mala Complete! Tap for Next Mala'
+                                      : 'Tap screen to Chant Mantra',
+                              key: ValueKey<String>(
+                                isBusy ? 'busy' : (isCompleted ? 'comp' : 'tap'),
+                              ),
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight:
+                                    isBusy ? FontWeight.bold : FontWeight.w600,
+                                color: isBusy
+                                    ? const Color(0xFFFF9933)
+                                    : Colors.white.withValues(alpha: 0.85),
+                                shadows: const [
+                                  Shadow(
+                                    color: Colors.black87,
+                                    blurRadius: 6,
+                                    offset: Offset(0, 1),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ],
@@ -2296,9 +2404,6 @@ class DivineCardPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    final cardRRect = RRect.fromRectAndRadius(rect, const Radius.circular(20));
-    // Clip everything to the card's rounded corners so reveals don't leak outside
-    canvas.clipRRect(cardRRect);
 
     // 1. Draw Divine Veil Overlay strictly proportional to completed chant count (100% Solid Black)
     final veilAlpha = (1.0 - completionFadeProgress).clamp(0.0, 1.0);
@@ -2310,39 +2415,126 @@ class DivineCardPainter extends CustomPainter {
       canvas.saveLayer(rect, Paint());
       canvas.drawRect(rect, veilPaint);
 
+      // Exact mathematical sizing according to target chants:
+      // If target is 10, radius is large so 10 chants reveal the full image.
+      // If target is 100/108, radius is small and delicate.
+      final double safeTarget = math.max(1, target).toDouble();
+      final double aspect = size.width / (size.height > 0 ? size.height : 1.0);
+      final int cols = math.max(1, math.sqrt(safeTarget * aspect).round());
+      final int rows = (safeTarget / cols).ceil();
+      final double cellWidth = size.width / cols;
+      final double cellHeight = size.height / rows;
+
+      // Circumradius of each cell ensures complete, seamless coverage when all chants complete
+      final double baseCellRadius = math.sqrt(
+        math.pow(cellWidth / 2.0, 2) + math.pow(cellHeight / 2.0, 2),
+      );
+      // Minimal geometric aperture: small for 100 chants, perfectly filling in 10 chants
+      final double cellRadius = baseCellRadius * 1.10;
+      final double blurSigma = (cellRadius * 0.18).clamp(5.0, 28.0);
+
       final erasePaint = Paint()
         ..blendMode = BlendMode.dstOut
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22.0);
-
-      // Proportional radius mathematically sized so target chants reveal progressively
-      final double targetSafe = math.max(1, target).toDouble();
-      final double cellRadius =
-          (math.sqrt((size.width * size.height) / (targetSafe * math.pi)) *
-                  0.95)
-              .clamp(16.0, 25.0);
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, blurSigma);
 
       for (int i = 0; i < count && i < target; i++) {
         final tileIdx = shuffledIndices[i];
+        if (tileIdx >= jitteredPoints.length) continue;
         final pt = jitteredPoints[tileIdx];
 
         // Organic varied radius around the exact cell size
         final tileRng = math.Random((tileIdx + 1) * 7919);
-        final baseRadius = cellRadius * (0.92 + tileRng.nextDouble() * 0.22);
+        final baseRadius = cellRadius * (0.95 + tileRng.nextDouble() * 0.12);
 
         double scale = 1.0;
         if (tileIdx == revealingTileIndex) {
-          scale = 0.35 +
-              Curves.easeOutCubic.transform(
-                    currentRevealProgress.clamp(0.0, 1.0),
-                  ) *
-                  0.65;
+          // Meditative, serene ease-out expansion (no jarring rubber-band bounce)
+          scale = Curves.easeOutCubic.transform(
+            currentRevealProgress.clamp(0.0, 1.0),
+          );
         }
         final r = baseRadius * scale;
-        // Erase with pure blurred circle: Completely soft edges, zero cloud shape!
-        canvas.drawCircle(pt, r, erasePaint);
+        if (r > 1.0) {
+          canvas.drawCircle(pt, r, erasePaint);
+        }
       }
 
       canvas.restore();
+
+      // ── 2. Minimal, Serene Divine Light Rim at Newly Revealed Spot ──
+      if (revealingTileIndex != null &&
+          revealingTileIndex! < jitteredPoints.length &&
+          currentRevealProgress < 1.0) {
+        final pt = jitteredPoints[revealingTileIndex!];
+        final progress = currentRevealProgress.clamp(0.0, 1.0);
+        final easeProgress = Curves.easeOutCubic.transform(progress);
+
+        // Sinusoidal bell-curve intensity: soft rise -> gentle fade out
+        final double intensity = math.sin(progress * math.pi);
+
+        // Delicate, ethereal golden perimeter contour (center is 100% crystal clear so darshan is unobscured)
+        final double rimRadius = cellRadius * (0.3 + 0.7 * easeProgress);
+        if (rimRadius > 2.0 && intensity > 0.02) {
+          final rimPaint = Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = (cellRadius * 0.045).clamp(1.5, 3.5)
+            ..color = const Color(0xFFFFD54F).withValues(alpha: (0.38 * intensity).clamp(0.0, 1.0))
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, (cellRadius * 0.08).clamp(3.0, 10.0));
+          canvas.drawCircle(pt, rimRadius, rimPaint);
+        }
+      }
+
+      // ── 3. Expanding Sacred Glow Rings ──
+      for (final ring in glowRings) {
+        final t = (1.0 - (ring.life / ring.maxLife)).clamp(0.0, 1.0);
+        final curR = ring.maxRadius * Curves.easeOutCubic.transform(t);
+        final alpha = (1.0 - t).clamp(0.0, 1.0);
+        if (alpha > 0.01) {
+          final ringPaint = Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.5 * (1.0 - t)
+            ..color = ring.color.withValues(alpha: alpha * 0.85)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+          canvas.drawCircle(ring.position, curR, ringPaint);
+        }
+      }
+
+      // ── 4. Golden Starlight Tap Sparks ──
+      for (final spark in tapSparks) {
+        final t = (spark.life / spark.maxLife).clamp(0.0, 1.0);
+        if (t > 0.02) {
+          final sparkPaint = Paint()
+            ..color = spark.color.withValues(alpha: t)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0);
+          canvas.drawCircle(spark.position, spark.size * t, sparkPaint);
+        }
+      }
+
+      // ── 5. Rising Sacred Golden "ॐ" Glyph ──
+      for (final om in floatingOms) {
+        final t = (om.life / om.maxLife).clamp(0.0, 1.0);
+        final omAlpha = (math.sin(t * math.pi)).clamp(0.0, 1.0);
+        if (omAlpha > 0.05) {
+          final tp = TextPainter(
+            text: TextSpan(
+              text: om.text,
+              style: GoogleFonts.notoSerifDevanagari(
+                fontSize: 24.0,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFFFD54F).withValues(alpha: omAlpha),
+                shadows: [
+                  Shadow(
+                    color: const Color(0xFFFF7700).withValues(alpha: omAlpha * 0.9),
+                    blurRadius: 10.0,
+                  ),
+                ],
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          tp.paint(canvas, Offset(om.position.dx - tp.width / 2, om.position.dy - tp.height / 2));
+        }
+      }
     }
   }
 
