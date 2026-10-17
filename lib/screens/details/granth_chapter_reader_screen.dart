@@ -29,30 +29,26 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   List<Map<String, String>> _verses = [];
   bool _isLoadingPages = true;
   final bool _sepiaMode = true;
-  final bool _showAudioPlayerFab = false; // Hidden for now
 
-  // ── Audio / Karaoke state ──────────────────────────────────────────────────
+  // ── Auto-Reading & Highlighting State ──────────────────────────────────────
   final GlobalKey<_BookViewerState> _bookViewerKey = GlobalKey<_BookViewerState>();
   final AudioPlayer _audioPlayer = AudioPlayer();
   String? _audioUrl;
-  bool _isPlaying = false;
+  bool _isPlaying = false; // Starts paused by default as requested
   bool _isLoadingAudio = false;
-  Duration _audioDuration = Duration.zero;
-  Duration _audioPosition = Duration.zero;
 
-  // Karaoke: flat list of all words across all verses, in order.
-  List<_KaraokeWord> _allWords = [];
+  int _currentPage = 0; // 0 = Cover, 1...N = Verses, N+1 = Back Cover
+  int _currentWordOnPage = 0;
+  double _speedMultiplier = 1.0;
+  int _readingSpeedMs = 550; // Calmer, slightly slower devotional pace (~550ms per word at 1.0x)
+  Timer? _wordTimer;
+  bool _isAutoTurning = false;
+  bool _isPageCompleted = false;
 
-  // Per-verse word start offsets in _allWords.
-  List<int> _verseWordOffsets = [];
+  // Pre-tokenized words for every verse across Sanskrit, Hindi, and English
+  List<List<_PageWordToken>> _verseTokens = [];
 
-  // The global word index that is currently highlighted.
-  int _highlightedWordIndex = -1;
-
-  StreamSubscription? _durationSub;
-  StreamSubscription? _positionSub;
   StreamSubscription? _completeSub;
-  StreamSubscription? _stateSub;
 
   @override
   void initState() {
@@ -62,149 +58,229 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   }
 
   void _initAudioListeners() {
-    _durationSub = _audioPlayer.onDurationChanged.listen((d) {
-      if (mounted) setState(() => _audioDuration = d);
-    });
-    _positionSub = _audioPlayer.onPositionChanged.listen((p) {
-      if (!mounted) return;
-      _audioPosition = p;
-      _updateKaraokeHighlight(p);
-    });
     _completeSub = _audioPlayer.onPlayerComplete.listen((_) {
-      if (mounted) setState(() { _isPlaying = false; _highlightedWordIndex = -1; });
+      if (mounted && _isPlaying && _audioUrl != null) {
+        // Loop audio if user desires background chant while reading
+        _audioPlayer.play(UrlSource(_audioUrl!));
+      }
     });
-    _stateSub = _audioPlayer.onPlayerStateChanged.listen((state) {
-      if (mounted) setState(() => _isPlaying = state == PlayerState.playing);
-    });
   }
 
-  void _updateKaraokeHighlight(Duration position) {
-    if (_allWords.isEmpty || _audioDuration.inMilliseconds <= 0) return;
-    final fraction = (position.inMilliseconds / _audioDuration.inMilliseconds).clamp(0.0, 1.0);
-    final idx = (fraction * _allWords.length).floor().clamp(0, _allWords.length - 1);
-    if (idx != _highlightedWordIndex) {
-      setState(() => _highlightedWordIndex = idx);
-
-      // Auto-turn book to the page containing this currently-recited verse
-      final targetVerse = _allWords[idx].verseIndex;
-      final targetPage = targetVerse + 1; // 1-indexed (0 is cover)
-      _bookViewerKey.currentState?.autoTurnToPage(targetPage);
-    }
+  /// Active section on the currently displayed verse ('sanskrit', 'hindi', 'english', or '')
+  String get activeSection {
+    if (!_isPlaying || _currentPage < 1 || _currentPage > _verses.length) return '';
+    final vi = _currentPage - 1;
+    if (vi >= _verseTokens.length) return '';
+    final tokens = _verseTokens[vi];
+    if (_currentWordOnPage >= tokens.length) return '';
+    return tokens[_currentWordOnPage].section;
   }
 
-  void _buildKaraokeWordList() {
-    final allWords = <_KaraokeWord>[];
-    final offsets = <int>[];
-    final wordPattern = RegExp(r'[^\s।॥\n\r,.:;!?]+');
+  /// Active word index within its section (-1 if not highlighting)
+  int get activeLocalWordIndex {
+    if (!_isPlaying || _currentPage < 1 || _currentPage > _verses.length) return -1;
+    final vi = _currentPage - 1;
+    if (vi >= _verseTokens.length) return -1;
+    final tokens = _verseTokens[vi];
+    if (_currentWordOnPage >= tokens.length) return -1;
+    return tokens[_currentWordOnPage].localIndex;
+  }
 
-    for (int vi = 0; vi < _verses.length; vi++) {
-      offsets.add(allWords.length);
-      // Highlight the primary verse text added from the admin panel:
-      // typically sanskrit/shloka text; if empty, fallback to hindi or english
-      String text = (_verses[vi]['sanskrit'] ?? '').trim();
-      if (text.isEmpty) text = (_verses[vi]['hindi'] ?? '').trim();
-      if (text.isEmpty) text = (_verses[vi]['english'] ?? '').trim();
-      if (text.isEmpty) continue;
+  void _startWordTimer() {
+    _wordTimer?.cancel();
+    if (!_isPlaying) return;
 
-      final matches = wordPattern.allMatches(text);
-      for (final m in matches) {
-        final w = m.group(0) ?? '';
-        if (w.isNotEmpty) {
-          allWords.add(_KaraokeWord(word: w, verseIndex: vi));
-        }
+    _wordTimer = Timer.periodic(Duration(milliseconds: _readingSpeedMs), (timer) {
+      if (!mounted || !_isPlaying || _isAutoTurning) return;
+
+      final vi = _currentPage - 1;
+      if (vi < 0 || vi >= _verseTokens.length) return;
+
+      final tokens = _verseTokens[vi];
+      if (tokens.isEmpty) {
+        _handlePageComplete();
+        return;
       }
-    }
-    _allWords = allWords;
-    _verseWordOffsets = offsets;
-  }
 
-  Future<void> _loadAudio() async {
-    if (_isLoadingAudio) return;
-    setState(() => _isLoadingAudio = true);
-
-    String? foundUrl;
-
-    // 1. Check chapter object directly for audio URL
-    final direct = (widget.chapter['audioUrl'] ?? widget.chapter['audio'] ?? widget.chapter['streamUrl'] ?? widget.chapter['fileUrl'])?.toString().trim();
-    if (direct != null && direct.isNotEmpty) {
-      final resolved = ApiService.resolveImageUrl(direct);
-      if (resolved.isNotEmpty) foundUrl = resolved;
-    }
-
-    // 2. Fetch chapter audio from backend
-    final chapterId = (widget.chapter['_id'] ?? widget.chapter['id'] ?? '').toString();
-    if (foundUrl == null && chapterId.isNotEmpty) {
-      try {
-        final audios = await ApiService.getAudioByChapter(chapterId);
-        if (audios.isNotEmpty) {
-          final first = Map<String, dynamic>.from(audios.first as Map);
-          final raw = (first['audioUrl'] ?? first['url'] ?? first['streamUrl'] ?? first['fileUrl'] ?? '').toString();
-          final resolved = raw.isNotEmpty ? ApiService.resolveImageUrl(raw) : '';
-          if (resolved.isNotEmpty) foundUrl = resolved;
-        }
-      } catch (_) {}
-    }
-
-    // 3. Check verse-level audio
-    if (foundUrl == null) {
-      for (final v in _verses) {
-        final va = (v['audio'] ?? '').trim();
-        if (va.isNotEmpty) {
-          final resolved = ApiService.resolveImageUrl(va);
-          if (resolved.isNotEmpty) {
-            foundUrl = resolved;
-            break;
-          }
-        }
-      }
-    }
-
-    // 4. Default devotional chant audio so karaoke works seamlessly out of the box even before custom upload
-    if (foundUrl == null || foundUrl.isEmpty) {
-      foundUrl = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3';
-    }
-
-    if (mounted) {
-      setState(() {
-        _audioUrl = foundUrl;
-        _isLoadingAudio = false;
-      });
-    }
-  }
-
-  Future<void> _togglePlayPause() async {
-    if (_audioUrl == null) {
-      // No audio loaded yet — show a snackbar
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('No audio available for this chapter.', style: GoogleFonts.outfit(color: Colors.white)),
-            backgroundColor: const Color(0xFF5C1405),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
-      return;
-    }
-    if (_isPlaying) {
-      await _audioPlayer.pause();
-    } else {
-      if (_audioPosition == Duration.zero || _audioPosition >= _audioDuration) {
-        // Fresh start
-        await _audioPlayer.play(UrlSource(_audioUrl!));
+      if (_currentWordOnPage < tokens.length - 1) {
+        setState(() {
+          _currentWordOnPage++;
+        });
       } else {
-        await _audioPlayer.resume();
+        // All words on the current page are complete!
+        _handlePageComplete();
       }
+    });
+  }
+
+  void _handlePageComplete() {
+    _wordTimer?.cancel();
+    if (!_isPlaying || _isAutoTurning) return;
+
+    final totalPages = _verses.length + 2;
+    final nextPage = _currentPage + 1;
+
+    // Show the entire page completed/read state (all text warmly illuminated)
+    setState(() {
+      _isPageCompleted = true;
+    });
+
+    // Pause for 1200ms so reader comfortably absorbs the completed verse
+    Future.delayed(const Duration(milliseconds: 1200), () {
+      if (!mounted || !_isPlaying || _isAutoTurning) return;
+
+      if (nextPage < totalPages - 1) {
+        // Auto-turn to the next verse page slowly and gracefully (2200ms)
+        _isAutoTurning = true;
+        _bookViewerKey.currentState?.autoTurnToPage(nextPage, durationMs: 2200);
+
+        // Wait for slow page turn animation to finish (~2300ms), then start reading the next page
+        Future.delayed(const Duration(milliseconds: 2300), () {
+          if (!mounted) return;
+          _isAutoTurning = false;
+          if (_isPlaying) {
+            setState(() {
+              _currentPage = nextPage;
+              _currentWordOnPage = 0;
+              _isPageCompleted = false;
+            });
+            _startWordTimer();
+          }
+        });
+      } else if (nextPage == totalPages - 1) {
+        // Reached end of chapter verses, automatically turn to back cover slowly
+        _isAutoTurning = true;
+        _bookViewerKey.currentState?.autoTurnToPage(nextPage, durationMs: 2200);
+        setState(() {
+          _isPlaying = false;
+          _isAutoTurning = false;
+          _currentPage = nextPage;
+          _currentWordOnPage = 0;
+          _isPageCompleted = false;
+        });
+        if (_audioUrl != null) _audioPlayer.stop();
+      } else {
+        setState(() {
+          _isPlaying = false;
+          _currentWordOnPage = 0;
+          _isPageCompleted = false;
+        });
+      }
+    });
+  }
+
+  void _toggleAutoRead() {
+    if (_isPlaying) {
+      _wordTimer?.cancel();
+      if (_audioUrl != null) _audioPlayer.pause();
+      setState(() {
+        _isPlaying = false;
+        _isPageCompleted = false;
+      });
+    } else {
+      final totalPages = _verses.length + 2;
+      if (_currentPage == 0) {
+        // Currently on front cover: turn slowly (2200ms) to Page 1
+        _bookViewerKey.currentState?.autoTurnToPage(1, durationMs: 2200);
+        setState(() {
+          _isPlaying = true;
+          _currentPage = 1;
+          _currentWordOnPage = 0;
+          _isPageCompleted = false;
+        });
+        if (_audioUrl != null) {
+          _audioPlayer.play(UrlSource(_audioUrl!));
+        }
+        Future.delayed(const Duration(milliseconds: 2300), () {
+          if (mounted && _isPlaying) {
+            _startWordTimer();
+          }
+        });
+      } else if (_currentPage >= totalPages - 1) {
+        // On back cover: return slowly to Page 1 and start fresh
+        _bookViewerKey.currentState?.autoTurnToPage(1, durationMs: 2200);
+        setState(() {
+          _isPlaying = true;
+          _currentPage = 1;
+          _currentWordOnPage = 0;
+          _isPageCompleted = false;
+        });
+        if (_audioUrl != null) {
+          _audioPlayer.play(UrlSource(_audioUrl!));
+        }
+        Future.delayed(const Duration(milliseconds: 2300), () {
+          if (mounted && _isPlaying) {
+            _startWordTimer();
+          }
+        });
+      } else {
+        // On a verse page: start or resume immediately
+        setState(() {
+          _isPlaying = true;
+          _isPageCompleted = false;
+        });
+        if (_audioUrl != null) {
+          _audioPlayer.resume();
+        }
+        _startWordTimer();
+      }
+    }
+  }
+
+  void _cycleSpeed() {
+    setState(() {
+      if (_speedMultiplier == 1.0) {
+        _speedMultiplier = 1.25;
+      } else if (_speedMultiplier == 1.25) {
+        _speedMultiplier = 1.5;
+      } else if (_speedMultiplier == 1.5) {
+        _speedMultiplier = 0.8;
+      } else {
+        _speedMultiplier = 1.0;
+      }
+      _readingSpeedMs = (550 / _speedMultiplier).round();
+    });
+    if (_isPlaying) {
+      _startWordTimer();
+    }
+  }
+
+  void _onPageChanged(int newPage) {
+    if (!mounted) return;
+    if (_currentPage == newPage) return;
+    setState(() {
+      _currentPage = newPage;
+      _currentWordOnPage = 0;
+      _isPageCompleted = false;
+    });
+    if (_isPlaying) {
+      if (newPage >= 1 && newPage <= _verses.length) {
+        _startWordTimer();
+      } else {
+        _wordTimer?.cancel();
+        if (_audioUrl != null) _audioPlayer.pause();
+        setState(() => _isPlaying = false);
+      }
+    }
+  }
+
+  void _goToPrevPage() {
+    if (_currentPage > 0) {
+      _bookViewerKey.currentState?.autoTurnToPage(_currentPage - 1, durationMs: 2200);
+    }
+  }
+
+  void _goToNextPage() {
+    final totalPages = _verses.length + 2;
+    if (_currentPage < totalPages - 1) {
+      _bookViewerKey.currentState?.autoTurnToPage(_currentPage + 1, durationMs: 2200);
     }
   }
 
   @override
   void dispose() {
-    _durationSub?.cancel();
-    _positionSub?.cancel();
+    _wordTimer?.cancel();
     _completeSub?.cancel();
-    _stateSub?.cancel();
     _audioPlayer.dispose();
     super.dispose();
   }
@@ -283,14 +359,73 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       }
     }
 
+    final tokens = List.generate(
+      parsedVerses.length,
+      (vi) => _extractTokensForVerse(parsedVerses[vi]),
+    );
+
     if (mounted) {
       setState(() {
         _verses = parsedVerses;
+        _verseTokens = tokens;
         _isLoadingPages = false;
       });
-      _buildKaraokeWordList();
-      _loadAudio(); // Fire-and-forget
+      _loadOptionalAudio();
     }
+  }
+
+  Future<void> _loadOptionalAudio() async {
+    if (_isLoadingAudio) return;
+    _isLoadingAudio = true;
+    String? foundUrl;
+    final direct = (widget.chapter['audioUrl'] ?? widget.chapter['audio'] ?? widget.chapter['streamUrl'] ?? widget.chapter['fileUrl'])?.toString().trim();
+    if (direct != null && direct.isNotEmpty) {
+      final resolved = ApiService.resolveImageUrl(direct);
+      if (resolved.isNotEmpty) foundUrl = resolved;
+    }
+    final chapterId = (widget.chapter['_id'] ?? widget.chapter['id'] ?? '').toString();
+    if (foundUrl == null && chapterId.isNotEmpty) {
+      try {
+        final audios = await ApiService.getAudioByChapter(chapterId);
+        if (audios.isNotEmpty) {
+          final first = Map<String, dynamic>.from(audios.first as Map);
+          final raw = (first['audioUrl'] ?? first['url'] ?? first['streamUrl'] ?? first['fileUrl'] ?? '').toString();
+          final resolved = raw.isNotEmpty ? ApiService.resolveImageUrl(raw) : '';
+          if (resolved.isNotEmpty) foundUrl = resolved;
+        }
+      } catch (_) {}
+    }
+    if (mounted) {
+      setState(() {
+        _audioUrl = foundUrl;
+        _isLoadingAudio = false;
+      });
+    }
+  }
+
+  static List<_PageWordToken> _extractTokensForVerse(Map<String, String> verse) {
+    final tokens = <_PageWordToken>[];
+    final wordPattern = RegExp(r'[^\s।॥\n\r,.:;!?]+');
+
+    void addSection(String sectionName, String text) {
+      if (text.trim().isEmpty) return;
+      final matches = wordPattern.allMatches(text);
+      int localIdx = 0;
+      for (final m in matches) {
+        final w = m.group(0) ?? '';
+        if (w.isNotEmpty) {
+          tokens.add(_PageWordToken(section: sectionName, localIndex: localIdx, word: w));
+          localIdx++;
+        }
+      }
+    }
+
+    addSection('sanskrit', (verse['sanskrit'] ?? '').trim());
+    addSection('transliteration', (verse['transliteration'] ?? '').trim());
+    addSection('hindi', (verse['hindi'] ?? '').trim());
+    addSection('english', (verse['english'] ?? '').trim());
+
+    return tokens;
   }
 
   @override
@@ -322,9 +457,13 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
                       chapterTitle: chapterTitle,
                       verses: _verses,
                       sepiaMode: _sepiaMode,
-                      highlightedWordIndex: _highlightedWordIndex,
-                      verseWordOffsets: _verseWordOffsets,
-                      allWordCount: _allWords.length,
+                      activeVerseIndex: (_isPlaying && _currentPage >= 1 && _currentPage <= _verses.length)
+                          ? _currentPage - 1
+                          : -1,
+                      activeSection: activeSection,
+                      activeLocalWordIndex: activeLocalWordIndex,
+                      isPageCompleted: _isPageCompleted,
+                      onPageChanged: _onPageChanged,
                     ),
             ),
 
@@ -346,16 +485,23 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
               ),
             ),
 
-            // ── Sacred Floating Play/Pause Button (Hidden for now) ─────────
-            if (_showAudioPlayerFab && !_isLoadingPages)
+            // ── Floating Sacred Reading Control Bar ──────────────────────────
+            if (!_isLoadingPages)
               Positioned(
-                bottom: bottomPadding + 28,
-                right: 20,
-                child: _KaraokePlayFab(
-                  isPlaying: _isPlaying,
-                  isLoading: _isLoadingAudio,
-                  hasAudio: _audioUrl != null,
-                  onTap: _togglePlayPause,
+                bottom: bottomPadding + 14,
+                left: 16,
+                right: 16,
+                child: Center(
+                  child: _SacredReaderControlBar(
+                    isPlaying: _isPlaying,
+                    currentVerseIndex: (_currentPage >= 1 && _currentPage <= _verses.length) ? _currentPage - 1 : -1,
+                    totalVerses: _verses.length,
+                    speed: _speedMultiplier,
+                    onTogglePlay: _toggleAutoRead,
+                    onSpeedCycle: _cycleSpeed,
+                    onPrevPage: _goToPrevPage,
+                    onNextPage: _goToNextPage,
+                  ),
                 ),
               ),
           ],
@@ -366,34 +512,48 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// KARAOKE DATA MODELS
+// WORD TOKEN DATA MODEL
 // ─────────────────────────────────────────────────────────────────────────────
-class _KaraokeWord {
-  const _KaraokeWord({required this.word, required this.verseIndex});
+class _PageWordToken {
+  const _PageWordToken({
+    required this.section,
+    required this.localIndex,
+    required this.word,
+  });
+  final String section; // 'sanskrit', 'hindi', 'english'
+  final int localIndex;
   final String word;
-  final int verseIndex;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SACRED FLOATING PLAY/PAUSE FAB
+// SACRED FLOATING CONTROL BAR
 // ─────────────────────────────────────────────────────────────────────────────
-class _KaraokePlayFab extends StatefulWidget {
-  const _KaraokePlayFab({
+class _SacredReaderControlBar extends StatefulWidget {
+  const _SacredReaderControlBar({
     required this.isPlaying,
-    required this.isLoading,
-    required this.hasAudio,
-    required this.onTap,
+    required this.currentVerseIndex,
+    required this.totalVerses,
+    required this.speed,
+    required this.onTogglePlay,
+    required this.onSpeedCycle,
+    required this.onPrevPage,
+    required this.onNextPage,
   });
+
   final bool isPlaying;
-  final bool isLoading;
-  final bool hasAudio;
-  final VoidCallback onTap;
+  final int currentVerseIndex;
+  final int totalVerses;
+  final double speed;
+  final VoidCallback onTogglePlay;
+  final VoidCallback onSpeedCycle;
+  final VoidCallback onPrevPage;
+  final VoidCallback onNextPage;
 
   @override
-  State<_KaraokePlayFab> createState() => _KaraokePlayFabState();
+  State<_SacredReaderControlBar> createState() => _SacredReaderControlBarState();
 }
 
-class _KaraokePlayFabState extends State<_KaraokePlayFab> with SingleTickerProviderStateMixin {
+class _SacredReaderControlBarState extends State<_SacredReaderControlBar> with SingleTickerProviderStateMixin {
   late final AnimationController _pulseCtrl;
   late final Animation<double> _pulseAnim;
 
@@ -402,7 +562,7 @@ class _KaraokePlayFabState extends State<_KaraokePlayFab> with SingleTickerProvi
     super.initState();
     _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))
       ..repeat(reverse: true);
-    _pulseAnim = Tween<double>(begin: 0.92, end: 1.08).animate(
+    _pulseAnim = Tween<double>(begin: 0.94, end: 1.06).animate(
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
   }
@@ -415,53 +575,147 @@ class _KaraokePlayFabState extends State<_KaraokePlayFab> with SingleTickerProvi
 
   @override
   Widget build(BuildContext context) {
-    final bool pulsing = widget.isPlaying;
-    return AnimatedBuilder(
-      animation: _pulseAnim,
-      builder: (context, child) {
-        final scale = pulsing ? _pulseAnim.value : 1.0;
-        return Transform.scale(
-          scale: scale,
-          child: GestureDetector(
-            onTap: widget.onTap,
+    final hasVerse = widget.currentVerseIndex >= 0;
+    final verseNum = widget.currentVerseIndex + 1;
+    final speedLabel = '${widget.speed == 1.0 ? '1' : widget.speed.toString()}x';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E0A03).withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.55), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.5),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+          if (widget.isPlaying)
+            BoxShadow(
+              color: const Color(0xFFFF8C1A).withValues(alpha: 0.25),
+              blurRadius: 16,
+              spreadRadius: 2,
+            ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Previous Verse Button
+          IconButton(
+            icon: const Icon(Icons.skip_previous_rounded, color: Color(0xFFFFD54F), size: 24),
+            tooltip: 'Previous Page',
+            onPressed: widget.onPrevPage,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          ),
+          const SizedBox(width: 4),
+
+          // Speed Multiplier Pill
+          GestureDetector(
+            onTap: widget.onSpeedCycle,
             child: Container(
-              width: 58,
-              height: 58,
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
               decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: const RadialGradient(
-                  colors: [Color(0xFFFF8C1A), Color(0xFFB85C00)],
-                  center: Alignment(-0.3, -0.3),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFFF8C1A).withValues(alpha: pulsing ? 0.7 : 0.4),
-                    blurRadius: pulsing ? 22 : 14,
-                    spreadRadius: pulsing ? 4 : 2,
-                  ),
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
+                color: const Color(0xFF381406),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.4), width: 0.8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.speed_rounded, size: 13, color: Color(0xFFFFD54F)),
+                  const SizedBox(width: 3),
+                  Text(
+                    speedLabel,
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFFFFD54F),
+                    ),
                   ),
                 ],
               ),
-              child: Center(
-                child: widget.isLoading
-                    ? const SizedBox(
-                        width: 24, height: 24,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-                      )
-                    : Icon(
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // Center Pulsing Play/Pause FAB
+          AnimatedBuilder(
+            animation: _pulseAnim,
+            builder: (context, child) {
+              final scale = widget.isPlaying ? _pulseAnim.value : 1.0;
+              return Transform.scale(
+                scale: scale,
+                child: GestureDetector(
+                  onTap: widget.onTogglePlay,
+                  child: Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const RadialGradient(
+                        colors: [Color(0xFFFF9E3D), Color(0xFFB85C00)],
+                        center: Alignment(-0.2, -0.2),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFF8C1A).withValues(alpha: widget.isPlaying ? 0.7 : 0.4),
+                          blurRadius: widget.isPlaying ? 16 : 8,
+                          spreadRadius: widget.isPlaying ? 2 : 1,
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Icon(
                         widget.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
                         color: Colors.white,
                         size: 30,
                       ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 10),
+
+          // Reading Status Pill
+          Container(
+            constraints: const BoxConstraints(minWidth: 80),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: const Color(0xFF381406),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.4), width: 0.8),
+            ),
+            child: Center(
+              child: Text(
+                hasVerse
+                    ? (widget.isPlaying ? 'Verse $verseNum/${widget.totalVerses}' : 'Verse $verseNum')
+                    : (widget.isPlaying ? 'Reciting' : '॥ ॐ ॥'),
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFFFFE082),
+                ),
               ),
             ),
           ),
-        );
-      },
+          const SizedBox(width: 4),
+
+          // Next Verse Button
+          IconButton(
+            icon: const Icon(Icons.skip_next_rounded, color: Color(0xFFFFD54F), size: 24),
+            tooltip: 'Next Page',
+            onPressed: widget.onNextPage,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -478,9 +732,11 @@ class _BookViewer extends StatefulWidget {
     required this.chapterTitle,
     required this.verses,
     required this.sepiaMode,
-    required this.highlightedWordIndex,
-    required this.verseWordOffsets,
-    required this.allWordCount,
+    required this.activeVerseIndex,
+    required this.activeSection,
+    required this.activeLocalWordIndex,
+    required this.isPageCompleted,
+    this.onPageChanged,
   });
 
   final Map<String, dynamic> granth;
@@ -488,9 +744,11 @@ class _BookViewer extends StatefulWidget {
   final String chapterTitle;
   final List<Map<String, String>> verses;
   final bool sepiaMode;
-  final int highlightedWordIndex;
-  final List<int> verseWordOffsets;
-  final int allWordCount;
+  final int activeVerseIndex;
+  final String activeSection;
+  final int activeLocalWordIndex;
+  final bool isPageCompleted;
+  final ValueChanged<int>? onPageChanged;
 
   @override
   State<_BookViewer> createState() => _BookViewerState();
@@ -510,6 +768,7 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
   late Animation<double> _turnAnim;
 
   int get totalPages => widget.verses.length + 2;
+  int get currentPage => _currentPage;
 
   @override
   void dispose() { _turnCtrl.dispose(); super.dispose(); }
@@ -536,6 +795,7 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
         _dragProgress = 0;
       });
       _turnCtrl.reset();
+      widget.onPageChanged?.call(_currentPage);
     } else if (status == AnimationStatus.dismissed) {
       // The drag was aborted and snapped back to 0.
       setState(() {
@@ -545,13 +805,13 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     }
   }
 
-  void autoTurnToPage(int targetPage) {
+  void autoTurnToPage(int targetPage, {int durationMs = 2200}) {
     if (_currentPage == targetPage || _isTurning || _isClosingBook) return;
     if (targetPage < 0 || targetPage >= totalPages) return;
     if (targetPage > _currentPage) {
-      _triggerTurn(forward: true, durationMs: 550);
+      _triggerTurn(forward: true, durationMs: durationMs);
     } else if (targetPage < _currentPage) {
-      _triggerTurn(forward: false, durationMs: 550);
+      _triggerTurn(forward: false, durationMs: durationMs);
     }
   }
 
@@ -1138,24 +1398,23 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     } else if (index == totalPages - 1) {
       return _BackCoverPage(
         granthName: widget.granthTitle,
-        onReadAgain: () => setState(() { _currentPage = 0; }),
+        onReadAgain: () => setState(() {
+          _currentPage = 0;
+          widget.onPageChanged?.call(0);
+        }),
         onClose: _triggerCloseBookAnimation,
       );
     } else {
       final vi = index - 1;
-      final startOffset = (vi < widget.verseWordOffsets.length) ? widget.verseWordOffsets[vi] : 0;
-      final endOffset = (vi + 1 < widget.verseWordOffsets.length)
-          ? widget.verseWordOffsets[vi + 1]
-          : widget.allWordCount;
-      // Local highlighted word index within this verse (-1 if none)
-      final localIdx = (widget.highlightedWordIndex >= startOffset && widget.highlightedWordIndex < endOffset)
-          ? widget.highlightedWordIndex - startOffset
-          : -1;
+      final bool isThisVerseActive = (widget.activeVerseIndex == vi);
       return _VersePage(
+        key: ValueKey('verse_$vi'),
         verse: widget.verses[vi],
         verseIndex: vi,
         sepiaMode: widget.sepiaMode,
-        highlightedLocalWordIndex: localIdx,
+        activeSection: isThisVerseActive ? widget.activeSection : '',
+        activeLocalWordIndex: isThisVerseActive ? widget.activeLocalWordIndex : -1,
+        isPageCompleted: isThisVerseActive ? widget.isPageCompleted : false,
       );
     }
   }
@@ -1270,22 +1529,76 @@ class _LeatherTexturePainter extends CustomPainter {
 // ─────────────────────────────────────────────────────────────────────────────
 // VERSE PAGE
 // ─────────────────────────────────────────────────────────────────────────────
-class _VersePage extends StatelessWidget {
+class _VersePage extends StatefulWidget {
   const _VersePage({
+    super.key,
     required this.verse,
     required this.verseIndex,
     required this.sepiaMode,
-    this.highlightedLocalWordIndex = -1,
+    required this.activeSection,
+    required this.activeLocalWordIndex,
+    this.isPageCompleted = false,
   });
+
   final Map<String, String> verse;
   final int verseIndex;
   final bool sepiaMode;
-  /// Index of the highlighted word within THIS verse's Sanskrit token list. -1 = none.
-  final int highlightedLocalWordIndex;
+  final String activeSection; // 'sanskrit', 'transliteration', 'hindi', 'english', or ''
+  final int activeLocalWordIndex; // -1 if none
+  final bool isPageCompleted;
 
-  /// Build a rich text widget that highlights the active word while preserving 100% of
-  /// the original admin-entered whitespace, newlines (\n), and devanagari dandas (। ॥).
-  Widget _buildKaraokeText(String text, TextStyle baseStyle) {
+  @override
+  State<_VersePage> createState() => _VersePageState();
+}
+
+class _VersePageState extends State<_VersePage> {
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _hindiKey = GlobalKey();
+  final GlobalKey _englishKey = GlobalKey();
+
+  @override
+  void didUpdateWidget(covariant _VersePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.activeSection != oldWidget.activeSection) {
+      if (widget.activeSection == 'sanskrit' || widget.activeSection == 'transliteration') {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(0.0, duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
+        }
+      } else if (widget.activeSection == 'hindi') {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_hindiKey.currentContext != null) {
+            Scrollable.ensureVisible(
+              _hindiKey.currentContext!,
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeInOut,
+              alignment: 0.15,
+            );
+          }
+        });
+      } else if (widget.activeSection == 'english') {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_englishKey.currentContext != null) {
+            Scrollable.ensureVisible(
+              _englishKey.currentContext!,
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeInOut,
+              alignment: 0.15,
+            );
+          }
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// Builds rich text that highlights purely the text itself without any background box or container.
+  /// Also marks already-read words in a warm sacred tone and fully highlights all text when the page is completed.
+  Widget _buildKaraokeText(String text, TextStyle baseStyle, String sectionName) {
     if (text.isEmpty) return const SizedBox.shrink();
     final wordPattern = RegExp(r'[^\s।॥\n\r,.:;!?]+');
     final matches = wordPattern.allMatches(text).toList();
@@ -1293,12 +1606,19 @@ class _VersePage extends StatelessWidget {
       return Text(text, textAlign: TextAlign.center, style: baseStyle);
     }
 
-    if (highlightedLocalWordIndex < 0 || highlightedLocalWordIndex >= matches.length) {
-      // No active highlight on this verse: render text naturally
+    final isSectionActive = (widget.activeSection == sectionName);
+    final isPageComplete = widget.isPageCompleted;
+
+    const sectionOrder = ['sanskrit', 'transliteration', 'hindi', 'english'];
+    final currentSectionIdx = sectionOrder.indexOf(widget.activeSection);
+    final thisSectionIdx = sectionOrder.indexOf(sectionName);
+    final bool isPastSection = currentSectionIdx > thisSectionIdx && currentSectionIdx != -1;
+
+    // If section hasn't started and page is not completed, render base style
+    if (!isSectionActive && !isPastSection && !isPageComplete) {
       return Text(text, textAlign: TextAlign.center, style: baseStyle);
     }
 
-    // Reconstruct the exact string with rich styling on the active word
     final spans = <InlineSpan>[];
     int lastIndex = 0;
 
@@ -1312,33 +1632,36 @@ class _VersePage extends StatelessWidget {
         ));
       }
 
-      final isHighlighted = (i == highlightedLocalWordIndex);
+      final isHighlighted = isSectionActive && (i == widget.activeLocalWordIndex);
+      final isWordRead = isPageComplete || isPastSection || (isSectionActive && i < widget.activeLocalWordIndex);
       final wordStr = m.group(0)!;
 
       if (isHighlighted) {
-        spans.add(WidgetSpan(
-          alignment: PlaceholderAlignment.middle,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-            margin: const EdgeInsets.symmetric(horizontal: 1),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFD54F), // Radiant holy gold highlight
-              borderRadius: BorderRadius.circular(5),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFFF8C1A).withValues(alpha: 0.65),
-                  blurRadius: 8,
-                  spreadRadius: 1,
-                ),
-              ],
-            ),
-            child: Text(
-              wordStr,
-              style: baseStyle.copyWith(
-                color: const Color(0xFF8B0000), // Deep sacred crimson for high readability
-                fontWeight: FontWeight.w900,
+        // Pure text highlight without background box - glowing sacred saffron
+        spans.add(TextSpan(
+          text: wordStr,
+          style: baseStyle.copyWith(
+            color: const Color(0xFFE65100), // Vibrant sacred saffron
+            fontWeight: FontWeight.w900,
+            shadows: [
+              Shadow(
+                color: const Color(0xFFFF9800).withValues(alpha: 0.75),
+                blurRadius: 8,
               ),
-            ),
+              Shadow(
+                color: const Color(0xFFFFD54F).withValues(alpha: 0.6),
+                blurRadius: 3,
+              ),
+            ],
+          ),
+        ));
+      } else if (isWordRead) {
+        // Completed/read word - warm sacred terracotta/amber tone
+        spans.add(TextSpan(
+          text: wordStr,
+          style: baseStyle.copyWith(
+            color: const Color(0xFFA04000), // Rich warm amber text
+            fontWeight: FontWeight.w700,
           ),
         ));
       } else {
@@ -1351,7 +1674,6 @@ class _VersePage extends StatelessWidget {
       lastIndex = m.end;
     }
 
-    // Trailing punctuation / newlines after the last word
     if (lastIndex < text.length) {
       spans.add(TextSpan(
         text: text.substring(lastIndex),
@@ -1367,11 +1689,11 @@ class _VersePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bodyColor = sepiaMode ? const Color(0xFF332014) : const Color(0xFF261910);
-    final sanskritText = (verse['sanskrit'] ?? '').trim();
-    final transliterationText = (verse['transliteration'] ?? '').trim();
-    String rawEnglish = (verse['english'] ?? '').trim();
-    String rawHindi = (verse['hindi'] ?? '').trim();
+    final bodyColor = widget.sepiaMode ? const Color(0xFF332014) : const Color(0xFF261910);
+    final sanskritText = (widget.verse['sanskrit'] ?? '').trim();
+    final transliterationText = (widget.verse['transliteration'] ?? '').trim();
+    String rawEnglish = (widget.verse['english'] ?? '').trim();
+    String rawHindi = (widget.verse['hindi'] ?? '').trim();
 
     if (rawHindi.isEmpty && rawEnglish.contains('\n\n')) {
       final parts = rawEnglish.split('\n\n');
@@ -1410,6 +1732,7 @@ class _VersePage extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: LayoutBuilder(
                   builder: (context, constraints) => SingleChildScrollView(
+                    controller: _scrollController,
                     physics: const BouncingScrollPhysics(),
                     padding: EdgeInsets.only(top: contentTopPadding, bottom: 24),
                     child: ConstrainedBox(
@@ -1429,8 +1752,9 @@ class _VersePage extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(height: 6),
-                          // Karaoke indicator pill — appears while a word is highlighted
-                          if (highlightedLocalWordIndex >= 0)
+
+                          // Reading indicator pill — shows current active recitation section
+                          if (!widget.isPageCompleted && widget.activeLocalWordIndex >= 0)
                             Container(
                               margin: const EdgeInsets.only(bottom: 6),
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
@@ -1442,43 +1766,70 @@ class _VersePage extends StatelessWidget {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.music_note_rounded, size: 10, color: Color(0xFFD55F00)),
-                                  const SizedBox(width: 4),
-                                  Text('Now Playing', style: GoogleFonts.outfit(fontSize: 9, color: const Color(0xFFD55F00), fontWeight: FontWeight.w600)),
+                                  const Icon(Icons.auto_stories_rounded, size: 11, color: Color(0xFFD55F00)),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    widget.activeSection == 'sanskrit'
+                                        ? 'श्लोक पाठ'
+                                        : (widget.activeSection == 'transliteration'
+                                            ? 'उच्चारण पाठ'
+                                            : (widget.activeSection == 'hindi' ? 'भावार्थ पाठ' : 'English Translation')),
+                                    style: GoogleFonts.outfit(fontSize: 10, color: const Color(0xFFD55F00), fontWeight: FontWeight.w600),
+                                  ),
                                 ],
                               ),
                             ),
-                          Text('Verse ${verseIndex + 1}',
+                          Text('Verse ${widget.verseIndex + 1}',
                               style: GoogleFonts.outfit(color: const Color(0xFF8B6048), fontSize: 11, fontWeight: FontWeight.w500)),
                           const SizedBox(height: 14),
-                          // ── Karaoke-enabled Sanskrit text ──
+
+                          // ── Sanskrit Text ──
                           if (sanskritText.isNotEmpty) ...[
-                            _buildKaraokeText(sanskritText, sanskritBaseStyle),
+                            _buildKaraokeText(
+                              sanskritText,
+                              sanskritBaseStyle,
+                              'sanskrit',
+                            ),
                             const SizedBox(height: 16),
                           ],
+
+                          // ── Transliteration ──
                           if (transliterationText.isNotEmpty) ...[
-                            Text(transliterationText, textAlign: TextAlign.center,
-                                style: GoogleFonts.outfit(fontSize: 14, height: 1.6, color: bodyColor.withValues(alpha: 0.85), fontStyle: FontStyle.italic, fontWeight: FontWeight.w500)),
+                            _buildKaraokeText(
+                              transliterationText,
+                              GoogleFonts.outfit(fontSize: 14, height: 1.6, color: bodyColor.withValues(alpha: 0.85), fontStyle: FontStyle.italic, fontWeight: FontWeight.w500),
+                              'transliteration',
+                            ),
                             const SizedBox(height: 16),
                           ],
+
+                          // ── Hindi Meaning (भावार्थ) ──
                           if (rawHindi.isNotEmpty) ...[
-                            _divider('भावार्थ', devanagari: true),
+                            Container(
+                              key: _hindiKey,
+                              child: _divider('भावार्थ', devanagari: true),
+                            ),
                             const SizedBox(height: 8),
-                            if (sanskritText.isEmpty)
-                              _buildKaraokeText(rawHindi, GoogleFonts.notoSerifDevanagari(fontSize: 16, height: 1.7, color: bodyColor.withValues(alpha: 0.95), fontWeight: FontWeight.w500))
-                            else
-                              Text(rawHindi, textAlign: TextAlign.center,
-                                  style: GoogleFonts.notoSerifDevanagari(fontSize: 16, height: 1.7, color: bodyColor.withValues(alpha: 0.95), fontWeight: FontWeight.w500)),
+                            _buildKaraokeText(
+                              rawHindi,
+                              GoogleFonts.notoSerifDevanagari(fontSize: 16, height: 1.7, color: bodyColor.withValues(alpha: 0.95), fontWeight: FontWeight.w500),
+                              'hindi',
+                            ),
                             const SizedBox(height: 16),
                           ],
+
+                          // ── English Translation ──
                           if (rawEnglish.isNotEmpty) ...[
-                            _divider('English Translation'),
+                            Container(
+                              key: _englishKey,
+                              child: _divider('English Translation'),
+                            ),
                             const SizedBox(height: 8),
-                            if (sanskritText.isEmpty && rawHindi.isEmpty)
-                              _buildKaraokeText(rawEnglish, GoogleFonts.outfit(fontSize: 14.5, height: 1.65, color: bodyColor.withValues(alpha: 0.92), fontWeight: FontWeight.w500))
-                            else
-                              Text(rawEnglish, textAlign: TextAlign.center,
-                                  style: GoogleFonts.outfit(fontSize: 14.5, height: 1.65, color: bodyColor.withValues(alpha: 0.92), fontWeight: FontWeight.w500)),
+                            _buildKaraokeText(
+                              rawEnglish,
+                              GoogleFonts.outfit(fontSize: 14.5, height: 1.65, color: bodyColor.withValues(alpha: 0.92), fontWeight: FontWeight.w500),
+                              'english',
+                            ),
                             const SizedBox(height: 12),
                           ],
                         ],

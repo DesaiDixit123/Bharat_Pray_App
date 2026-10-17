@@ -10,11 +10,11 @@ import 'fast2sms_service.dart';
 
 class ApiService {
   // Set to true to use the live production server, false for local testing
-  static const bool isLive = true;
+  static const bool isLive = false;
 
   // Local backend configuration:
-  // Active ADB Reverse USB Tunnel = 127.0.0.1, Wi-Fi IP = 192.168.29.73, Android Emulator = 10.0.2.2
-  static const String _localIp = '192.168.29.73';
+  // Active ADB Reverse Tunnel = 127.0.0.1, Wi-Fi IP = 192.168.29.113, Android Emulator = 10.0.2.2
+  static const String _localIp = '127.0.0.1';
   static const int _localPort = 3020;
 
   static String get baseUrl {
@@ -109,24 +109,34 @@ class ApiService {
     return '$baseUrl${isUploads ? "" : "/uploads"}$pathPrefix$trimmed';
   }
 
+  static final List<String> _fallbackHosts = ['127.0.0.1', '192.168.29.113', '10.0.2.2', 'api.bharatpray.com'];
+
   static Future<http.Response> _safeGet(Uri uri, {Map<String, String>? headers}) async {
     try {
       _logApiCall('GET', uri, headers: headers);
       final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 15));
       _logApiResponse('GET', uri, response);
+      if (response.statusCode >= 500) {
+        throw HttpException('Server returned error ${response.statusCode}');
+      }
       return response;
     } catch (e) {
-      if (!isLive) {
-        for (final host in ['127.0.0.1', '192.168.29.73', '10.0.2.2']) {
-          if (host == uri.host) continue;
-          try {
-            final fallbackUri = uri.replace(host: host);
-            _logApiCall('GET (Fallback $host)', fallbackUri, headers: headers);
-            final res = await http.get(fallbackUri, headers: headers).timeout(const Duration(seconds: 4));
-            _logApiResponse('GET (Fallback $host)', fallbackUri, res);
+      for (final host in _fallbackHosts) {
+        if (host == uri.host) continue;
+        try {
+          final isHttps = (host == 'api.bharatpray.com');
+          final fallbackUri = uri.replace(
+            scheme: isHttps ? 'https' : 'http',
+            host: host,
+            port: isHttps ? null : _localPort,
+          );
+          _logApiCall('GET (Fallback $host)', fallbackUri, headers: headers);
+          final res = await http.get(fallbackUri, headers: headers).timeout(const Duration(seconds: 4));
+          _logApiResponse('GET (Fallback $host)', fallbackUri, res);
+          if (res.statusCode < 500) {
             return res;
-          } catch (_) {}
-        }
+          }
+        } catch (_) {}
       }
       print('[API ERROR] GET $uri | $e');
       rethrow;
@@ -138,19 +148,27 @@ class ApiService {
       _logApiCall('POST', uri, headers: headers);
       final response = await http.post(uri, headers: headers, body: body).timeout(const Duration(seconds: 15));
       _logApiResponse('POST', uri, response);
+      if (response.statusCode >= 500) {
+        throw HttpException('Server returned error ${response.statusCode}');
+      }
       return response;
     } catch (e) {
-      if (!isLive) {
-        for (final host in ['127.0.0.1', '192.168.29.73', '10.0.2.2']) {
-          if (host == uri.host) continue;
-          try {
-            final fallbackUri = uri.replace(host: host);
-            _logApiCall('POST (Fallback $host)', fallbackUri, headers: headers);
-            final res = await http.post(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
-            _logApiResponse('POST (Fallback $host)', fallbackUri, res);
+      for (final host in _fallbackHosts) {
+        if (host == uri.host) continue;
+        try {
+          final isHttps = (host == 'api.bharatpray.com');
+          final fallbackUri = uri.replace(
+            scheme: isHttps ? 'https' : 'http',
+            host: host,
+            port: isHttps ? null : _localPort,
+          );
+          _logApiCall('POST (Fallback $host)', fallbackUri, headers: headers);
+          final res = await http.post(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+          _logApiResponse('POST (Fallback $host)', fallbackUri, res);
+          if (res.statusCode < 500) {
             return res;
-          } catch (_) {}
-        }
+          }
+        } catch (_) {}
       }
       print('[API ERROR] POST $uri | $e');
       rethrow;
@@ -162,19 +180,27 @@ class ApiService {
       _logApiCall('PUT', uri, headers: headers);
       final response = await http.put(uri, headers: headers, body: body).timeout(const Duration(seconds: 15));
       _logApiResponse('PUT', uri, response);
+      if (response.statusCode >= 500) {
+        throw HttpException('Server returned error ${response.statusCode}');
+      }
       return response;
     } catch (e) {
-      if (!isLive) {
-        for (final host in ['127.0.0.1', '192.168.29.73', '10.0.2.2']) {
-          if (host == uri.host) continue;
-          try {
-            final fallbackUri = uri.replace(host: host);
-            _logApiCall('PUT (Fallback $host)', fallbackUri, headers: headers);
-            final res = await http.put(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
-            _logApiResponse('PUT (Fallback $host)', fallbackUri, res);
+      for (final host in _fallbackHosts) {
+        if (host == uri.host) continue;
+        try {
+          final isHttps = (host == 'api.bharatpray.com');
+          final fallbackUri = uri.replace(
+            scheme: isHttps ? 'https' : 'http',
+            host: host,
+            port: isHttps ? null : _localPort,
+          );
+          _logApiCall('PUT (Fallback $host)', fallbackUri, headers: headers);
+          final res = await http.put(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+          _logApiResponse('PUT (Fallback $host)', fallbackUri, res);
+          if (res.statusCode < 500) {
             return res;
-          } catch (_) {}
-        }
+          }
+        } catch (_) {}
       }
       print('[API ERROR] PUT $uri | $e');
       rethrow;
@@ -186,20 +212,25 @@ class ApiService {
       _logApiCall('PATCH', uri, headers: headers);
       final response = await http.patch(uri, headers: headers, body: body).timeout(const Duration(seconds: 30));
       _logApiResponse('PATCH', uri, response);
+      if (response.statusCode >= 500) {
+        throw HttpException('Server returned error ${response.statusCode}');
+      }
       return response;
-    } on TimeoutException catch (e) {
-      print('[API TIMEOUT] PATCH $uri | $e');
-      rethrow;
     } catch (e) {
-      if (!isLive) {
-        for (final host in ['127.0.0.1', '192.168.29.73', '10.0.2.2']) {
-          if (host == uri.host) continue;
-          try {
-            final fallbackUri = uri.replace(host: host);
-            final res = await http.patch(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+      for (final host in _fallbackHosts) {
+        if (host == uri.host) continue;
+        try {
+          final isHttps = (host == 'api.bharatpray.com');
+          final fallbackUri = uri.replace(
+            scheme: isHttps ? 'https' : 'http',
+            host: host,
+            port: isHttps ? null : _localPort,
+          );
+          final res = await http.patch(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+          if (res.statusCode < 500) {
             return res;
-          } catch (_) {}
-        }
+          }
+        } catch (_) {}
       }
       print('[API ERROR] PATCH $uri | $e');
       rethrow;
@@ -211,20 +242,25 @@ class ApiService {
       _logApiCall('DELETE', uri, headers: headers);
       final response = await http.delete(uri, headers: headers, body: body).timeout(const Duration(seconds: 30));
       _logApiResponse('DELETE', uri, response);
+      if (response.statusCode >= 500) {
+        throw HttpException('Server returned error ${response.statusCode}');
+      }
       return response;
-    } on TimeoutException catch (e) {
-      print('[API TIMEOUT] DELETE $uri | $e');
-      rethrow;
     } catch (e) {
-      if (!isLive) {
-        for (final host in ['127.0.0.1', '192.168.29.73', '10.0.2.2']) {
-          if (host == uri.host) continue;
-          try {
-            final fallbackUri = uri.replace(host: host);
-            final res = await http.delete(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+      for (final host in _fallbackHosts) {
+        if (host == uri.host) continue;
+        try {
+          final isHttps = (host == 'api.bharatpray.com');
+          final fallbackUri = uri.replace(
+            scheme: isHttps ? 'https' : 'http',
+            host: host,
+            port: isHttps ? null : _localPort,
+          );
+          final res = await http.delete(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+          if (res.statusCode < 500) {
             return res;
-          } catch (_) {}
-        }
+          }
+        } catch (_) {}
       }
       print('[API ERROR] DELETE $uri | $e');
       rethrow;
