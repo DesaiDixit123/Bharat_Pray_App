@@ -91,7 +91,11 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } catch (error) {
-      _showSnackBar(error.toString().replaceAll('Exception: ', ''));
+      String msg = error.toString().replaceAll('Exception: ', '');
+      if (msg.contains('TimeoutException') || msg.contains('Future not completed')) {
+        msg = 'Connection timed out. Please check your network or server status.';
+      }
+      _showSnackBar(msg);
     } finally {
       if (mounted) {
         setState(() {
