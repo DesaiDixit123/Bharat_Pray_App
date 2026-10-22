@@ -121,6 +121,7 @@ class ApiService {
       }
       return response;
     } catch (e) {
+<<<<<<< Updated upstream
       for (final host in _fallbackHosts) {
         if (host == uri.host) continue;
         try {
@@ -136,6 +137,16 @@ class ApiService {
           if (res.statusCode < 500) {
             return res;
           }
+=======
+      for (final host in ['127.0.0.1', '192.168.29.178', '192.168.29.73', '10.0.2.2']) {
+        if (host == uri.host && uri.scheme == 'http') continue;
+        try {
+          final fallbackUri = uri.replace(scheme: 'http', host: host, port: _localPort);
+          _logApiCall('GET (Fallback $host)', fallbackUri, headers: headers);
+          final res = await http.get(fallbackUri, headers: headers).timeout(const Duration(seconds: 4));
+          _logApiResponse('GET (Fallback $host)', fallbackUri, res);
+          return res;
+>>>>>>> Stashed changes
         } catch (_) {}
       }
       print('[API ERROR] GET $uri | $e');
@@ -146,13 +157,14 @@ class ApiService {
   static Future<http.Response> _safePost(Uri uri, {Map<String, String>? headers, Object? body}) async {
     try {
       _logApiCall('POST', uri, headers: headers);
-      final response = await http.post(uri, headers: headers, body: body).timeout(const Duration(seconds: 15));
+      final response = await http.post(uri, headers: headers, body: body).timeout(const Duration(seconds: 10));
       _logApiResponse('POST', uri, response);
       if (response.statusCode >= 500) {
         throw HttpException('Server returned error ${response.statusCode}');
       }
       return response;
     } catch (e) {
+<<<<<<< Updated upstream
       for (final host in _fallbackHosts) {
         if (host == uri.host) continue;
         try {
@@ -168,6 +180,16 @@ class ApiService {
           if (res.statusCode < 500) {
             return res;
           }
+=======
+      for (final host in ['127.0.0.1', '192.168.29.178', '192.168.29.73', '10.0.2.2']) {
+        if (host == uri.host && uri.scheme == 'http') continue;
+        try {
+          final fallbackUri = uri.replace(scheme: 'http', host: host, port: _localPort);
+          _logApiCall('POST (Fallback $host)', fallbackUri, headers: headers);
+          final res = await http.post(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+          _logApiResponse('POST (Fallback $host)', fallbackUri, res);
+          return res;
+>>>>>>> Stashed changes
         } catch (_) {}
       }
       print('[API ERROR] POST $uri | $e');
@@ -178,13 +200,14 @@ class ApiService {
   static Future<http.Response> _safePut(Uri uri, {Map<String, String>? headers, Object? body}) async {
     try {
       _logApiCall('PUT', uri, headers: headers);
-      final response = await http.put(uri, headers: headers, body: body).timeout(const Duration(seconds: 15));
+      final response = await http.put(uri, headers: headers, body: body).timeout(const Duration(seconds: 10));
       _logApiResponse('PUT', uri, response);
       if (response.statusCode >= 500) {
         throw HttpException('Server returned error ${response.statusCode}');
       }
       return response;
     } catch (e) {
+<<<<<<< Updated upstream
       for (final host in _fallbackHosts) {
         if (host == uri.host) continue;
         try {
@@ -200,6 +223,16 @@ class ApiService {
           if (res.statusCode < 500) {
             return res;
           }
+=======
+      for (final host in ['127.0.0.1', '192.168.29.178', '192.168.29.73', '10.0.2.2']) {
+        if (host == uri.host && uri.scheme == 'http') continue;
+        try {
+          final fallbackUri = uri.replace(scheme: 'http', host: host, port: _localPort);
+          _logApiCall('PUT (Fallback $host)', fallbackUri, headers: headers);
+          final res = await http.put(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+          _logApiResponse('PUT (Fallback $host)', fallbackUri, res);
+          return res;
+>>>>>>> Stashed changes
         } catch (_) {}
       }
       print('[API ERROR] PUT $uri | $e');
@@ -210,13 +243,14 @@ class ApiService {
   static Future<http.Response> _safePatch(Uri uri, {Map<String, String>? headers, Object? body}) async {
     try {
       _logApiCall('PATCH', uri, headers: headers);
-      final response = await http.patch(uri, headers: headers, body: body).timeout(const Duration(seconds: 30));
+      final response = await http.patch(uri, headers: headers, body: body).timeout(const Duration(seconds: 15));
       _logApiResponse('PATCH', uri, response);
       if (response.statusCode >= 500) {
         throw HttpException('Server returned error ${response.statusCode}');
       }
       return response;
     } catch (e) {
+<<<<<<< Updated upstream
       for (final host in _fallbackHosts) {
         if (host == uri.host) continue;
         try {
@@ -230,6 +264,14 @@ class ApiService {
           if (res.statusCode < 500) {
             return res;
           }
+=======
+      for (final host in ['127.0.0.1', '192.168.29.178', '192.168.29.73', '10.0.2.2']) {
+        if (host == uri.host && uri.scheme == 'http') continue;
+        try {
+          final fallbackUri = uri.replace(scheme: 'http', host: host, port: _localPort);
+          final res = await http.patch(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+          return res;
+>>>>>>> Stashed changes
         } catch (_) {}
       }
       print('[API ERROR] PATCH $uri | $e');
@@ -240,13 +282,14 @@ class ApiService {
   static Future<http.Response> _safeDelete(Uri uri, {Map<String, String>? headers, Object? body}) async {
     try {
       _logApiCall('DELETE', uri, headers: headers);
-      final response = await http.delete(uri, headers: headers, body: body).timeout(const Duration(seconds: 30));
+      final response = await http.delete(uri, headers: headers, body: body).timeout(const Duration(seconds: 15));
       _logApiResponse('DELETE', uri, response);
       if (response.statusCode >= 500) {
         throw HttpException('Server returned error ${response.statusCode}');
       }
       return response;
     } catch (e) {
+<<<<<<< Updated upstream
       for (final host in _fallbackHosts) {
         if (host == uri.host) continue;
         try {
@@ -260,6 +303,14 @@ class ApiService {
           if (res.statusCode < 500) {
             return res;
           }
+=======
+      for (final host in ['127.0.0.1', '192.168.29.178', '192.168.29.73', '10.0.2.2']) {
+        if (host == uri.host && uri.scheme == 'http') continue;
+        try {
+          final fallbackUri = uri.replace(scheme: 'http', host: host, port: _localPort);
+          final res = await http.delete(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+          return res;
+>>>>>>> Stashed changes
         } catch (_) {}
       }
       print('[API ERROR] DELETE $uri | $e');

@@ -1,28 +1,21 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/jap_models.dart';
-import '../../models/particles.dart';
 import '../../services/api_service.dart';
 import '../../services/jap_offline_repository.dart';
-import '../../services/jap_session_controller.dart';
-import 'darshan_runtime_screen.dart';
 import 'upload_god_photo_screen.dart';
 import 'notification_screen.dart';
 import 'messages_screen.dart';
 import '../../services/yatra_personal_chat_service.dart';
-import '../../animations/jap/jap_animation_type.dart';
-import '../../animations/jap/jap_mantra_helper.dart';
-import '../../animations/jap/premium_jap_animator.dart';
-import '../../animations/jap/jap_animation_selector_sheet.dart';
 import '../../widgets/user_avatar.dart';
+import '../../models/jap_theme_config.dart';
+import 'jap_detail_screen.dart';
+export 'jap_detail_screen.dart';
 
 // ─────────────────────────────────────────────
 // Main Jap List Screen
@@ -131,10 +124,18 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
     }
 
     // 4. Combine remote admin japs and user custom japs
-    final combined = [
+    List<JapConfig> combined = [
       ...remoteJaps,
       ...customJaps.where((c) => !remoteJaps.any((r) => r.id == c.id)),
     ];
+    if (combined.isEmpty) {
+      combined = _getDefaultPresets();
+    } else {
+      final hasRadha = combined.any((j) => j.name.toLowerCase().contains('radha'));
+      if (!hasRadha) {
+        combined.insert(0, _createRadhaPreset());
+      }
+    }
     try {
       for (final jap in combined) {
         final cached = await JapOfflineRepository.getProgress(
@@ -161,6 +162,36 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
     }
   }
 
+  static JapConfig _createRadhaPreset() {
+    return JapConfig(
+      id: JapThemeConfig.radha.id,
+      name: JapThemeConfig.radha.name,
+      thumbnailUrl: JapThemeConfig.radha.imageAsset,
+      darshanImageUrl: JapThemeConfig.radha.imageAsset,
+      shlokText: JapThemeConfig.radha.mantraText,
+      shlokAudioUrl: JapThemeConfig.radha.audioAsset,
+      targetCount: 108,
+      progress: 0,
+      effectPack: EffectPack.resolve(name: 'Shri Radha'),
+    );
+  }
+
+  static List<JapConfig> _getDefaultPresets() {
+    return JapThemeConfig.allThemes.map((theme) {
+      return JapConfig(
+        id: theme.id,
+        name: theme.name,
+        thumbnailUrl: theme.imageAsset,
+        darshanImageUrl: theme.imageAsset,
+        shlokText: theme.mantraText,
+        shlokAudioUrl: theme.audioAsset,
+        targetCount: 108,
+        progress: 0,
+        effectPack: EffectPack.resolve(name: theme.name),
+      );
+    }).toList();
+  }
+
   String _getGreeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) {
@@ -181,9 +212,6 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
     }
   }
 
-  String _resolveProfilePic(String pic) {
-    return ApiService.resolveImageUrl(pic);
-  }
 
   String _getMailSvg(int count) {
     final fill = count > 0 ? '#FF0000' : 'none';
@@ -203,79 +231,6 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
 </svg>''';
   }
 
-  void _showMailNotificationSheet(
-    BuildContext context,
-    String title,
-    String content,
-  ) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (BuildContext context) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFFFFF0E6),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.outfit(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF2E2A36),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Color(0xFF2E2A36)),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFEFE6DB)),
-                ),
-                child: Text(
-                  content,
-                  style: GoogleFonts.outfit(
-                    fontSize: 14,
-                    color: const Color(0xFF2E2A36).withValues(alpha: 0.8),
-                    height: 1.5,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-            ],
-          ),
-        );
-      },
-    );
-  }
 
   List<JapConfig> get _filteredJaps {
     if (_searchQuery.isEmpty) return _allJaps;
@@ -353,6 +308,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       }
 
       if (_token.isNotEmpty) {
+        if (!mounted || !context.mounted) return;
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -425,7 +381,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
         } catch (e) {
           debugPrint('[JapCounterScreen] Server createCustomJap failed, saved offline: $e');
         } finally {
-          if (mounted) {
+          if (mounted && context.mounted) {
             Navigator.of(context, rootNavigator: true).pop();
           }
         }
@@ -975,6 +931,7 @@ class _JapCard extends StatelessWidget {
     );
   }
 }
+<<<<<<< Updated upstream
 
 // ─────────────────────────────────────────────
 // Detail / Counting Screen – Image Reveal Engine
@@ -2744,3 +2701,5 @@ class _RenderBlendedLayer extends RenderProxyBox {
   }
 }
 
+=======
+>>>>>>> Stashed changes
