@@ -75,9 +75,20 @@ class _GranthScreenState extends State<GranthScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      final List<Map<String, dynamic>> fallbackList = [];
+      for (final cat in ApiService.defaultGranthCategories) {
+        fallbackList.add({
+          '_id': cat['_id'],
+          'title': (cat['name'] ?? cat['title'] ?? 'Granth').toString(),
+          'count': cat['granthCount'] ?? 2,
+          'image': cat['image'] ?? 'assets/images/bhagavad_gita.png',
+          'description': (cat['description'] ?? '').toString(),
+        });
+      }
       setState(() {
+        _categories = fallbackList;
         _isLoading = false;
-        _error = 'Failed to load granth categories.';
+        _error = '';
       });
     }
   }

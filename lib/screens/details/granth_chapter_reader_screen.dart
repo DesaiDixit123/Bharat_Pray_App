@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
@@ -130,12 +131,12 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       if (!mounted || !_isPlaying || _isAutoTurning) return;
 
       if (nextPage < totalPages - 1) {
-        // Auto-turn to the next verse page slowly and gracefully (2200ms)
+        // Auto-turn to the next verse page smoothly and gracefully (650ms)
         _isAutoTurning = true;
-        _bookViewerKey.currentState?.autoTurnToPage(nextPage, durationMs: 2200);
+        _bookViewerKey.currentState?.autoTurnToPage(nextPage, durationMs: 650);
 
-        // Wait for slow page turn animation to finish (~2300ms), then start reading the next page
-        Future.delayed(const Duration(milliseconds: 2300), () {
+        // Wait for page turn animation to finish (~700ms), then start reading the next page
+        Future.delayed(const Duration(milliseconds: 700), () {
           if (!mounted) return;
           _isAutoTurning = false;
           if (_isPlaying) {
@@ -148,9 +149,9 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
           }
         });
       } else if (nextPage == totalPages - 1) {
-        // Reached end of chapter verses, automatically turn to back cover slowly
+        // Reached end of chapter verses, automatically turn to back cover gracefully
         _isAutoTurning = true;
-        _bookViewerKey.currentState?.autoTurnToPage(nextPage, durationMs: 2200);
+        _bookViewerKey.currentState?.autoTurnToPage(nextPage, durationMs: 650);
         setState(() {
           _isPlaying = false;
           _isAutoTurning = false;
@@ -180,8 +181,8 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     } else {
       final totalPages = _verses.length + 2;
       if (_currentPage == 0) {
-        // Currently on front cover: turn slowly (2200ms) to Page 1
-        _bookViewerKey.currentState?.autoTurnToPage(1, durationMs: 2200);
+        // Currently on front cover: turn smoothly (650ms) to Page 1
+        _bookViewerKey.currentState?.autoTurnToPage(1, durationMs: 650);
         setState(() {
           _isPlaying = true;
           _currentPage = 1;
@@ -191,14 +192,14 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
         if (_audioUrl != null) {
           _audioPlayer.play(UrlSource(_audioUrl!));
         }
-        Future.delayed(const Duration(milliseconds: 2300), () {
+        Future.delayed(const Duration(milliseconds: 750), () {
           if (mounted && _isPlaying) {
             _startWordTimer();
           }
         });
       } else if (_currentPage >= totalPages - 1) {
-        // On back cover: return slowly to Page 1 and start fresh
-        _bookViewerKey.currentState?.autoTurnToPage(1, durationMs: 2200);
+        // On back cover: return to Page 1 and start fresh
+        _bookViewerKey.currentState?.autoTurnToPage(1, durationMs: 650);
         setState(() {
           _isPlaying = true;
           _currentPage = 1;
@@ -208,7 +209,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
         if (_audioUrl != null) {
           _audioPlayer.play(UrlSource(_audioUrl!));
         }
-        Future.delayed(const Duration(milliseconds: 2300), () {
+        Future.delayed(const Duration(milliseconds: 750), () {
           if (mounted && _isPlaying) {
             _startWordTimer();
           }
@@ -266,14 +267,14 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
 
   void _goToPrevPage() {
     if (_currentPage > 0) {
-      _bookViewerKey.currentState?.autoTurnToPage(_currentPage - 1, durationMs: 2200);
+      _bookViewerKey.currentState?.autoTurnToPage(_currentPage - 1, durationMs: 580);
     }
   }
 
   void _goToNextPage() {
     final totalPages = _verses.length + 2;
     if (_currentPage < totalPages - 1) {
-      _bookViewerKey.currentState?.autoTurnToPage(_currentPage + 1, durationMs: 2200);
+      _bookViewerKey.currentState?.autoTurnToPage(_currentPage + 1, durationMs: 580);
     }
   }
 
@@ -433,53 +434,95 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     final granthTitle = (widget.granth['name'] ?? widget.granth['title'] ?? 'Granth').toString();
     final chapterTitle = (widget.chapter['title'] ?? widget.chapter['name'] ?? 'Chapter').toString();
     final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final screenHeight = MediaQuery.of(context).size.height;
+    // Book fills the readable area: just the status bar at top, nav controls region at bottom
+    final double vInset = screenHeight * 0.045;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-        systemNavigationBarColor: Colors.black,
-        systemNavigationBarIconBrightness: Brightness.light,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+        systemNavigationBarColor: Color(0xFFF7EFE2),
+        systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: const Color(0xFF1E0A03),
+        backgroundColor: const Color(0xFFF7EFE2),
         body: Stack(
           children: [
-            // Full-screen book viewer
+            // Ambient sacred reading sanctuary background matching the app's divine cream theme
             Positioned.fill(
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: RadialGradient(
+                    center: Alignment.center,
+                    radius: 1.35,
+                    colors: [
+                      Color(0xFFFFF9F0), // Divine warm light cream
+                      Color(0xFFF8EDE0), // Sandalwood cream
+                      Color(0xFFEDE0CF), // Warm beige
+                    ],
+                    stops: [0.0, 0.55, 1.0],
+                  ),
+                ),
+              ),
+            ),
+
+            // Book viewer reduced 10% from top and bottom with authentic desk drop shadow
+            Positioned(
+              top: vInset,
+              bottom: vInset,
+              left: 0,
+              right: 0,
               child: _isLoadingPages
                   ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF8C1A)))
-                  : _BookViewer(
-                      key: _bookViewerKey,
-                      granth: widget.granth,
-                      granthTitle: granthTitle,
-                      chapterTitle: chapterTitle,
-                      verses: _verses,
-                      sepiaMode: _sepiaMode,
-                      activeVerseIndex: (_isPlaying && _currentPage >= 1 && _currentPage <= _verses.length)
-                          ? _currentPage - 1
-                          : -1,
-                      activeSection: activeSection,
-                      activeLocalWordIndex: activeLocalWordIndex,
-                      isPageCompleted: _isPageCompleted,
-                      onPageChanged: _onPageChanged,
+                  : DecoratedBox(
+                      decoration: BoxDecoration(
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.18),
+                            blurRadius: 28,
+                            spreadRadius: 2,
+                            offset: const Offset(0, 12),
+                          ),
+                          BoxShadow(
+                            color: const Color(0xFF5C1405).withValues(alpha: 0.08),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: _BookViewer(
+                        key: _bookViewerKey,
+                        granth: widget.granth,
+                        granthTitle: granthTitle,
+                        chapterTitle: chapterTitle,
+                        verses: _verses,
+                        sepiaMode: _sepiaMode,
+                        activeVerseIndex: (_isPlaying && _currentPage >= 1 && _currentPage <= _verses.length)
+                            ? _currentPage - 1
+                            : -1,
+                        activeSection: activeSection,
+                        activeLocalWordIndex: activeLocalWordIndex,
+                        isPageCompleted: _isPageCompleted,
+                        onPageChanged: _onPageChanged,
+                      ),
                     ),
             ),
 
-            // Floating back arrow (top-left)
+            // Floating back arrow (top-left) styled to match theme
             Positioned(
               top: MediaQuery.of(context).padding.top + 8,
-              left: 8,
+              left: 10,
               child: Material(
-                color: Colors.black.withValues(alpha: 0.35),
+                color: const Color(0xFF5C1405).withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(24),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(24),
                   onTap: () => Navigator.pop(context),
                   child: const Padding(
                     padding: EdgeInsets.all(10),
-                    child: Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                    child: Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF5C1405), size: 20),
                   ),
                 ),
               ),
@@ -755,14 +798,26 @@ class _BookViewer extends StatefulWidget {
 }
 
 class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin {
+  /// Width of the visible leather spine strip on the left of the cover, in logical pixels.
+  static const double _spineW = 22.0;
+
+  /// Physical thickness of the dense hardbound cover board in logical pixels.
+  /// 4.0px matches authentic, slim, elegant luxury hardbound binder's board thickness.
+  static const double _boardThickness = 4.0;
+
   int _currentPage = 0; // 0 = Cover, 1...N = Verses, N+1 = Back Cover
   bool _isTurning = false;
   bool _turnForward = true;
   double _dragProgress = 0.0; // 0.0 to 1.0
   bool _isDragging = false;
   bool _isClosingBook = false;
+  bool _isReturning = false;
   // Pending drag: touch started but no movement yet — avoids blink on hold
   bool _pendingDrag = false;
+
+  // 2D Gesture tracking for Apple Books-style diagonal corner peel
+  Offset? _dragStart;
+  Offset? _dragCurrent;
 
   late AnimationController _turnCtrl;
   late Animation<double> _turnAnim;
@@ -775,6 +830,17 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
 
   void _onAnimStatus(AnimationStatus status) {
     if (status == AnimationStatus.completed) {
+      if (_isReturning) {
+        setState(() {
+          _isReturning = false;
+          _isTurning = false;
+          _dragProgress = 0;
+          _dragStart = null;
+          _dragCurrent = null;
+        });
+        _turnCtrl.reset();
+        return;
+      }
       if (_isClosingBook) {
         Navigator.pop(context);
         return;
@@ -792,7 +858,10 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
           _currentPage = (_currentPage - 1).clamp(0, totalPages - 1);
         }
         _isTurning = false;
+        _isReturning = false;
         _dragProgress = 0;
+        _dragStart = null;
+        _dragCurrent = null;
       });
       _turnCtrl.reset();
       widget.onPageChanged?.call(_currentPage);
@@ -800,17 +869,27 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
       // The drag was aborted and snapped back to 0.
       setState(() {
         _isTurning = false;
+        _isReturning = false;
         _dragProgress = 0;
+        _dragStart = null;
+        _dragCurrent = null;
       });
     }
   }
 
-  void autoTurnToPage(int targetPage, {int durationMs = 2200}) {
+  void autoTurnToPage(int targetPage, {int durationMs = 650}) {
     if (_currentPage == targetPage || _isTurning || _isClosingBook) return;
     if (targetPage < 0 || targetPage >= totalPages) return;
+    final w = context.size?.width ?? 350;
+    final h = context.size?.height ?? 600;
+    _dragProgress = 0.0;
     if (targetPage > _currentPage) {
+      _dragStart = Offset(w, h * 0.82); // Natural bottom-right corner peel
+      _dragCurrent = _dragStart;
       _triggerTurn(forward: true, durationMs: durationMs);
     } else if (targetPage < _currentPage) {
+      _dragStart = Offset(0, h * 0.82);
+      _dragCurrent = _dragStart;
       _triggerTurn(forward: false, durationMs: durationMs);
     }
   }
@@ -820,24 +899,44 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     if (forward && _currentPage >= totalPages) return;
     if (!forward && _currentPage <= 0) return;
     HapticFeedback.lightImpact();
-    setState(() { _isTurning = true; _turnForward = forward; });
-    if (durationMs != null) {
-      _turnCtrl.duration = Duration(milliseconds: durationMs);
-    } else {
-      _turnCtrl.duration = const Duration(milliseconds: 650);
-    }
-    _turnCtrl.forward(from: _dragProgress.clamp(0.0, 0.99));
+    setState(() {
+      _isTurning = true;
+      _turnForward = forward;
+      _isReturning = false;
+    });
+
+    final double startP = _dragProgress.clamp(0.0, 0.99);
+    _turnAnim = Tween<double>(begin: startP, end: 1.0).animate(
+      CurvedAnimation(parent: _turnCtrl, curve: Curves.easeOutCubic),
+    );
+
+    // Dignified, physical paper inertia: cover is heavier hardbound board (640ms), inner pages (540ms)
+    final bool isCoverTurn = (_currentPage == 0 && forward) || (_currentPage == 1 && !forward);
+    final double remaining = (1.0 - startP).clamp(0.12, 1.0);
+    final int defaultBase = isCoverTurn ? 640 : 540;
+    final int duration = durationMs != null
+        ? (durationMs * remaining).clamp(isCoverTurn ? 480.0 : 380.0, 720.0).toInt()
+        : (defaultBase * remaining).clamp(isCoverTurn ? 480.0 : 380.0, 720.0).toInt();
+
+    _turnCtrl.duration = Duration(milliseconds: duration);
+    _turnCtrl.forward(from: 0.0);
   }
 
   void _triggerReturn({int? durationMs}) {
     if (_isTurning) return;
-    setState(() { _isTurning = true; });
-    if (durationMs != null) {
-      _turnCtrl.duration = Duration(milliseconds: durationMs);
-    } else {
-      _turnCtrl.duration = const Duration(milliseconds: 650);
-    }
-    _turnCtrl.reverse(from: _dragProgress.clamp(0.01, 1.0));
+    setState(() {
+      _isTurning = true;
+      _isReturning = true;
+    });
+
+    final double startP = _dragProgress.clamp(0.01, 1.0);
+    _turnAnim = Tween<double>(begin: startP, end: 0.0).animate(
+      CurvedAnimation(parent: _turnCtrl, curve: Curves.easeOutCubic),
+    );
+
+    final int duration = durationMs ?? (380 + (startP * 120)).clamp(360, 480).toInt();
+    _turnCtrl.duration = Duration(milliseconds: duration);
+    _turnCtrl.forward(from: 0.0);
   }
 
   void _triggerCloseBookAnimation() {
@@ -845,78 +944,80 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     setState(() {
       _isClosingBook = true;
       _turnForward = true; // Swings from right to left
+      _isReturning = false;
     });
-    _turnCtrl.duration = const Duration(milliseconds: 900); // Slower, dramatic close
+    _turnAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _turnCtrl, curve: Curves.easeOutCubic),
+    );
+    _turnCtrl.duration = const Duration(milliseconds: 620);
     _turnCtrl.forward(from: 0.0);
   }
 
-  void _onHorizontalDragStart(DragStartDetails d) {
+  void _onPanStart(DragStartDetails d) {
     if (_isTurning || _isClosingBook) return;
     _pendingDrag = true;
     _isDragging = false;
+    _dragStart = d.localPosition;
+    _dragCurrent = d.localPosition;
   }
 
-  void _onHorizontalDragUpdate(DragUpdateDetails d) {
+  void _onPanUpdate(DragUpdateDetails d) {
     if (_isTurning) return;
+    _dragCurrent = d.localPosition;
     final width = context.size?.width ?? 350;
-    final delta = -(d.primaryDelta! / width);
+    final dx = (_dragCurrent!.dx - (_dragStart?.dx ?? d.localPosition.dx));
 
-    // Lock direction on first decisive movement — avoids direction jitter
+    // Lock direction on first decisive horizontal movement (dx < 0 is forward, dx > 0 is reverse)
     if (!_isDragging && _pendingDrag) {
-      if (delta.abs() < 0.003) return;
-      final bool forward = delta > 0;
+      if (dx.abs() < 5.0) return;
+      final bool forward = (dx < 0);
       if (forward && _currentPage >= totalPages - 1) return;
       if (!forward && _currentPage <= 0) return;
-      setState(() {
-        _isDragging = true;
-        _pendingDrag = false;
-        _turnForward = forward;
-        _dragProgress = 0.0;
-      });
-      return;
+      _isDragging = true;
+      _pendingDrag = false;
+      _turnForward = forward;
+      _dragProgress = 0.0;
     }
     if (!_isDragging) return;
 
-    // Advance or retreat smoothly along the locked gesture direction
-    final double step = _turnForward ? delta : -delta;
+    // Smoothly calculate progress based on drag distance
+    final double dragDist = _turnForward ? -dx : dx;
+    final double rawProgress = (dragDist / (width * 0.82)).clamp(0.0, 1.0);
     setState(() {
-      _dragProgress = (_dragProgress + step * 1.35).clamp(0.0, 0.99);
+      _dragProgress = rawProgress;
     });
   }
 
-  void _onHorizontalDragEnd(DragEndDetails d) {
+  void _onPanEnd(DragEndDetails d) {
     _pendingDrag = false;
-    if (!_isDragging) return;
+    if (!_isDragging) {
+      _dragStart = null;
+      _dragCurrent = null;
+      return;
+    }
     setState(() => _isDragging = false);
 
-    final velocity = d.primaryVelocity ?? 0;
-    final int targetMs = velocity.abs() > 300 ? 250 : 350;
-
-    final double remForward = (1.0 - _dragProgress).clamp(0.05, 1.0);
-    final double remBackward = _dragProgress.clamp(0.05, 1.0);
-
-    final int forwardTotalMs = (targetMs / remForward).round().clamp(150, 650);
-    final int returnTotalMs = (targetMs / remBackward).round().clamp(150, 650);
-
-    if (velocity.abs() > 300) {
+    final vx = d.velocity.pixelsPerSecond.dx;
+    // Even if user flings/swipes fast, maintain majestic, calm, slow turning speed (560ms)
+    if (vx.abs() > 200) {
       if (_turnForward) {
-        if (velocity < 0) {
-          _triggerTurn(forward: true, durationMs: forwardTotalMs);
+        if (vx < 0) {
+          _triggerTurn(forward: true, durationMs: 560);
         } else {
-          _triggerReturn(durationMs: returnTotalMs);
+          _triggerReturn(durationMs: 420);
         }
       } else {
-        if (velocity > 0) {
-          _triggerTurn(forward: false, durationMs: forwardTotalMs);
+        if (vx > 0) {
+          _triggerTurn(forward: false, durationMs: 560);
         } else {
-          _triggerReturn(durationMs: returnTotalMs);
+          _triggerReturn(durationMs: 420);
         }
       }
     } else {
-      if (_dragProgress > 0.35) {
-        _triggerTurn(forward: _turnForward, durationMs: forwardTotalMs);
+      if (_dragProgress > 0.28) {
+        _triggerTurn(forward: _turnForward, durationMs: 580);
       } else {
-        _triggerReturn(durationMs: returnTotalMs);
+        _triggerReturn(durationMs: 420);
       }
     }
   }
@@ -924,25 +1025,32 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
   @override
   void initState() {
     super.initState();
-    _turnCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 650));
-    _turnAnim = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _turnCtrl, curve: Curves.easeInOutSine));
-    _turnAnim.addStatusListener(_onAnimStatus);
+    _turnCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 580));
+    _turnAnim = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _turnCtrl, curve: Curves.easeOutCubic));
+    _turnCtrl.addStatusListener(_onAnimStatus);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Full-screen: book fills the entire display
-    return GestureDetector(
-      onHorizontalDragStart: _onHorizontalDragStart,
-      onHorizontalDragUpdate: _onHorizontalDragUpdate,
-      onHorizontalDragEnd: _onHorizontalDragEnd,
-      child: AnimatedBuilder(
-        animation: _turnCtrl,
-        builder: (context, _) {
-          final progress = _isTurning ? _turnAnim.value : _dragProgress;
-          return _build3DBookCanvas(progress);
-        },
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final h = constraints.maxHeight;
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          // Explicitly no onTapUp: Tapping on page or hardbound cover does NOT trigger turns
+          onPanStart: _onPanStart,
+          onPanUpdate: _onPanUpdate,
+          onPanEnd: _onPanEnd,
+          child: AnimatedBuilder(
+            animation: _turnCtrl,
+            builder: (context, _) {
+              final progress = _isTurning ? _turnAnim.value : _dragProgress;
+              return _build3DBookCanvas(progress, w, h);
+            },
+          ),
+        );
+      },
     );
   }
 
@@ -998,20 +1106,90 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
 
   Widget _buildInsideCover(double w, double h) {
     return Container(
-      width: w, height: h,
+      width: w,
+      height: h,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF381406), Color(0xFF1E0A03)], 
-          begin: Alignment.topLeft, end: Alignment.bottomRight
+          colors: [Color(0xFF2A0D04), Color(0xFF160602)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: CustomPaint(painter: _LeatherTexturePainter()),
+          ),
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.all(22),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.5), width: 1.5),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(7),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.25), width: 0.8),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'ॐ',
+                  style: GoogleFonts.notoSerifDevanagari(
+                    fontSize: 52,
+                    color: const Color(0xFFD4AF37).withValues(alpha: 0.80),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '॥ ॐ श्री परमात्मने नमः ॥',
+                  style: GoogleFonts.notoSerifDevanagari(
+                    fontSize: 13,
+                    color: const Color(0xFFE5C158).withValues(alpha: 0.70),
+                    letterSpacing: 1.1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _build3DBookCanvas(double progress) {
-    final size = MediaQuery.of(context).size;
-    final w = size.width;
-    final h = size.height;
+  Widget _buildHeadband() {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(1.5),
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF8B0000), // crimson red
+            Color(0xFFFFD700), // gold
+            Color(0xFF8B0000),
+            Color(0xFFFFD700),
+            Color(0xFF8B0000),
+          ],
+          stops: [0.0, 0.25, 0.5, 0.75, 1.0],
+        ),
+        boxShadow: const [
+          BoxShadow(color: Colors.black45, blurRadius: 2, offset: Offset(0, 1)),
+        ],
+      ),
+    );
+  }
+
+  Widget _build3DBookCanvas(double progress, double w, double h) {
 
     final bool isAnimatingOrDragging = progress > 0 || _isDragging || _isClosingBook;
     final bool isClosingToCover = isAnimatingOrDragging && !_turnForward && _currentPage == 1;
@@ -1037,148 +1215,49 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     final double swipeProgress = isTurning ? (_turnForward ? progress : -progress) : 0.0;
     final double effectivePage = (_currentPage + swipeProgress).clamp(0.0, totalPages - 1.0);
     final double dynamicRatio = totalPages > 1 ? (effectivePage / (totalPages - 1)) : 0.0;
-    
-    final double leftStackW = maxStackW * dynamicRatio;
     final double rightStackW = maxStackW * (1.0 - dynamicRatio);
+
+    // Reading page leaf dimensions (sits cleanly to the right of the spine binding)
+    final double leafW = w - _spineW - 4.0;
+    final double leafH = h - 8.0;
+    final bool isFullCoverView = (!isAnimatingOrDragging && _currentPage == 0) || isFrontCoverTurn || _isClosingBook;
 
     Widget content;
     if (!isAnimatingOrDragging) {
-      content = topPage != null ? _wrapPage(topPageIndex, topPage) : const SizedBox.shrink();
+      if (_currentPage == 0) {
+        content = topPage != null ? _wrapPage(0, topPage) : const SizedBox.shrink();
+      } else {
+        content = topPage != null ? _wrapInnerLeaf(topPageIndex, topPage) : const SizedBox.shrink();
+      }
     } else if (isFrontCoverTurn || _isClosingBook) {
-      final double turnAngle = _isClosingBook
-          ? (progress * math.pi)
-          : (_turnForward ? (progress * math.pi) : ((1.0 - progress) * math.pi));
-
-      final bool isFrontVisible = turnAngle <= math.pi / 2;
-      final double sineAngle = math.sin(turnAngle);
-
-      content = Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // 1. Underneath page (basePage)
-          if (basePage != null && !_isClosingBook) ...[
-            _wrapPage(basePageIndex, basePage),
-            // Dynamic drop shadow cast on basePage by the turning page
-            Positioned.fill(
-              child: IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.only(
-                      topRight: Radius.circular(basePageIndex == 0 ? 6 : 2),
-                      bottomRight: Radius.circular(basePageIndex == 0 ? 6 : 2),
-                    ),
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.black.withValues(alpha: (0.42 * sineAngle).clamp(0.0, 0.45)),
-                        Colors.black.withValues(alpha: (0.12 * sineAngle).clamp(0.0, 0.2)),
-                        Colors.transparent,
-                      ],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      stops: [
-                        0.0,
-                        (0.25 + 0.35 * (1.0 - math.cos(turnAngle).abs())).clamp(0.1, 0.7),
-                        1.0,
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-
-          // 2. The Turning Page in 3D (Cover Swing)
-          if (topPage != null)
-            Transform(
-              alignment: Alignment.centerLeft,
-              transform: Matrix4.identity()
-                ..setEntry(3, 2, 0.0006)
-                ..rotateY(turnAngle),
-              child: isFrontVisible
-                  ? Stack(
-                      children: [
-                        _wrapPage(topPageIndex, topPage),
-                        // Ambient lighting & specular sheen on front of turning page
-                        Positioned.fill(
-                          child: IgnorePointer(
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.only(
-                                  topRight: Radius.circular(topPageIndex == 0 ? 6 : 2),
-                                  bottomRight: Radius.circular(topPageIndex == 0 ? 6 : 2),
-                                ),
-                                gradient: LinearGradient(
-                                  colors: [
-                                    Colors.black.withValues(alpha: (0.10 * sineAngle).clamp(0.0, 0.2)),
-                                    Colors.white.withValues(alpha: (0.18 * sineAngle).clamp(0.0, 0.25)),
-                                    Colors.black.withValues(alpha: (0.28 * sineAngle).clamp(0.0, 0.4)),
-                                  ],
-                                  stops: const [0.0, 0.45, 1.0],
-                                  begin: Alignment.centerLeft,
-                                  end: Alignment.centerRight,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Transform(
-                      alignment: Alignment.center,
-                      transform: Matrix4.diagonal3Values(-1.0, 1.0, 1.0),
-                      child: Stack(
-                        children: [
-                          _wrapPage(
-                            topPageIndex,
-                            _isClosingBook
-                                ? _fallbackCover(w, h, showTitle: false)
-                                : (_getInsidePage(topPageIndex, w, h) ?? topPage),
-                            isLeft: false,
-                          ),
-                          // Deep crease shadow on back of page along the spine
-                          Positioned(
-                            right: 0, top: 0, bottom: 0, width: 28,
-                            child: IgnorePointer(
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.transparent,
-                                      Colors.black.withValues(alpha: (0.35 * sineAngle).clamp(0.0, 0.4)),
-                                    ],
-                                    begin: Alignment.centerLeft,
-                                    end: Alignment.centerRight,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-            ),
-        ],
+      content = _buildHardcoverTurningEngine(
+        progress: progress,
+        forward: _turnForward,
+        isClosing: _isClosingBook,
+        basePage: basePage,
+        w: w,
+        h: h,
       );
     } else {
-      // ── INNER PAGES: TRUE CYLINDRICAL CURVED PAPER PEEL ANIMATION ──
-      // Symmetrical engine: progress 0.0 -> 1.0 controls fold position F for both forward and backward turns.
+      // ── INNER PAGES: AUTHENTIC 3D CORNER-ANCHORED DIAGONAL PAGE PEEL ENGINE ──
       content = _TruePagePeelWidget(
         progress: progress,
         forward: _turnForward,
-        frontPage: topPage != null ? _wrapPage(topPageIndex, topPage) : const SizedBox.shrink(),
-        basePage: basePage != null ? _wrapPage(basePageIndex, basePage) : const SizedBox.shrink(),
-        backSidePage: _wrapPage(
+        dragStart: _dragStart,
+        dragCurrent: _dragCurrent,
+        isDragging: _isDragging,
+        frontPage: topPage != null ? _wrapInnerLeaf(topPageIndex, topPage) : const SizedBox.shrink(),
+        basePage: basePage != null ? _wrapInnerLeaf(basePageIndex, basePage) : const SizedBox.shrink(),
+        backSidePage: _wrapInnerLeaf(
           topPageIndex,
-          _getInsidePage(topPageIndex, w, h) ?? (topPage ?? const SizedBox.shrink()),
+          _getInsidePage(topPageIndex, leafW, leafH) ?? (topPage ?? const SizedBox.shrink()),
         ),
-        width: w,
-        height: h,
+        width: leafW,
+        height: leafH,
       );
     }
 
     // Determine which page should be visible statically on the left side.
-    // If we are turning backward, the page peeling from left to right IS `_currentPage - 1`, 
-    // so the static page left underneath must be `_currentPage - 2`!
     int leftStaticIndex = _currentPage - 1;
     if (isAnimatingOrDragging && !_turnForward) {
       leftStaticIndex = _currentPage - 2;
@@ -1186,7 +1265,6 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     
     final Widget? activeLeftPeekPage = _getStaticLeftPage(leftStaticIndex, w, h);
     bool showLeftPeek = activeLeftPeekPage != null && leftStaticIndex >= 0;
-    // Note: do NOT suppress showLeftPeek during front cover turn — we use opacity to fade the spine shadow in smoothly
 
     // Compute spine shadow opacity: fades in as cover opens, instant on static pages
     final bool isCoverOpening = isAnimatingOrDragging && isFrontCoverTurn && _turnForward;
@@ -1196,6 +1274,14 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
         : (isCoverOpening ? progress       // Fades IN with the cover swing
             : (isCoverClosing ? (1.0 - progress) // Fades OUT when closing back to cover
                 : 0.0));
+
+    // Show realistic open book left binding (Image 3) when book is open or opening/closing
+    final bool showOpenLeftBinding = (_currentPage >= 1 || isCoverClosing) && !_isClosingBook;
+    final double leftBindingOpacity = (_currentPage >= 1 && !isClosingToCover && !isCoverClosing)
+        ? 1.0
+        : (isCoverOpening
+            ? ((progress - 0.25) / 0.75).clamp(0.0, 1.0)
+            : (isCoverClosing ? (1.0 - (progress / 0.75)).clamp(0.0, 1.0) : 0.0));
 
     return SizedBox(
       width: w,
@@ -1207,14 +1293,8 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
           // ── BASE LAYERS (The rigid covers lying permanently on the table) ──
           if (_currentPage > 0 && !(isAnimatingOrDragging && isFrontCoverTurn))
             Positioned(
-              left: -w, top: 0, bottom: 0, width: w,
-              child: _wrapPage(0, _buildInsideCover(w, h), isLeft: true),
-            ),
-          // Back-cover inner layer: only needed during cover/close animations, never during static reading
-          if ((_currentPage < totalPages - 1) && !_isClosingBook && (isAnimatingOrDragging && isFrontCoverTurn))
-            Positioned(
-              left: 0, top: 0, bottom: 0, width: w,
-              child: _wrapPage(totalPages - 1, _buildInsideCover(w, h), isLeft: false),
+              left: _spineW - (w - _spineW), top: 0, bottom: 0, width: w - _spineW,
+              child: _wrapInsideCoverBoard(_buildInsideCover(w - _spineW, h), w - _spineW, h),
             ),
           if (_isClosingBook)
             Positioned(
@@ -1223,7 +1303,6 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
             ),
 
           // ── 0. The full left page (e.g. static inner pages) ──
-          // Rendered fully to the left of the hinge
           if (showLeftPeek)
             Positioned(
               left: -w,
@@ -1239,26 +1318,28 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
               child: _buildRightPageStack(),
             ),
 
-          // ── 3. Content (The Current Page & Turning Engine) ──
-          // Always full width — the size never changes!
-          Positioned.fill(
-            child: content,
-          ),
-
-          // ── 4. Left Pages Stack (Fore-edge) — rendered ON TOP of content at left edge ──
-          // Shows the thickness of already-read pages like a real open book
-          if (leftStackW > 0.5 && _currentPage > 0 && !(isAnimatingOrDragging && isFrontCoverTurn))
+          // ── 2. Open Book Left Side Binding (Image 3) ──
+          // Renders the authentic curved spine gutter, left page stack, and center crease
+          if (showOpenLeftBinding && leftBindingOpacity > 0.0)
             Positioned(
               left: 0,
-              top: 12, bottom: 12, width: leftStackW,
-              child: IgnorePointer(child: _buildLeftPageStack()),
+              top: 4,
+              bottom: 4,
+              width: _spineW,
+              child: Opacity(
+                opacity: leftBindingOpacity,
+                child: _buildOpenBookLeftBinding(_spineW, h - 8),
+              ),
             ),
 
-          // ── 5. Deep Spine Crease Shadow — fades in with cover animation ──
-          if (spineOpacity > 0)
+          // ── 3. Deep Spine Crease Shadow & Sacred Book Gutter (Image 3) ──
+          if (spineOpacity > 0 && _currentPage >= 1 && !isClosingToCover && !isCoverClosing) ...[
+            // Concave gutter shadow extending onto the reading page
             Positioned(
-              left: leftStackW,
-              top: 0, bottom: 0, width: 18,
+              left: _spineW,
+              top: 4,
+              bottom: 4,
+              width: 36.0,
               child: IgnorePointer(
                 child: Opacity(
                   opacity: spineOpacity.clamp(0.0, 1.0),
@@ -1266,8 +1347,36 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          Colors.black.withValues(alpha: 0.5),
-                          Colors.black.withValues(alpha: 0.0),
+                          Colors.black.withValues(alpha: 0.52),
+                          Colors.black.withValues(alpha: 0.24),
+                          Colors.black.withValues(alpha: 0.06),
+                          Colors.transparent,
+                        ],
+                        stops: const [0.0, 0.20, 0.60, 1.0],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Convex 3D Paper arch highlight catching room light (Image 3)
+            Positioned(
+              left: _spineW + 36.0,
+              top: 4,
+              bottom: 4,
+              width: 18.0,
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: (spineOpacity * 0.75).clamp(0.0, 1.0),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          Colors.white.withValues(alpha: 0.16),
+                          Colors.transparent,
                         ],
                         begin: Alignment.centerLeft,
                         end: Alignment.centerRight,
@@ -1277,7 +1386,181 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
                 ),
               ),
             ),
+          ],
+
+          // ── 4. Content (The Current Page & Turning Engine) ──
+          // Positioned precisely: full-screen for covers, exact leaf geometry for inner pages
+          if (isFullCoverView)
+            Positioned.fill(
+              child: content,
+            )
+          else
+            Positioned(
+              left: _spineW,
+              top: 4,
+              width: leafW,
+              height: leafH,
+              child: content,
+            ),
         ],
+      ),
+    );
+  }
+
+  // ── Open Book Left Binding Structure (Image 3) ──
+  Widget _buildOpenBookLeftBinding(double bindW, double h) {
+    return Container(
+      width: bindW,
+      height: h,
+      decoration: const BoxDecoration(
+        color: Color(0xFF1B0A03), // Hardcover casing border
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(4),
+          bottomLeft: Radius.circular(4),
+        ),
+      ),
+      child: Stack(
+        children: [
+          // 1. Stacked pages of the left side (thickness of read pages)
+          Positioned(
+            left: 2.5,
+            top: 2,
+            bottom: 2,
+            width: bindW - 5.5,
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFE5D5BA),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(2),
+                  bottomLeft: Radius.circular(2),
+                ),
+                border: Border.all(color: const Color(0xFFBBA78B), width: 0.5),
+              ),
+              child: Stack(
+                children: [
+                  // Fore-edge paper lines
+                  Positioned.fill(
+                    child: CustomPaint(painter: _ForeEdgeLinesPainter(horizontal: false)),
+                  ),
+                  // Left page curving into the center gutter with gradient
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFFEDE0CB),
+                            const Color(0xFFDFCEB5),
+                            const Color(0xFF8B6B48).withValues(alpha: 0.55),
+                          ],
+                          stops: const [0.0, 0.65, 1.0],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Faint text lines on left curving page (like in Image 3)
+                  Positioned(
+                    left: 2,
+                    right: 3,
+                    top: 14,
+                    bottom: 14,
+                    child: IgnorePointer(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: List.generate(
+                          12,
+                          (i) => Container(
+                            height: 1.0,
+                            margin: const EdgeInsets.symmetric(vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF5C1405).withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(0.5),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // 2. Center Binding Crease (the deep seam where left & right pages meet)
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: 3.5,
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Color(0xFF260D04),
+                    Color(0xFF0D0301),
+                    Color(0xFF1F0903),
+                  ],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+              ),
+            ),
+          ),
+
+          // 3. Woven silk headband visible at head and foot of binding seam
+          Positioned(
+            right: 0,
+            top: 0,
+            width: 8,
+            height: 4.5,
+            child: _buildHeadband(),
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            width: 8,
+            height: 4.5,
+            child: _buildHeadband(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Wraps an inner book page leaf with authentic solid cream parchment,
+  /// 100% opacity, gold foil bevel border, and ZERO outer margins so there is
+  /// never any transparent gap or border during 3D page curl.
+  Widget _wrapInnerLeaf(int index, Widget child) {
+    final isBackCover = (index == totalPages - 1);
+    final radius = Radius.circular(isBackCover ? 6 : 2);
+    final borderRadius = BorderRadius.only(topRight: radius, bottomRight: radius);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isBackCover ? const Color(0xFF1E0A03) : (widget.sepiaMode ? const Color(0xFFF9F4E8) : const Color(0xFFF3EFE6)),
+        borderRadius: borderRadius,
+        border: isBackCover
+            ? Border(
+                top: BorderSide(color: const Color(0xFFD4AF37).withValues(alpha: 0.8), width: 2.0),
+                right: BorderSide(color: const Color(0xFFD4AF37).withValues(alpha: 0.8), width: 2.0),
+                bottom: BorderSide(color: const Color(0xFFD4AF37).withValues(alpha: 0.8), width: 2.0),
+              )
+            : Border.all(
+                color: const Color(0xFFD4AF37).withValues(alpha: 0.50),
+                width: 1.0,
+              ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.28),
+            blurRadius: 8,
+            offset: const Offset(3, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: child,
       ),
     );
   }
@@ -1289,11 +1572,11 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
         ? BorderRadius.only(topLeft: radius, bottomLeft: radius)
         : BorderRadius.only(topRight: radius, bottomRight: radius);
 
-    // In full-screen mode keep inner pages nearly flush — only tiny margin so pages feel large
+    // When inside book, left margin is _spineW so readable page sits right beside the open binding
     final margin = isCover ? EdgeInsets.zero : EdgeInsets.only(
       top: 4, bottom: 4,
-      left: isLeft ? 4 : 0,
-      right: isLeft ? 0 : 4
+      left: isLeft ? 4 : _spineW,
+      right: isLeft ? 0 : 4,
     );
 
     return Container(
@@ -1301,15 +1584,31 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
       decoration: BoxDecoration(
         color: isCover ? const Color(0xFF1E0A03) : (widget.sepiaMode ? const Color(0xFFF9F4E8) : const Color(0xFFF3EFE6)),
         borderRadius: borderRadius,
-        border: Border.all(
-          color: isCover ? const Color(0xFFD4AF37).withValues(alpha: 0.8) : const Color(0xFFD4AF37).withValues(alpha: 0.4),
-          width: isCover ? 2.0 : 1.0,
-        ),
+        border: (index == 0)
+            ? const Border(
+                // Right fore-edge board thickness border; top/bottom edge bevels and spine headbands are rendered internally in _buildCoverFace
+                right: BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+              )
+            : (isCover
+                ? Border(
+                    top: BorderSide(color: const Color(0xFFD4AF37).withValues(alpha: 0.8), width: 2.0),
+                    right: BorderSide(color: const Color(0xFFD4AF37).withValues(alpha: 0.8), width: 2.0),
+                    bottom: BorderSide(color: const Color(0xFFD4AF37).withValues(alpha: 0.8), width: 2.0),
+                  )
+                : Border.all(
+                    color: const Color(0xFFD4AF37).withValues(alpha: 0.4),
+                    width: 1.0,
+                  )),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isLeft ? 0.15 : 0.35),
-            blurRadius: isLeft ? 6 : 12,
-            offset: Offset(isLeft ? -2 : 4, 4),
+            color: Colors.black.withValues(alpha: isLeft ? 0.20 : 0.40),
+            blurRadius: isLeft ? 8 : 16,
+            offset: Offset(isLeft ? -3 : 4, 6),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.20),
+            blurRadius: 8,
+            offset: const Offset(0, -3),
           ),
         ],
       ),
@@ -1354,42 +1653,7 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     );
   }
 
-  Widget _buildLeftPageStack() {
-    return Container(
-      decoration: BoxDecoration(
-        color: widget.sepiaMode ? const Color(0xFFD4C5A9) : const Color(0xFFE5D5BA),
-        borderRadius: const BorderRadius.only(topLeft: Radius.circular(4), bottomLeft: Radius.circular(4)),
-        border: const Border(
-          top: BorderSide(color: Color(0xFFBBA78B), width: 0.8),
-          bottom: BorderSide(color: Color(0xFFBBA78B), width: 0.8),
-          left: BorderSide(color: Color(0xFFBBA78B), width: 0.8),
-        ),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 6, offset: const Offset(-3, 3)),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: CustomPaint(painter: _ForeEdgeLinesPainter(horizontal: false)),
-          ),
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.transparent, Colors.black.withValues(alpha: 0.6)],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Replaced by _DynamicCurvedPage internals
+  // Page content rendering
 
   Widget? _getPage(int index, double w, double h) {
     if (index < 0 || index >= totalPages) return null;
@@ -1419,84 +1683,864 @@ class _BookViewerState extends State<_BookViewer> with TickerProviderStateMixin 
     }
   }
 
-  // ── Cover face ─────────────────────────────────────────────────────────────
-  Widget _buildCoverFace(double w, double h) {
+  // ── Front cover board face — deity artwork, sacred frame, vignettes, and quarter-bound leather ──
+  Widget _buildFrontBoardFace(double faceW, double h) {
     final rawCover = (widget.granth['coverImage'] ?? widget.granth['image'] ?? widget.granth['cover'] ?? '').toString();
     final resolvedUrl = ApiService.resolveImageUrl(rawCover);
 
     Widget imageContent;
     if (resolvedUrl.startsWith('http')) {
-      imageContent = Image.network(resolvedUrl, fit: BoxFit.cover, width: w, height: h,
-          errorBuilder: (context, error, stackTrace) => _fallbackCover(w, h));
+      imageContent = Image.network(
+        resolvedUrl,
+        fit: BoxFit.cover,
+        width: faceW,
+        height: h,
+        alignment: Alignment.center,
+        errorBuilder: (context, error, stackTrace) => _buildFallbackCoverFace(faceW, h),
+      );
     } else if (rawCover.startsWith('assets/')) {
-      imageContent = Image.asset(rawCover, fit: BoxFit.cover, width: w, height: h,
-          errorBuilder: (context, error, stackTrace) => _fallbackCover(w, h));
+      imageContent = Image.asset(
+        rawCover,
+        fit: BoxFit.cover,
+        width: faceW,
+        height: h,
+        alignment: Alignment.center,
+        errorBuilder: (context, error, stackTrace) => _buildFallbackCoverFace(faceW, h),
+      );
     } else {
-      imageContent = _fallbackCover(w, h);
+      imageContent = _buildFallbackCoverFace(faceW, h);
     }
 
-    return Stack(
-      children: [
-        Positioned.fill(child: imageContent),
-        // Leather gloss overlay
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.white.withValues(alpha: 0.15), Colors.transparent, Colors.black.withValues(alpha: 0.25)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+    return SizedBox(
+      width: faceW,
+      height: h,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Authentic dark leather base board beneath artwork
+          Positioned.fill(
+            child: Container(
+              color: const Color(0xFF1E0A03),
+            ),
+          ),
+
+          // Deity Artwork (aspect ratio strictly preserved with BoxFit.cover)
+          Positioned.fill(
+            child: imageContent,
+          ),
+
+          // Sacred Book Inset Devotional Border & Frame
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _SacredCoverFramePainter(),
               ),
             ),
           ),
+
+          // Soft ambient edge vignette (darkens margins to focus illumination on deity)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: const Alignment(0.0, -0.05),
+                    radius: 0.95,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.15),
+                      Colors.black.withValues(alpha: 0.45),
+                    ],
+                    stops: const [0.55, 0.82, 1.0],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Satin specular sheen across cover board (simulates curved bound cloth/leather sheen)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.15),
+                      Colors.white.withValues(alpha: 0.04),
+                      Colors.black.withValues(alpha: 0.22),
+                    ],
+                    stops: const [0.0, 0.38, 1.0],
+                    begin: const Alignment(-0.8, -1.0),
+                    end: const Alignment(0.8, 1.0),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Top-edge hardcover board bevel highlight (catching room light)
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: 2.5,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.35),
+                      const Color(0xFFFFE082).withValues(alpha: 0.25),
+                      Colors.transparent,
+                    ],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Bottom-edge hardcover board bevel shadow
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 3.5,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.50),
+                    ],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Subtle inner hinge contact shadow
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 3.0,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.black.withValues(alpha: 0.35),
+                      Colors.transparent,
+                    ],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Cover face — 3D curved spine + physical hinge joint + front board artwork ──
+  Widget _buildCoverFace(double w, double h) {
+    final double faceW = w - _spineW;
+
+    return SizedBox(
+      width: w,
+      height: h,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // 1. Front Cover Board (Artwork & Devotional Hardcover Surface)
+          Positioned(
+            left: _spineW,
+            top: 0,
+            right: 0,
+            bottom: 0,
+            child: _buildFrontBoardFace(faceW, h),
+          ),
+
+          // 2. Left 3D Curved Leather Spine (Static Left Depth Edge)
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: _spineW,
+            child: _buildSpineStrip(_spineW, h),
+          ),
+
+          // 3. The French Groove (Hinge Joint Indentation)
+          Positioned(
+            left: _spineW - 2.0,
+            top: 0,
+            bottom: 0,
+            width: 4.0,
+            child: _buildFrenchGroove(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── The French Groove (Hinge Joint Indentation) ──
+  Widget _buildFrenchGroove() {
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFF150502).withValues(alpha: 0.8),
+              Colors.black.withValues(alpha: 0.95), // Deep trough
+              Colors.black.withValues(alpha: 0.95),
+              const Color(0xFFFFF3D0).withValues(alpha: 0.65), // Board shoulder highlight
+              Colors.transparent,
+            ],
+            stops: const [0.0, 0.35, 0.55, 0.80, 1.0],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _wrapCoverBoard(Widget child, double boardW, double h) {
+    const radius = Radius.circular(6);
+    const borderRadius = BorderRadius.only(topRight: radius, bottomRight: radius);
+
+    return Container(
+      width: boardW,
+      height: h,
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E0A03),
+        borderRadius: borderRadius,
+        border: const Border(
+          right: BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.40),
+            blurRadius: 16,
+            offset: const Offset(4, 6),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.20),
+            blurRadius: 8,
+            offset: const Offset(0, -3),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: child,
+      ),
+    );
+  }
+
+  Widget _wrapInsideCoverBoard(Widget child, double boardW, double h) {
+    const radius = Radius.circular(6);
+    const borderRadius = BorderRadius.only(topRight: radius, bottomRight: radius);
+
+    return Container(
+      width: boardW,
+      height: h,
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E0A03),
+        borderRadius: borderRadius,
+        border: const Border(
+          right: BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 14,
+            offset: const Offset(4, 6),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: child,
+      ),
+    );
+  }
+
+  // ── 3D Hardcover Turning Engine (Realistic Thickness, Connected Hinge, Dynamic Shadow) ──
+  Widget _buildHardcoverTurningEngine({
+    required double progress,
+    required bool forward,
+    required bool isClosing,
+    required Widget? basePage,
+    required double w,
+    required double h,
+  }) {
+    // 1. Turn angle: 0.0 (closed) to pi (fully open)
+    final double turnAngle = isClosing
+        ? (progress * math.pi)
+        : (forward ? (progress * math.pi) : ((1.0 - progress) * math.pi));
+
+    final double sineAngle = math.sin(turnAngle);
+    final double cosAngle = math.cos(turnAngle);
+    final bool isFrontVisible = turnAngle <= (math.pi / 2);
+    final double boardW = w - _spineW;
+    final double leafW = w - _spineW - 4.0;
+    final double leafH = h - 8.0;
+    final double normalizedOpen = (turnAngle / math.pi).clamp(0.0, 1.0);
+    final double leftBindingFade = ((normalizedOpen - 0.25) / 0.75).clamp(0.0, 1.0);
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // ── A. Underneath Page (Verse 1) with Authentic Cream Parchment & Borders ──
+        if (basePage != null && !isClosing) ...[
+          // Stack of read pages on the right
+          if (w - 12 > 0)
+            Positioned(
+              left: w - 12,
+              top: 12,
+              bottom: 12,
+              width: 10.0,
+              child: _buildRightPageStack(),
+            ),
+
+          // Verse 1 reading leaf (positioned at exact coordinates of static Verse 1)
+          Positioned(
+            left: _spineW,
+            top: 4,
+            width: leafW,
+            height: leafH,
+            child: _wrapInnerLeaf(1, basePage),
+          ),
+
+          // Open book left binding (fades in as cover swings open)
+          if (leftBindingFade > 0.0)
+            Positioned(
+              left: 0,
+              top: 4,
+              bottom: 4,
+              width: _spineW,
+              child: Opacity(
+                opacity: leftBindingFade,
+                child: _buildOpenBookLeftBinding(_spineW, leafH),
+              ),
+            ),
+
+          // Spine gutter shadow & arch highlight matching static reading layout
+          if (leftBindingFade > 0.0) ...[
+            Positioned(
+              left: _spineW,
+              top: 4,
+              bottom: 4,
+              width: 36.0,
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: leftBindingFade,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.black.withValues(alpha: 0.52),
+                          Colors.black.withValues(alpha: 0.24),
+                          Colors.black.withValues(alpha: 0.06),
+                          Colors.transparent,
+                        ],
+                        stops: const [0.0, 0.20, 0.60, 1.0],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: _spineW + 36.0,
+              top: 4,
+              bottom: 4,
+              width: 18.0,
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: leftBindingFade * 0.75,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          Colors.white.withValues(alpha: 0.16),
+                          Colors.transparent,
+                        ],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+
+          // Dynamic cast shadow from the swinging cover board onto Verse 1
+          if (sineAngle > 0.01)
+            Positioned(
+              left: _spineW,
+              top: 4,
+              bottom: 4,
+              right: 0,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.black.withValues(alpha: (0.46 * sineAngle).clamp(0.0, 0.50)),
+                        Colors.black.withValues(alpha: (0.18 * sineAngle).clamp(0.0, 0.22)),
+                        Colors.black.withValues(alpha: (0.04 * sineAngle).clamp(0.0, 0.06)),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.20, 0.60, 1.0],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+
+        // ── B. The Rigid Hardcover Board (Swings around hinge at X = _spineW) ──
+        Positioned(
+          left: _spineW,
+          top: 0,
+          bottom: 0,
+          width: boardW,
+          child: Transform(
+            alignment: Alignment.centerLeft,
+            transform: Matrix4.identity()
+              ..setEntry(3, 2, 0.0004)
+              ..rotateY(turnAngle),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                // 1. Inside Cover (facing viewer when turned past 90°)
+                if (!isFrontVisible)
+                  Transform(
+                    alignment: Alignment.center,
+                    transform: Matrix4.identity()
+                      ..setEntry(0, 0, -1.0)
+                      ..setTranslationRaw(0.0, 0.0, -_boardThickness),
+                    child: _wrapInsideCoverBoard(_buildInsideCover(boardW, h), boardW, h),
+                  ),
+
+                // 2. Front Cover Board Face (Artwork & Sacred Frame, visible 0° to 90°)
+                if (isFrontVisible)
+                  Stack(
+                    children: [
+                      _wrapCoverBoard(_buildFrontBoardFace(boardW, h), boardW, h),
+                      // Ambient tilt darkening on front face
+                      if (sineAngle > 0.01)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Colors.black.withValues(alpha: (0.10 * sineAngle).clamp(0.0, 0.20)),
+                                    Colors.white.withValues(alpha: (0.12 * sineAngle).clamp(0.0, 0.20)),
+                                    Colors.black.withValues(alpha: (0.28 * sineAngle).clamp(0.0, 0.40)),
+                                  ],
+                                  stops: const [0.0, 0.45, 1.0],
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ),
+
+        // ── C. 3D HARDCOVER FORE-EDGE THICKNESS SLAB ──
+        if (sineAngle > 0.01)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _Hardcover3DEdgesPainter(
+                  hingeX: _spineW,
+                  boardW: boardW,
+                  thickness: _boardThickness,
+                  height: h,
+                  turnAngle: turnAngle,
+                  sineAngle: sineAngle,
+                  cosAngle: cosAngle,
+                  isFrontVisible: isFrontVisible,
+                ),
+              ),
+            ),
+          ),
+
+        // ── D. STATIC LEFT SPINE DEPTH EDGE & FRENCH GROOVE ──
+        if (leftBindingFade < 1.0)
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: _spineW,
+            child: Opacity(
+              opacity: (1.0 - leftBindingFade).clamp(0.0, 1.0),
+              child: _buildSpineStrip(_spineW, h),
+            ),
+          ),
+
+        Positioned(
+          left: _spineW - 2.0,
+          top: 0,
+          bottom: 0,
+          width: 4.0,
+          child: _buildFrenchGroove(),
         ),
       ],
     );
   }
 
-  Widget _fallbackCover(double w, double h, {bool showTitle = true}) {
+
+  // ── Fallback cover face (used when no cover image is available) ────────────
+  Widget _buildFallbackCoverFace(double faceW, double h) {
     return Container(
+      width: faceW,
+      height: h,
       decoration: const BoxDecoration(
-        gradient: LinearGradient(colors: [Color(0xFF5C2008), Color(0xFF1E0A03), Color(0xFF4A1C08)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        gradient: LinearGradient(
+          colors: [Color(0xFF4A1A06), Color(0xFF1E0A03), Color(0xFF381406)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
       ),
       child: Stack(
         children: [
           Positioned.fill(child: CustomPaint(painter: _LeatherTexturePainter())),
-          if (showTitle)
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(border: Border.all(color: const Color(0xFFD4AF37), width: 1.5), borderRadius: BorderRadius.circular(8)),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.auto_stories_rounded, color: Color(0xFFD4AF37), size: 56),
-                        const SizedBox(height: 16),
-                        Text(widget.granthTitle, textAlign: TextAlign.center,
-                            style: GoogleFonts.notoSerifDevanagari(fontSize: 22, fontWeight: FontWeight.bold, color: const Color(0xFFFFD700), height: 1.3)),
-                        const SizedBox(height: 10),
-                        Text('❖ ──── ॐ ──── ❖', style: GoogleFonts.outfit(color: const Color(0xFFD4AF37), fontSize: 11)),
-                        const SizedBox(height: 8),
-                        Text(widget.chapterTitle, textAlign: TextAlign.center,
-                            style: GoogleFonts.outfit(color: const Color(0xFFFFD700).withValues(alpha: 0.85), fontSize: 13, fontWeight: FontWeight.w600)),
-                      ],
-                    ),
+          Positioned.fill(child: CustomPaint(painter: _SacredCoverFramePainter())),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: const Color(0xFFD4AF37), width: 1.5),
+                    borderRadius: BorderRadius.circular(8),
+                    color: const Color(0xFF1E0A03).withValues(alpha: 0.6),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.auto_stories_rounded, color: Color(0xFFD4AF37), size: 56),
+                      const SizedBox(height: 16),
+                      Text(widget.granthTitle, textAlign: TextAlign.center,
+                          style: GoogleFonts.notoSerifDevanagari(
+                              fontSize: 22, fontWeight: FontWeight.bold,
+                              color: const Color(0xFFFFD700), height: 1.3)),
+                      const SizedBox(height: 10),
+                      Text('❖ ──── ॐ ──── ❖',
+                          style: GoogleFonts.outfit(color: const Color(0xFFD4AF37), fontSize: 11)),
+                      const SizedBox(height: 8),
+                      Text(widget.chapterTitle, textAlign: TextAlign.center,
+                          style: GoogleFonts.outfit(
+                              color: const Color(0xFFFFD700).withValues(alpha: 0.85),
+                              fontSize: 13, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ],
             ),
+          ),
         ],
       ),
     );
   }
+
+  // ── Spine strip — realistic antique leather binding on the left of the closed cover ──
+  Widget _buildSpineStrip(double spineW, double h) {
+    return Container(
+      width: spineW,
+      height: h,
+      decoration: BoxDecoration(
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(5),
+          bottomLeft: Radius.circular(5),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 4,
+            offset: const Offset(-2, 0),
+          ),
+        ],
+        // Cylindrical barrel gradient: curvature turns away on the left, crowns at ~28%, falls off into the French groove
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF140502), // Outer curvature rim receding into shadow
+            Color(0xFF260C05), // Turning into light
+            Color(0xFF6B260D), // Rising leather shoulder
+            Color(0xFF8C3312), // Apex crown of cylindrical spine (at 28%)
+            Color(0xFF63220A), // Warm mahogany leather
+            Color(0xFF3D1405), // Leather flank
+            Color(0xFF1F0802), // Entering French groove
+            Color(0xFF0C0301), // Bottom of French groove
+          ],
+          stops: [0.0, 0.08, 0.20, 0.30, 0.45, 0.70, 0.88, 1.0],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+      ),
+      child: Stack(
+        children: [
+          // 1. Organic leather pebble grain micro-texture
+          Positioned.fill(
+            child: CustomPaint(painter: _LeatherTexturePainter()),
+          ),
+
+          // 2. Curvature specular gleam (vertical highlight beam along the spine crown)
+          Positioned(
+            left: spineW * 0.15,
+            top: 0,
+            bottom: 0,
+            width: spineW * 0.35,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      Colors.white.withValues(alpha: 0.18),
+                      const Color(0xFFFFE082).withValues(alpha: 0.14),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.0, 0.40, 0.70, 1.0],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 3. Five raised leather ribs (spine bands / sewing cord ridges)
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _SpineRibsPainter(),
+            ),
+          ),
+
+          // 4. Headband (woven silk crimson & gold endband at the top)
+          Positioned(
+            left: 1,
+            right: 0,
+            top: 0,
+            height: 4.0,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.only(topLeft: Radius.circular(3)),
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFF8B0000),
+                      Color(0xFFFFD700),
+                      Color(0xFF8B0000),
+                      Color(0xFFFFD700),
+                      Color(0xFF8B0000),
+                    ],
+                    stops: [0.0, 0.25, 0.5, 0.75, 1.0],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.65),
+                      blurRadius: 3,
+                      offset: const Offset(0, 1.5),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 5. Footband (woven silk crimson & gold endband at the bottom)
+          Positioned(
+            left: 1,
+            right: 0,
+            bottom: 0,
+            height: 4.0,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(3)),
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFF8B0000),
+                      Color(0xFFFFD700),
+                      Color(0xFF8B0000),
+                      Color(0xFFFFD700),
+                      Color(0xFF8B0000),
+                    ],
+                    stops: [0.0, 0.25, 0.5, 0.75, 1.0],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.65),
+                      blurRadius: 3,
+                      offset: const Offset(0, -1.5),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HELPERS
+// HELPERS & PAINTERS
 // ─────────────────────────────────────────────────────────────────────────────
+
+/// Paints the 3D multi-ply binder's board edges (fore-edge, top head-edge, bottom tail-edge)
+/// with exact perspective vertex projection ($d = 0.0010$) matching the 3D cover board.
+/// This ensures the thick hardbound edges are permanently locked to the board faces
+/// with zero gaps, zero drift, and full physical volume.
+class _Hardcover3DEdgesPainter extends CustomPainter {
+  final double hingeX;
+  final double boardW;
+  final double thickness;
+  final double height;
+  final double turnAngle;
+  final double sineAngle;
+  final double cosAngle;
+  final bool isFrontVisible;
+
+  const _Hardcover3DEdgesPainter({
+    required this.hingeX,
+    required this.boardW,
+    required this.thickness,
+    required this.height,
+    required this.turnAngle,
+    required this.sineAngle,
+    required this.cosAngle,
+    required this.isFrontVisible,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (sineAngle < 0.005) return;
+
+    final double h = height;
+    final double edgeW = (thickness * sineAngle).clamp(1.0, thickness);
+
+    // Projected outer edge position along X axis in root coordinates with matching 3D perspective
+    final double scale = 1.0 / (1.0 - (boardW * sineAngle * 0.0004));
+    final double outerEdgeX = hingeX + boardW * cosAngle * scale;
+
+    // Fore-edge thickness slab: attached to the outer edge of the swinging cover board
+    final double leftX = isFrontVisible ? outerEdgeX : (outerEdgeX - edgeW);
+    final double rightX = leftX + edgeW;
+
+    final rect = Rect.fromLTRB(leftX, 0, rightX, h);
+
+    // 1. Multi-ply dense binder's board cross-section gradient
+    final forePaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(leftX, 0),
+        Offset(rightX, 0),
+        [
+          const Color(0xFFFFD54F), // Front gold foil bevel rim
+          const Color(0xFF2C1006), // Front leather turn-in fold
+          const Color(0xFF4A1E0D), // Outer binder board ply
+          const Color(0xFF1A0802), // Dense dark core binder board
+          const Color(0xFF4A1E0D), // Inner binder board ply
+          const Color(0xFF240B03), // Inside leather turn-in
+          const Color(0xFFD4AF37), // Inside gold edge trim
+        ],
+        [0.0, 0.15, 0.32, 0.50, 0.68, 0.85, 1.0],
+      )
+      ..style = PaintingStyle.fill;
+    canvas.drawRect(rect, forePaint);
+
+    // 2. Fine horizontal grain lines of the multi-ply binder board
+    if (edgeW > 2.0) {
+      final plyPaint = Paint()
+        ..color = const Color(0xFF1E0A03).withValues(alpha: 0.35)
+        ..strokeWidth = 0.5;
+      for (double y = 4.0; y < h; y += 8.0) {
+        canvas.drawLine(Offset(leftX + 0.5, y), Offset(rightX - 0.5, y), plyPaint);
+      }
+    }
+
+    // 3. Center gilded fillet line running down the edge slab
+    final goldFoilPaint = Paint()
+      ..color = const Color(0xFFFFD700).withValues(alpha: (0.85 * sineAngle).clamp(0.0, 0.90))
+      ..strokeWidth = 0.7;
+    final double centerX = (leftX + rightX) / 2.0;
+    canvas.drawLine(Offset(centerX, 0), Offset(centerX, h), goldFoilPaint);
+
+    // 4. Dynamic ambient specular sheen across the fore-edge slab
+    final sheenPaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(centerX, 0),
+        Offset(centerX, h),
+        [
+          Colors.transparent,
+          Colors.white.withValues(alpha: (0.25 * sineAngle).clamp(0.0, 0.35)),
+          Colors.transparent,
+        ],
+        [0.15, 0.50, 0.85],
+      )
+      ..style = PaintingStyle.fill;
+    canvas.drawRect(rect, sheenPaint);
+
+    // 5. Outer edge border lines for crisp definition
+    final edgeBorderPaint = Paint()
+      ..color = const Color(0xFFB59350).withValues(alpha: (0.75 * sineAngle).clamp(0.0, 0.80))
+      ..strokeWidth = 0.6
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(Offset(leftX, 0), Offset(leftX, h), edgeBorderPaint);
+    canvas.drawLine(Offset(rightX, 0), Offset(rightX, h), edgeBorderPaint);
+
+    // 6. Top & bottom gilded end-caps (closing the top and bottom of the 4px slab)
+    final capPaint = Paint()
+      ..color = const Color(0xFFFFD54F).withValues(alpha: (0.80 * sineAngle).clamp(0.0, 0.85))
+      ..strokeWidth = 0.8
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(Offset(leftX, 0), Offset(rightX, 0), capPaint);
+    canvas.drawLine(Offset(leftX, h), Offset(rightX, h), capPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _Hardcover3DEdgesPainter oldDelegate) {
+    return oldDelegate.turnAngle != turnAngle ||
+        oldDelegate.boardW != boardW ||
+        oldDelegate.height != height;
+  }
+}
+
 class _ForeEdgeLinesPainter extends CustomPainter {
   _ForeEdgeLinesPainter({required this.horizontal});
   final bool horizontal;
@@ -1507,11 +2551,16 @@ class _ForeEdgeLinesPainter extends CustomPainter {
       ..color = const Color(0xFFBBA78B).withValues(alpha: 0.3)
       ..strokeWidth = 0.5;
     if (horizontal) {
-      for (double y = 4; y < size.height; y += 3) { canvas.drawLine(Offset(0, y), Offset(size.width, y), paint); }
+      for (double y = 4; y < size.height; y += 3) {
+        canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+      }
     } else {
-      for (double x = 4; x < size.width; x += 3) { canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint); }
+      for (double x = 4; x < size.width; x += 3) {
+        canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+      }
     }
   }
+
   @override
   bool shouldRepaint(_) => false;
 }
@@ -1519,12 +2568,141 @@ class _ForeEdgeLinesPainter extends CustomPainter {
 class _LeatherTexturePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white.withValues(alpha: 0.03)..style = PaintingStyle.stroke..strokeWidth = 0.5;
-    for (double y = 0; y < size.height; y += 8) { canvas.drawLine(Offset(0, y), Offset(size.width, y + 4), paint); }
+    final finePebblePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.025)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.5;
+
+    final shadowPebblePaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.04)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.5;
+
+    // Cross-hatch micro-grain to simulate morocco goatskin / calfskin texture
+    for (double y = 0; y < size.height; y += 6) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y + 3), finePebblePaint);
+    }
+    for (double y = 0; y < size.height; y += 6) {
+      canvas.drawLine(Offset(size.width, y), Offset(0, y + 3), shadowPebblePaint);
+    }
   }
   @override
   bool shouldRepaint(_) => false;
 }
+
+class _SpineRibsPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 5 raised sewing cords / spine ribs
+    const ribPositions = [0.10, 0.28, 0.50, 0.72, 0.90];
+    const double ribH = 4.5;
+
+    final topHighlightPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.65)
+      ..strokeWidth = 0.6
+      ..style = PaintingStyle.stroke;
+
+    final bottomShadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.85)
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke;
+
+    final goldLinePaint = Paint()
+      ..color = const Color(0xFFD4AF37).withValues(alpha: 0.85)
+      ..strokeWidth = 0.65
+      ..style = PaintingStyle.stroke;
+
+    for (final relY in ribPositions) {
+      final y = size.height * relY;
+      final rect = Rect.fromLTWH(0, y - ribH / 2, size.width, ribH);
+
+      // Raised ridge 3D cylindrical convex gradient
+      final ribPaint = Paint()
+        ..shader = const LinearGradient(
+          colors: [
+            Color(0xFF140401),
+            Color(0xFF5A1E0A),
+            Color(0xFF8B3312),
+            Color(0xFF5A1E0A),
+            Color(0xFF140401),
+          ],
+          stops: [0.0, 0.20, 0.40, 0.75, 1.0],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ).createShader(rect);
+
+      canvas.drawRect(rect, ribPaint);
+
+      // Top light-catching specular line
+      canvas.drawLine(Offset(1, y - ribH / 2 + 0.3), Offset(size.width, y - ribH / 2 + 0.3), topHighlightPaint);
+
+      // Dual gold fillet tooling (top and bottom fine gold hot-stamped lines)
+      canvas.drawLine(Offset(2, y - 0.9), Offset(size.width - 1, y - 0.9), goldLinePaint);
+      canvas.drawLine(Offset(2, y + 0.9), Offset(size.width - 1, y + 0.9), goldLinePaint);
+
+      // Bottom deep cast shadow onto spine leather below
+      canvas.drawLine(Offset(0, y + ribH / 2), Offset(size.width, y + ribH / 2), bottomShadowPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _SacredCoverFramePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    const double margin = 10.0;
+    final outerRect = Rect.fromLTWH(margin, margin, size.width - margin * 2, size.height - margin * 2);
+    if (outerRect.width <= 0 || outerRect.height <= 0) return;
+
+    final outerGoldPaint = Paint()
+      ..color = const Color(0xFFD4AF37).withValues(alpha: 0.70)
+      ..strokeWidth = 1.4
+      ..style = PaintingStyle.stroke;
+
+    final innerGoldPaint = Paint()
+      ..color = const Color(0xFFFFE082).withValues(alpha: 0.50)
+      ..strokeWidth = 0.8
+      ..style = PaintingStyle.stroke;
+
+    // Draw outer fine gold rectangle
+    canvas.drawRect(outerRect, outerGoldPaint);
+
+    // Draw inner fine gold rectangle (inset 3.5px)
+    final innerRect = outerRect.deflate(3.5);
+    if (innerRect.width > 0 && innerRect.height > 0) {
+      canvas.drawRect(innerRect, innerGoldPaint);
+    }
+
+    // Corner decorative bracket flourishes at 4 corners
+    const double bracketLen = 14.0;
+    final cornerFlourishPaint = Paint()
+      ..color = const Color(0xFFFFD54F).withValues(alpha: 0.85)
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke;
+
+    // Top-Left corner bracket
+    canvas.drawLine(Offset(outerRect.left - 2, outerRect.top + bracketLen), Offset(outerRect.left - 2, outerRect.top - 2), cornerFlourishPaint);
+    canvas.drawLine(Offset(outerRect.left - 2, outerRect.top - 2), Offset(outerRect.left + bracketLen, outerRect.top - 2), cornerFlourishPaint);
+
+    // Top-Right corner bracket
+    canvas.drawLine(Offset(outerRect.right + 2, outerRect.top + bracketLen), Offset(outerRect.right + 2, outerRect.top - 2), cornerFlourishPaint);
+    canvas.drawLine(Offset(outerRect.right + 2, outerRect.top - 2), Offset(outerRect.right - bracketLen, outerRect.top - 2), cornerFlourishPaint);
+
+    // Bottom-Left corner bracket
+    canvas.drawLine(Offset(outerRect.left - 2, outerRect.bottom - bracketLen), Offset(outerRect.left - 2, outerRect.bottom + 2), cornerFlourishPaint);
+    canvas.drawLine(Offset(outerRect.left - 2, outerRect.bottom + 2), Offset(outerRect.left + bracketLen, outerRect.bottom + 2), cornerFlourishPaint);
+
+    // Bottom-Right corner bracket
+    canvas.drawLine(Offset(outerRect.right + 2, outerRect.bottom - bracketLen), Offset(outerRect.right + 2, outerRect.bottom + 2), cornerFlourishPaint);
+    canvas.drawLine(Offset(outerRect.right + 2, outerRect.bottom + 2), Offset(outerRect.right - bracketLen, outerRect.bottom + 2), cornerFlourishPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // VERSE PAGE
@@ -1954,16 +3132,29 @@ class _BackCoverPage extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRUE 3D CYLINDRICAL CURVED PAGE PEEL WIDGET
-// Folds & unrolls realistic flexible paper with authentic 3D curvature,
-// dynamic crease drop-shadow, specular sheen, and paper depth.
-// Symmetrically handles both forward (right-to-left) and backward (left-to-right) turns.
-// Front and base pages maintain fixed full-width layout so text NEVER shifts or reflows.
+// AUTHENTIC 3D DIAGONAL CORNER PAGE PEEL ENGINE
+// Peels dynamically from the exact corner or edge touched by the user.
+// Grab near top-right/top-left: top corner peels first across diagonal.
+// ─────────────────────────────────────────────────────────────────────────────
+// MASTERCLASS 3D CORNER-ANCHORED PAGE PEEL ENGINE
+// ─────────────────────────────────────────────────────────────────────────────
+// Features:
+// 1. Top-Right / Top-Left Grab: Picks up the top corner first. Top corner peels
+//    diagonally downward while bottom corner stays anchored initially.
+// 2. Bottom-Right / Bottom-Left Grab: Picks up the bottom corner first. Bottom
+//    corner peels diagonally upward while top corner stays anchored initially.
+// 3. Middle Grab: Rolls the page uniformly in a majestic cylindrical curl.
+// 4. Exact 3D reflection across the arbitrary diagonal fold line using
+//    coordinate alignment matrices (T * Rz * Ry * Rz * T) for 100% seam continuity.
+// 5. Symmetric for both Forward (Right-to-Left) and Reverse (Left-to-Right) turns.
 // ─────────────────────────────────────────────────────────────────────────────
 class _TruePagePeelWidget extends StatelessWidget {
   const _TruePagePeelWidget({
-    required this.progress, // 0.0 to 1.0 (0 = start of swipe, 1 = swipe completed)
-    required this.forward,  // true = forward (R->L), false = backward (L->R)
+    required this.progress, // 0.0 to 1.0
+    required this.forward,  // true = right-to-left, false = left-to-right
+    required this.dragStart,
+    required this.dragCurrent,
+    required this.isDragging,
     required this.frontPage,
     required this.basePage,
     required this.backSidePage,
@@ -1973,6 +3164,9 @@ class _TruePagePeelWidget extends StatelessWidget {
 
   final double progress;
   final bool forward;
+  final Offset? dragStart;
+  final Offset? dragCurrent;
+  final bool isDragging;
   final Widget frontPage;
   final Widget basePage;
   final Widget backSidePage;
@@ -1982,192 +3176,320 @@ class _TruePagePeelWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final double clampedP = progress.clamp(0.0, 1.0);
-    // When forward: effectiveP goes 0.0 -> 1.0 (crease F moves width -> 0)
-    // When backward: effectiveP goes 1.0 -> 0.0 (crease F moves 0 -> width)
-    final double effectiveP = forward ? clampedP : (1.0 - clampedP);
+    if (clampedP <= 0.001 && !isDragging) {
+      return SizedBox(
+        width: width,
+        height: height,
+        child: forward ? frontPage : basePage,
+      );
+    }
+    if (clampedP >= 0.999 && !isDragging) {
+      return SizedBox(
+        width: width,
+        height: height,
+        child: forward ? basePage : frontPage,
+      );
+    }
 
-    // Smooth bell curve intensity for shadows and 3D depth
-    final double shadowIntensity = math.sin(effectiveP * math.pi);
+    // 1. Physical Touch-Origin Zone Detection along height
+    final double touchY = dragStart?.dy ?? (height * 0.5);
+    final double normY = ((touchY - height * 0.5) / (height * 0.5)).clamp(-1.0, 1.0);
 
-    // Fold crease X position strictly within [0, width]
-    final double F = width * (1.0 - effectiveP);
+    // 2. Corner Lead & Lag Physics
+    // Zone A (Top): normY < -0.18 -> Top corner peels first, bottom lags
+    // Zone B (Bottom): normY > 0.18 -> Bottom corner peels first, top lags
+    // Zone C (Middle): |normY| <= 0.18 -> Balanced cylindrical curl
+    double pTop = clampedP;
+    double pBottom = clampedP;
 
-    return SizedBox(
-      width: width,
-      height: height,
-      child: ClipRect(
-        child: Stack(
-          clipBehavior: Clip.hardEdge,
-          children: [
-            // ── 1. Base Page (Underneath) ──
-            // Always fixed at full width x height so its text NEVER shifts or reflows.
-            Positioned(
-              left: 0,
-              top: 0,
-              width: width,
-              height: height,
-              child: basePage,
+    if (normY < -0.18) {
+      final double strength = ((-normY - 0.18) / 0.82).clamp(0.0, 1.0);
+      final double bias = 0.36 * (0.35 + 0.65 * strength) * math.sin(clampedP * math.pi);
+      pTop = (clampedP + bias).clamp(0.0, 1.0);
+      pBottom = (clampedP - bias).clamp(0.0, 1.0);
+    } else if (normY > 0.18) {
+      final double strength = ((normY - 0.18) / 0.82).clamp(0.0, 1.0);
+      final double bias = 0.36 * (0.35 + 0.65 * strength) * math.sin(clampedP * math.pi);
+      pBottom = (clampedP + bias).clamp(0.0, 1.0);
+      pTop = (clampedP - bias).clamp(0.0, 1.0);
+    } else {
+      pTop = clampedP;
+      pBottom = clampedP;
+    }
+
+    // 3. Crease Fold Coordinates
+    // Forward (Right-to-Left): fold sweeps from width (p=0) to 0 (p=1)
+    // Reverse (Left-to-Right): fold sweeps from 0 (p=0) to width (p=1)
+    final double fTop    = forward ? width * (1.0 - pTop)    : width * pTop;
+    final double fBottom = forward ? width * (1.0 - pBottom) : width * pBottom;
+    final double fMid = (fTop + fBottom) * 0.5;
+
+    // Angle of diagonal fold line relative to vertical
+    final double foldAngle = math.atan2(fBottom - fTop, height);
+
+    // 4. 3D Curl Matrices
+    final double curlLift = math.sin(clampedP * math.pi) * 0.26;
+    final double curlAngle = math.pi - curlLift;
+
+    final Matrix4 forwardFlapMatrix = Matrix4.identity()
+      ..multiply(Matrix4.translationValues(fMid, height * 0.5, 0.0))
+      ..rotateZ(-foldAngle)
+      ..setEntry(3, 2, 0.0012)
+      ..rotateY(curlAngle)
+      ..rotateZ(foldAngle)
+      ..multiply(Matrix4.translationValues(-fMid, -height * 0.5, 0.0));
+
+    final Matrix4 reverseFlapMatrix = Matrix4.identity()
+      ..multiply(Matrix4.translationValues(fMid, height * 0.5, 0.0))
+      ..rotateZ(-foldAngle)
+      ..setEntry(3, 2, 0.0012)
+      ..rotateY(-curlAngle)
+      ..rotateZ(foldAngle)
+      ..multiply(Matrix4.translationValues(-fMid, -height * 0.5, 0.0));
+
+    return ClipRect(
+      clipper: _PeelOverflowClipper(width: width, height: height),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // ── 1. Base Layer (Page underneath) ──
+          // Forward: basePage is visible everywhere underneath the peeling page.
+          // Reverse: basePage is visible to the RIGHT of the fold line (x > foldLine).
+          Positioned.fill(
+            child: forward
+                ? basePage
+                : ClipPath(
+                    clipper: _DiagonalClipper(
+                      fTop: fTop,
+                      fBottom: fBottom,
+                      isLeftPortion: false,
+                    ),
+                    child: SizedBox(width: width, height: height, child: basePage),
+                  ),
+          ),
+
+          // ── 2. Crease Drop Shadow onto basePage ──
+          if (clampedP > 0.01 && clampedP < 0.99)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _DiagonalCreaseShadowPainter(
+                    fTop: fTop,
+                    fBottom: fBottom,
+                    forward: forward,
+                    opacity: (0.45 * math.sin(clampedP * math.pi)).clamp(0.0, 0.48),
+                  ),
+                ),
+              ),
             ),
 
-            // ── 2. Drop Shadow Cast on Base Page by the 3D turning paper ──
-            // Cast to the right of F onto the basePage
-            if (effectiveP > 0.005 && effectiveP < 0.995 && F < width - 1)
-              Positioned(
-                left: F.clamp(0.0, width),
-                top: 0,
-                bottom: 0,
-                width: math.min(55.0, (width - F).clamp(0.0, width)),
-                child: IgnorePointer(
+          // ── 3. Flat Portion of frontPage ──
+          // Forward: flat on the LEFT of crease (x < foldLine).
+          // Reverse: flat on the LEFT of crease (x < foldLine) as previous page unrolls.
+          ClipPath(
+            clipper: _DiagonalClipper(
+              fTop: fTop,
+              fBottom: fBottom,
+              isLeftPortion: true,
+            ),
+            child: SizedBox(width: width, height: height, child: frontPage),
+          ),
+
+          // ── 3.5 Dynamic soft drop shadow under the airborne flap extending over the spine gutter ──
+          if (clampedP > 0.01 && clampedP < 0.99)
+            Transform(
+              transform: forward ? forwardFlapMatrix : reverseFlapMatrix,
+              child: ClipPath(
+                clipper: _DiagonalClipper(
+                  fTop: fTop,
+                  fBottom: fBottom,
+                  isLeftPortion: false,
+                ),
+                child: SizedBox(
+                  width: width,
+                  height: height,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.black.withValues(alpha: (0.42 * shadowIntensity).clamp(0.0, 0.45)),
-                          Colors.black.withValues(alpha: (0.12 * shadowIntensity).clamp(0.0, 0.18)),
-                          Colors.transparent,
-                        ],
-                        stops: const [0.0, 0.35, 1.0],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: (0.35 * math.sin(clampedP * math.pi)).clamp(0.0, 0.38)),
+                          blurRadius: 18,
+                          spreadRadius: 2,
+                          offset: const Offset(-8, 5),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
+            ),
 
-            // ── 3. Flat Portion of Front Page (Clipped strictly to [0, F]) ──
-            // CRITICAL: Positioned has width: width (NOT F) so constraints are always full-width!
-            // The text is always centered at width/2 and NEVER changes its position during swipe!
-            if (F > 0.5)
-              Positioned(
-                left: 0,
-                top: 0,
-                width: width,
-                height: height,
-                child: ClipRect(
-                  clipper: _RectClipper(0, F),
-                  child: frontPage,
+          // ── 4. Airborne 3D Flap ──
+          if (clampedP > 0.01 && clampedP < 0.99)
+            Transform(
+              transform: forward ? forwardFlapMatrix : reverseFlapMatrix,
+              child: ClipPath(
+                clipper: _DiagonalClipper(
+                  fTop: fTop,
+                  fBottom: fBottom,
+                  isLeftPortion: false,
                 ),
-              ),
-
-            // ── 4. Soft Inner Crease Shadow on Front Page just left of F ──
-            if (effectiveP > 0.01 && effectiveP < 0.99 && F > 4)
-              Positioned(
-                left: math.max(0.0, F - 28.0),
-                top: 0,
-                bottom: 0,
-                width: math.min(28.0, F),
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withValues(alpha: (0.22 * shadowIntensity).clamp(0.0, 0.25)),
-                        ],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
+                child: SizedBox(
+                  width: width,
+                  height: height,
+                  child: Stack(
+                    children: [
+                      // Back of the page (100% solid, fully opaque parchment)
+                      Transform(
+                        alignment: Alignment.center,
+                        transform: Matrix4.identity()..setEntry(0, 0, -1.0),
+                        child: backSidePage,
                       ),
-                    ),
-                  ),
-                ),
-              ),
-
-            // ── 5. The 3D Turning Page Flap ──
-            // Authentic 3D perspective curl around the crease at x=F.
-            // Vertically aligned so top and bottom stay strictly horizontal with no corner tilt.
-            if (effectiveP > 0.01 && effectiveP < 0.99 && F < width - 2)
-              Positioned(
-                left: 0,
-                top: 0,
-                width: width,
-                height: height,
-                child: Transform(
-                  alignment: Alignment(F / width * 2.0 - 1.0, 0.0),
-                  transform: Matrix4.identity()
-                    ..setEntry(3, 2, 0.0008) // Natural 3D perspective depth
-                    ..rotateY(math.pi - effectiveP * math.pi * 0.20), // 3D curl angle around fold
-                  child: ClipRect(
-                    clipper: _RectClipper(F, width),
-                    child: SizedBox(
-                      width: width,
-                      height: height,
-                      child: Stack(
-                        children: [
-                          // Mirrored back of the turning page (real content with sacred markings)
-                          Positioned.fill(
-                            child: Transform(
-                              alignment: Alignment.center,
-                              transform: Matrix4.diagonal3Values(-1.0, 1.0, 1.0),
-                              child: backSidePage,
-                            ),
-                          ),
-                          // Paper semi-translucent warm parchment overlay
-                          Positioned.fill(
-                            child: IgnorePointer(
-                              child: Container(
-                                color: Colors.white.withValues(alpha: 0.18),
+                      // Specular sheen & bend shadow
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.black.withValues(alpha: 0.0),
+                                  Colors.white.withValues(alpha: 0.45 * math.sin(clampedP * math.pi)),
+                                  Colors.black.withValues(alpha: 0.30 * math.sin(clampedP * math.pi)),
+                                ],
+                                stops: const [0.0, 0.70, 1.0],
+                                begin: forward ? Alignment.centerLeft : Alignment.centerRight,
+                                end: forward ? Alignment.centerRight : Alignment.centerLeft,
                               ),
                             ),
                           ),
-                          // Fold lighting: specular highlight at crease, shadow on the far edge
-                          Positioned.fill(
-                            child: IgnorePointer(
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.black.withValues(alpha: 0.0), // free edge
-                                      Colors.white.withValues(alpha: (0.42 * shadowIntensity).clamp(0.0, 0.45)), // specular highlight
-                                      Colors.black.withValues(alpha: (0.35 * shadowIntensity).clamp(0.0, 0.38)), // inner shadow at crease
-                                    ],
-                                    stops: const [0.0, 0.70, 1.0],
-                                    begin: Alignment.centerLeft,
-                                    end: Alignment.centerRight,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ),
-
-            // ── 6. Fine Crease Line Highlight at fold F ──
-            if (effectiveP > 0.01 && effectiveP < 0.99 && F > 1.0 && F < width - 1.0)
-              Positioned(
-                left: F - 0.75,
-                top: 0,
-                bottom: 0,
-                width: 1.5,
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: (0.45 * shadowIntensity).clamp(0.0, 0.50)),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
 }
 
-class _RectClipper extends CustomClipper<Rect> {
-  const _RectClipper(this.left, this.right);
-  final double left;
-  final double right;
+/// Allows the curled page flap to cross over the spine gutter and swing onto the left side (-width to width)
+/// without getting clipped by local widget bounds, while constraining vertical extent to the book canvas.
+class _PeelOverflowClipper extends CustomClipper<Rect> {
+  const _PeelOverflowClipper({required this.width, required this.height});
+  final double width;
+  final double height;
 
   @override
   Rect getClip(Size size) {
-    return Rect.fromLTRB(math.max(0, left), 0, math.min(size.width, right), size.height);
+    return Rect.fromLTWH(-width, -8.0, width * 2.0 + 16.0, height + 16.0);
   }
 
   @override
-  bool shouldReclip(_RectClipper oldClipper) => oldClipper.left != left || oldClipper.right != right;
+  bool shouldReclip(covariant _PeelOverflowClipper oldClipper) =>
+      oldClipper.width != width || oldClipper.height != height;
+}
+
+// ── Clipper along the diagonal fold line with 0.8px antialiasing bleed ──
+class _DiagonalClipper extends CustomClipper<Path> {
+  const _DiagonalClipper({
+    required this.fTop,
+    required this.fBottom,
+    required this.isLeftPortion,
+  });
+
+  final double fTop;
+  final double fBottom;
+  final bool isLeftPortion;
+
+  @override
+  Path getClip(Size size) {
+    final Path path = Path();
+    final double w = size.width;
+    final double h = size.height;
+    final double xt = fTop.clamp(0.0, w);
+    final double xb = fBottom.clamp(0.0, w);
+
+    if (isLeftPortion) {
+      path.moveTo(0, 0);
+      path.lineTo(xt + 0.8, 0);
+      path.lineTo(xb + 0.8, h);
+      path.lineTo(0, h);
+      path.close();
+    } else {
+      path.moveTo(xt - 0.8, 0);
+      path.lineTo(w, 0);
+      path.lineTo(w, h);
+      path.lineTo(xb - 0.8, h);
+      path.close();
+    }
+    return path;
+  }
+
+  @override
+  bool shouldReclip(_DiagonalClipper oldClipper) =>
+      oldClipper.fTop != fTop ||
+      oldClipper.fBottom != fBottom ||
+      oldClipper.isLeftPortion != isLeftPortion;
+}
+
+// ── Dynamic soft drop shadow painter following the diagonal crease ──
+class _DiagonalCreaseShadowPainter extends CustomPainter {
+  const _DiagonalCreaseShadowPainter({
+    required this.fTop,
+    required this.fBottom,
+    required this.forward,
+    required this.opacity,
+  });
+
+  final double fTop;
+  final double fBottom;
+  final bool forward;
+  final double opacity;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (opacity <= 0.01) return;
+    final double w = size.width;
+    final double h = size.height;
+    final double xt = fTop.clamp(0.0, w);
+    final double xb = fBottom.clamp(0.0, w);
+    const double shadowWidth = 42.0;
+
+    final Path shadowPath = Path();
+    shadowPath.moveTo(xt, 0);
+    shadowPath.lineTo(math.min(w, xt + shadowWidth), 0);
+    shadowPath.lineTo(math.min(w, xb + shadowWidth), h);
+    shadowPath.lineTo(xb, h);
+    shadowPath.close();
+
+    final Paint paint = Paint()
+      ..shader = LinearGradient(
+        colors: [
+          Colors.black.withValues(alpha: opacity),
+          Colors.black.withValues(alpha: opacity * 0.40),
+          Colors.black.withValues(alpha: opacity * 0.10),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.25, 0.65, 1.0],
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+      ).createShader(Rect.fromLTRB(
+        math.min(xt, xb),
+        0,
+        math.max(xt, xb) + shadowWidth,
+        h,
+      ));
+
+    canvas.drawPath(shadowPath, paint);
+  }
+
+  @override
+  bool shouldRepaint(_DiagonalCreaseShadowPainter old) =>
+      old.fTop != fTop ||
+      old.fBottom != fBottom ||
+      old.forward != forward ||
+      old.opacity != opacity;
 }

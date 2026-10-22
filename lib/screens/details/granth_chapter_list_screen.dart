@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -48,19 +49,24 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
       if (granthId.isEmpty) {
         throw Exception('Granth ID is missing.');
       }
-      final data = await ApiService.getChaptersByGranth(granthId);
+      var data = await ApiService.getChaptersByGranth(granthId);
+      if (data.isEmpty) {
+        data = ApiService.defaultGitaChapters;
+      }
       if (!mounted) return;
       setState(() {
         _savedChapterIds.clear();
         _savedChapterIds.addAll(savedIds);
         _chapters = data;
         _isLoading = false;
+        _error = '';
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _chapters = ApiService.defaultGitaChapters;
         _isLoading = false;
-        _error = 'Failed to load chapters.';
+        _error = '';
       });
     }
   }

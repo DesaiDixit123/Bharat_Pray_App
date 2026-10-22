@@ -73,19 +73,27 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
         } catch (_) {}
       }
 
+      if (list.isEmpty) {
+        list = ApiService.getDefaultGranthsByCategory(categoryId, categoryTitle);
+      }
+
       if (!mounted) return;
       setState(() {
         _savedGranthIds.clear();
         _savedGranthIds.addAll(savedIds);
         _granths = list;
         _isLoading = false;
-        _error = list.isEmpty ? 'No granths available in this category.' : '';
+        _error = '';
       });
     } catch (e) {
       if (!mounted) return;
+      final categoryId = (widget.category['_id'] ?? widget.category['id'] ?? '').toString();
+      final categoryTitle = (widget.category['title'] ?? widget.category['name'] ?? '').toString();
+      final list = ApiService.getDefaultGranthsByCategory(categoryId, categoryTitle);
       setState(() {
+        _granths = list;
         _isLoading = false;
-        _error = 'Failed to load granths for this category.';
+        _error = '';
       });
     }
   }
