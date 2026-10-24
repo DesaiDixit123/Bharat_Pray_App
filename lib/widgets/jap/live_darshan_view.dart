@@ -108,7 +108,9 @@ class _LiveDarshanViewState extends State<LiveDarshanView>
 
       if (result.hasVideo) {
         VideoPlayerController? ctrl;
-        if (result.localFilePath != null && File(result.localFilePath!).existsSync()) {
+        if (result.assetVideoPath != null) {
+          ctrl = VideoPlayerController.asset(result.assetVideoPath!);
+        } else if (result.localFilePath != null && File(result.localFilePath!).existsSync()) {
           ctrl = VideoPlayerController.file(File(result.localFilePath!));
         } else if (result.videoUrl != null && result.videoUrl!.isNotEmpty) {
           ctrl = VideoPlayerController.networkUrl(Uri.parse(result.videoUrl!));
@@ -208,12 +210,16 @@ class _LiveDarshanViewState extends State<LiveDarshanView>
             },
           ),
 
-          // ── Layer 4: Living Deity Artwork or AI Video Playback ───────
+          // ── Layer 4: Living Deity Artwork or Dynamic Live Darshan Video Playback ───
           if (_isVideoInitialized && _videoController != null)
-            Center(
-              child: AspectRatio(
-                aspectRatio: _videoController!.value.aspectRatio,
-                child: VideoPlayer(_videoController!),
+            SizedBox.expand(
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _videoController!.value.size.width,
+                  height: _videoController!.value.size.height,
+                  child: VideoPlayer(_videoController!),
+                ),
               ),
             )
           else

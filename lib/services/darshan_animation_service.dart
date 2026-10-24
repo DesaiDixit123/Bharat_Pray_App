@@ -16,6 +16,7 @@ class DarshanAnimationResult {
   final DarshanAnimationMode mode;
   final String? videoUrl;
   final String? localFilePath;
+  final String? assetVideoPath;
   final String message;
   final Map<String, dynamic>? engineConfig;
 
@@ -24,6 +25,7 @@ class DarshanAnimationResult {
     required this.mode,
     this.videoUrl,
     this.localFilePath,
+    this.assetVideoPath,
     this.message = '',
     this.engineConfig,
   });
@@ -43,6 +45,18 @@ class DarshanAnimationService {
     final cacheKey = deityId.toLowerCase().trim();
     if (_memoryCache.containsKey(cacheKey)) {
       return _memoryCache[cacheKey]!;
+    }
+
+    // Built-in live darshan video asset for Lord Shri Ram
+    if (cacheKey.contains('ram') || deityName.toLowerCase().contains('ram')) {
+      const result = DarshanAnimationResult(
+        hasVideo: true,
+        mode: DarshanAnimationMode.aiVideo,
+        assetVideoPath: 'assets/videos/lord_shri_ram_live_darshan.mp4',
+        message: 'Loaded Lord Shri Ram live darshan video asset',
+      );
+      _memoryCache[cacheKey] = result;
+      return result;
     }
 
     try {

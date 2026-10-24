@@ -256,6 +256,19 @@ class JapOfflineRepository {
     await saveSession(record);
   }
 
+  /// Completely resets progress for a specific Jap back to 0
+  static Future<void> resetProgress(String japId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('$_prefixSession$japId');
+      await prefs.remove('$_prefixCount$japId');
+      await prefs.remove('$_prefixMalas$japId');
+      await prefs.remove('$_prefixDirty$japId');
+    } catch (e) {
+      debugPrint('[JapOfflineRepository] Error resetting progress for "$japId": $e');
+    }
+  }
+
   /// Retrieve locally cached progress map
   static Future<Map<String, int>> getProgress(
     String japId, {

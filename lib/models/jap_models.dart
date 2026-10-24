@@ -259,7 +259,7 @@ class JapConfig {
     } else if (n.contains('hanuman') || n.contains('bajrang') || n.contains('maruti')) {
       return 'assets/images/deity_hanuman.png';
     } else if (n.contains('ram') || n.contains('raghav') || n.contains('sita')) {
-      return 'assets/images/deity_ram.png';
+      return 'assets/images/lord_shri_ram_darshan.png';
     } else if (n.contains('amba') || n.contains('durga') || n.contains('mata') || n.contains('kali')) {
       return 'assets/images/deity_amba.png';
     }

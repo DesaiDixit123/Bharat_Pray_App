@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:bharat_pray/models/jap_models.dart';
-import 'package:bharat_pray/models/darshan_model.dart';
 import 'package:bharat_pray/services/jap_session_controller.dart';
 import 'package:bharat_pray/services/effect_engine/effect_engine.dart';
 import 'package:bharat_pray/services/effect_engine/effect_registry.dart';
