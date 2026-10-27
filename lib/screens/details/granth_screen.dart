@@ -21,75 +21,83 @@ class _GranthScreenState extends State<GranthScreen> {
   @override
   void initState() {
     super.initState();
+    // Instant UI load: display cached/default categories immediately so there is ZERO waiting time
+    _categories = _mapCategories(ApiService.defaultGranthCategories);
+    _isLoading = _categories.isEmpty;
     _fetchCategories();
+  }
+
+  List<Map<String, dynamic>> _mapCategories(List<dynamic> rawList) {
+    final List<Map<String, dynamic>> res = [];
+    for (final cat in rawList) {
+      final catMap = Map<String, dynamic>.from(cat as Map);
+      final title = (catMap['name'] ?? catMap['title'] ?? 'Granth').toString();
+      final catId = (catMap['_id'] ?? catMap['id'] ?? '').toString();
+      final rawImg = (catMap['image'] ?? catMap['coverImage'] ?? '').toString();
+
+      String resolvedImg = 'assets/images/bhagavad_gita.png';
+      if (rawImg.isNotEmpty) {
+        resolvedImg = ApiService.resolveImageUrl(rawImg);
+      } else if (title.toLowerCase().contains('veda') || title.toLowerCase().contains('puran')) {
+        resolvedImg = 'assets/images/bhagavad_gita.png';
+      } else if (title.toLowerCase().contains('itihas')) {
+        resolvedImg = 'assets/images/image_2.png';
+      } else if (title.toLowerCase().contains('darshan')) {
+        resolvedImg = 'assets/images/image_3.png';
+      } else if (title.toLowerCase().contains('stotra')) {
+        resolvedImg = 'assets/images/image_4.png';
+      } else if (title.toLowerCase().contains('aarti')) {
+        resolvedImg = 'assets/images/image_4_1.png';
+      }
+
+      res.add({
+        '_id': catId,
+        'title': title,
+        'count': catMap['granthCount'] ?? catMap['count'] ?? 1,
+        'image': resolvedImg,
+        'description': (catMap['description'] ?? '').toString().isNotEmpty
+            ? catMap['description'].toString()
+            : 'Explore sacred texts of $title',
+      });
+    }
+    return res;
   }
 
   Future<void> _fetchCategories() async {
     if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _error = '';
-    });
+    if (_categories.isEmpty) {
+      setState(() {
+        _isLoading = true;
+        _error = '';
+      });
+    }
 
     try {
       final remoteCats = await ApiService.getGranthCategories();
       if (!mounted) return;
-      
-      final List<Map<String, dynamic>> fetched = [];
-      for (final cat in remoteCats) {
-        final catMap = Map<String, dynamic>.from(cat as Map);
-        final title = (catMap['name'] ?? catMap['title'] ?? 'Granth').toString();
-        final catId = (catMap['_id'] ?? catMap['id'] ?? '').toString();
-        final rawImg = (catMap['image'] ?? catMap['coverImage'] ?? '').toString();
 
-        String resolvedImg = 'assets/images/bhagavad_gita.png';
-        if (rawImg.isNotEmpty) {
-          resolvedImg = ApiService.resolveImageUrl(rawImg);
-        } else if (title.toLowerCase().contains('veda') || title.toLowerCase().contains('puran')) {
-          resolvedImg = 'assets/images/bhagavad_gita.png';
-        } else if (title.toLowerCase().contains('itihas')) {
-          resolvedImg = 'assets/images/image_2.png';
-        } else if (title.toLowerCase().contains('darshan')) {
-          resolvedImg = 'assets/images/image_3.png';
-        } else if (title.toLowerCase().contains('stotra')) {
-          resolvedImg = 'assets/images/image_4.png';
-        } else if (title.toLowerCase().contains('aarti')) {
-          resolvedImg = 'assets/images/image_4_1.png';
-        }
-
-        fetched.add({
-          '_id': catId,
-          'title': title,
-          'count': catMap['granthCount'] ?? catMap['count'] ?? 1,
-          'image': resolvedImg,
-          'description': (catMap['description'] ?? '').toString().isNotEmpty
-              ? catMap['description'].toString()
-              : 'Explore sacred texts of $title',
-        });
-      }
+      final fetched = _mapCategories(remoteCats);
 
       setState(() {
-        _categories = fetched;
+        if (fetched.isNotEmpty) {
+          _categories = fetched;
+        }
         _isLoading = false;
-        _error = fetched.isEmpty ? 'No granth categories found.' : '';
+        _error = _categories.isEmpty ? 'No granth categories found.' : '';
       });
     } catch (e) {
       if (!mounted) return;
-      final List<Map<String, dynamic>> fallbackList = [];
-      for (final cat in ApiService.defaultGranthCategories) {
-        fallbackList.add({
-          '_id': cat['_id'],
-          'title': (cat['name'] ?? cat['title'] ?? 'Granth').toString(),
-          'count': cat['granthCount'] ?? 2,
-          'image': cat['image'] ?? 'assets/images/bhagavad_gita.png',
-          'description': (cat['description'] ?? '').toString(),
+      if (_categories.isEmpty) {
+        setState(() {
+          _categories = _mapCategories(ApiService.defaultGranthCategories);
+          _isLoading = false;
+          _error = '';
+        });
+      } else {
+        setState(() {
+          _isLoading = false;
         });
       }
-      setState(() {
-        _categories = fallbackList;
-        _isLoading = false;
-        _error = '';
-      });
     }
   }
 

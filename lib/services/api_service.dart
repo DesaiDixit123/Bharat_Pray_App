@@ -12,8 +12,8 @@ class ApiService {
   static const bool isLive = false;
 
   // Local backend configuration:
-  // Active Wi-Fi IP = 192.168.29.227, Port = 3020
-  static const String _localIp = '192.168.29.227';
+  // Active Wi-Fi IP = 192.168.29.73, Port = 3020
+  static const String _localIp = '192.168.29.73';
   static const int _localPort = 3020;
 
   static String get baseUrl {
@@ -108,12 +108,12 @@ class ApiService {
     return '$baseUrl${isUploads ? "" : "/uploads"}$pathPrefix$trimmed';
   }
 
-  static final List<String> _fallbackHosts = ['10.127.253.19', '127.0.0.1', '192.168.29.113', '10.0.2.2', 'api.bharatpray.com'];
+  static final List<String> _fallbackHosts = ['192.168.29.73', '127.0.0.1', '10.0.2.2', 'api.bharatpray.com'];
 
   static Future<http.Response> _safeGet(Uri uri, {Map<String, String>? headers}) async {
     try {
       _logApiCall('GET', uri, headers: headers);
-      final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 15));
+      final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 4));
       _logApiResponse('GET', uri, response);
       if (response.statusCode >= 500) {
         throw HttpException('Server returned error ${response.statusCode}');

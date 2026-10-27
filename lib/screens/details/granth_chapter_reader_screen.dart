@@ -39,35 +39,39 @@ class GranthChapterReaderScreen extends StatefulWidget {
       _GranthChapterReaderScreenState();
 }
 
+class _VersePhrase {
+  final String spokenText;
+  final String delimiter;
+  final List<int> wordIndices;
+  final List<int> wordStarts;
+  final List<int> relativeOffsetsMs;
+  final int totalDurationMs;
+  final int pauseMs;
+
+  _VersePhrase({
+    required this.spokenText,
+    required this.delimiter,
+    required this.wordIndices,
+    required this.wordStarts,
+    required this.relativeOffsetsMs,
+    required this.totalDurationMs,
+    required this.pauseMs,
+  });
+}
+
 class _VerseSection {
   final String section; // 'sanskrit', 'transliteration', 'hindi', 'english'
   final String displayText;
   final List<String> words;
-  final String spokenText;
+  final List<_VersePhrase> phrases;
   final String langCode;
-  final List<_SectionWordTiming> timings;
 
   _VerseSection({
     required this.section,
     required this.displayText,
     required this.words,
-    required this.spokenText,
+    required this.phrases,
     required this.langCode,
-    required this.timings,
-  });
-}
-
-class _SectionWordTiming {
-  final int localWordIndex;
-  final int startMs;
-  final int endMs;
-  final String word;
-
-  _SectionWordTiming({
-    required this.localWordIndex,
-    required this.startMs,
-    required this.endMs,
-    required this.word,
   });
 }
 
@@ -100,6 +104,10 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   List<_VerseSection> _activeVerseSections = [];
   int _ttsSectionSession = 0;
   int _sectionStartTimeMs = 0;
+  int _speechLoopSession = 0;
+  Completer<void>? _wordCompleter;
+  VoidCallback? _ttsPhraseStartCallback;
+  void Function(int startOffset)? _ttsPhraseProgressCallback;
 
   Timer? _wordTimer;
   Timer? _paceTicker;
@@ -142,7 +150,71 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     return _currentLocalWord;
   }
 
-  /// Builds structured sections with word tokens and calibrated phonetic durations for a verse.
+  /// Canonical regex for extracting words consistently across TTS timing and UI highlighting
+  static final RegExp granthWordPattern = RegExp(
+    r'''[^\s।॥\n\r,.:;!?~❖✦★☆◆◇_─━═()\[\]{}|‖¦/'"“”‘’–—]+''',
+  );
+  static final RegExp citationPattern =
+      RegExp(r'^[\d०-९]+(?:[-–—.:][\d०-९]+)?$');
+
+  /// Dynamically computes the natural speech duration (in ms) for a word using
+  /// Chhandas-inspired phonetic mora for Devanagari and syllable metrics for Latin text.
+  static int _computePhoneticDurationMs(
+    String word,
+    String lang,
+    double rateScale,
+  ) {
+    if (word.isEmpty) return 0;
+
+    final bool isDevanagari =
+        word.runes.any((r) => r >= 0x0900 && r <= 0x097F);
+
+    double baseMs;
+    if (isDevanagari) {
+      int morae = 0;
+      final runes = word.runes.toList();
+      for (int i = 0; i < runes.length; i++) {
+        final r = runes[i];
+        if (r == 0x0906 ||
+            r == 0x0908 ||
+            r == 0x090A ||
+            r == 0x090F ||
+            r == 0x0910 ||
+            r == 0x0913 ||
+            r == 0x0914 ||
+            r == 0x093E ||
+            r == 0x0940 ||
+            r == 0x0942 ||
+            r == 0x0947 ||
+            r == 0x0948 ||
+            r == 0x094B ||
+            r == 0x094C) {
+          morae += 2;
+        } else if (r == 0x0902 || r == 0x0903) {
+          morae += 1;
+        } else if (r >= 0x0915 && r <= 0x0939) {
+          morae += 1;
+        } else if (r >= 0x0904 && r <= 0x090B) {
+          morae += 1;
+        }
+      }
+      if (morae < 1) morae = 1;
+      baseMs = 120.0 + (morae * 110.0);
+    } else {
+      final vowelMatches =
+          RegExp(r'[aeiouy]+', caseSensitive: false).allMatches(word).length;
+      final syllables = math.max(1, vowelMatches);
+      baseMs = 130.0 + (syllables * 120.0);
+    }
+
+    final duration = (baseMs * rateScale).round();
+    return duration.clamp(
+      (220 * rateScale).round(),
+      (2200 * rateScale).round(),
+    );
+  }
+
+  /// Builds structured sections with word tokens and calibrated pause durations for a verse.
   static List<_VerseSection> _buildVerseSections(
     Map<String, String> verse,
     double calibratedRate,
@@ -170,15 +242,10 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       ('english', rawEnglish, 'en-IN'),
     ];
 
-    final wordPattern = RegExp(r'[^\s।॥\n\r,.:;!?]+');
-    final citationPattern = RegExp(r'^[\d०-९]+(?:[-–—.:][\d०-९]+)?$');
-
     final nativeRate = Platform.isAndroid
         ? (calibratedRate * 2.0)
         : calibratedRate;
-    final double rateScale = 0.30 / nativeRate.clamp(0.08, 2.0);
-    final double baseWordMs = 380.0 * rateScale;
-    final double msPerChar = 70.0 * rateScale;
+    final double rateScale = 0.50 / nativeRate.clamp(0.12, 2.0);
 
     for (final item in rawList) {
       final secName = item.$1;
@@ -186,95 +253,100 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       final lang = item.$3;
       if (rawText.isEmpty) continue;
 
-      final matches = wordPattern.allMatches(rawText).toList();
-      if (matches.isEmpty) continue;
+      final allMatches = granthWordPattern.allMatches(rawText).toList();
+      if (allMatches.isEmpty) continue;
 
-      final words = <String>[];
-      final timings = <_SectionWordTiming>[];
-      int currentMs = 0;
+      final words = allMatches.map((m) => m.group(0) ?? '').toList();
 
-      for (int i = 0; i < matches.length; i++) {
-        final w = matches[i].group(0) ?? '';
-        words.add(w);
+      final phraseRegex = RegExp(r'([^।॥|\n,.;!?:]+)([।॥|\n,.;!?:]*)');
+      final phraseMatches = phraseRegex.allMatches(rawText).toList();
+      final phrases = <_VersePhrase>[];
 
-        final charCount = w.runes.length;
-        final speechMs = (baseWordMs + (charCount * msPerChar)).round().clamp(
-          (320 * rateScale).round(),
-          (1600 * rateScale).round(),
-        );
-        final startMs = currentMs;
-        final endMs = startMs + speechMs;
+      int wordCursor = 0;
 
-        timings.add(
-          _SectionWordTiming(
-            localWordIndex: i,
-            startMs: startMs,
-            endMs: endMs,
-            word: w,
-          ),
-        );
+      for (final pm in phraseMatches) {
+        final content = pm.group(1)?.trim() ?? '';
+        final delim = pm.group(2) ?? '';
+        if (content.isEmpty) continue;
 
-        int pauseMs = (60.0 * rateScale).round();
-        if (i < matches.length - 1) {
-          final delim = rawText.substring(matches[i].end, matches[i + 1].start);
-          if (delim.contains('॥') ||
-              delim.contains('.') ||
-              delim.contains('\n\n')) {
-            pauseMs = (800.0 * rateScale).round();
-          } else if (delim.contains('।') ||
-              delim.contains('|') ||
-              delim.contains(',') ||
-              delim.contains(';') ||
-              delim.contains('\n')) {
-            pauseMs = (450.0 * rateScale).round();
+        final phraseWords = granthWordPattern.allMatches(content).toList();
+        if (phraseWords.isEmpty) continue;
+
+        final cleanSpokenWords = <String>[];
+        final phraseWordIndices = <int>[];
+        final wordStarts = <int>[];
+        final relativeOffsets = <int>[];
+        int currentSpokenLen = 0;
+        int phraseDurationMs = 0;
+
+        for (final pw in phraseWords) {
+          final rawWord = pw.group(0) ?? '';
+          if (wordCursor < words.length) {
+            final isCitation = citationPattern.hasMatch(rawWord);
+            final clean = rawWord
+                .replaceAll(
+                  RegExp(r'[^\p{L}\p{N}\u0900-\u097F]', unicode: true),
+                  '',
+                )
+                .trim();
+
+            if (!isCitation && clean.isNotEmpty) {
+              if (cleanSpokenWords.isNotEmpty) {
+                currentSpokenLen += 1;
+              }
+              wordStarts.add(currentSpokenLen);
+              cleanSpokenWords.add(clean);
+              currentSpokenLen += clean.length;
+
+              phraseWordIndices.add(wordCursor);
+              relativeOffsets.add(phraseDurationMs);
+
+              final wordMs =
+                  _computePhoneticDurationMs(clean, lang, rateScale);
+              phraseDurationMs += wordMs;
+            }
+
+            wordCursor++;
           }
         }
-        currentMs = endMs + pauseMs;
+
+        if (cleanSpokenWords.isNotEmpty) {
+          int pauseMs = 80;
+          if (delim.contains('॥') || delim.contains('\n\n')) {
+            pauseMs = 550;
+          } else if (delim.contains('।') ||
+              delim.contains('.') ||
+              delim.contains('|')) {
+            pauseMs = 350;
+          } else if (delim.contains(',') || delim.contains(';')) {
+            pauseMs = 180;
+          } else if (delim.contains('\n')) {
+            pauseMs = 240;
+          }
+
+          phrases.add(
+            _VersePhrase(
+              spokenText: cleanSpokenWords.join(' '),
+              delimiter: delim,
+              wordIndices: phraseWordIndices,
+              wordStarts: wordStarts,
+              relativeOffsetsMs: relativeOffsets,
+              totalDurationMs: math.max(400, phraseDurationMs),
+              pauseMs: pauseMs,
+            ),
+          );
+        }
       }
 
-      // Prepare clean text for TTS
-      String cleaned = rawText;
-      cleaned = cleaned.replaceAll(RegExp(r'[─━═_]{2,}|\-{2,}'), ' ');
-      cleaned = cleaned.replaceAll(RegExp(r'[❖✦★☆◆◇•~]+'), ' ');
-      cleaned = cleaned.replaceAll(
-        RegExp(r'[\(\[]\s*[\d०-९]+(?:[-–—.:][\d०-९]+)?\s*[\)\]]'),
-        ' ',
-      );
-      cleaned = cleaned.replaceAll(
-        RegExp(r'(?:॥|\|{1,2})\s*[\d०-९]+(?:[-–—.:][\d०-९]+)?\s*(?:॥|\|{1,2})'),
-        '. ',
-      );
-      cleaned = cleaned.replaceAll(
-        RegExp(
-          r'\b(?:Verse|Shloka|Chapter|अध्याय|श्लोक|BG)\s*[\d०-९]+(?:[-–—.:][\d०-९]+)?\b:?',
-          caseSensitive: false,
-        ),
-        ' ',
-      );
-      cleaned = cleaned.replaceAll('॥', '. ');
-      cleaned = cleaned.replaceAll('।', ', ');
-      cleaned = cleaned.replaceAll('ॐ', 'ॐ, ');
-
-      final spokenBuf = StringBuffer();
-      final cleanMatches = wordPattern.allMatches(cleaned).toList();
-      for (final cm in cleanMatches) {
-        final w = cm.group(0)!;
-        if (citationPattern.hasMatch(w)) continue;
-        if (spokenBuf.isNotEmpty) spokenBuf.write(' ');
-        spokenBuf.write(w);
-      }
-
-      final spoken = spokenBuf.toString().trim();
-      if (spoken.isEmpty) continue;
+      if (phrases.isEmpty) continue;
 
       sections.add(
         _VerseSection(
           section: secName,
           displayText: rawText,
           words: words,
-          spokenText: spoken,
+          phrases: phrases,
           langCode: lang,
-          timings: timings,
         ),
       );
     }
@@ -328,21 +400,23 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
                 lLower.contains(langPrefix)) {
               fallbackMatch ??= {'name': name, 'locale': locale};
               int score = 0;
-              if (lLower == targetLocale) score += 10;
+              if (lLower == targetLocale) score += 15;
               if (nLower.contains('neural') || nLower.contains('wavenet')) {
-                score += 30;
+                score += 35;
               }
               if (nLower.contains('x-hie') ||
                   nLower.contains('x-hid') ||
                   nLower.contains('x-ene') ||
                   nLower.contains('x-end')) {
+                score += 25;
+              }
+              if (nLower.contains('x-hic') ||
+                  nLower.contains('x-hib') ||
+                  nLower.contains('x-hia')) {
                 score += 20;
               }
-              if (nLower.contains('x-hic') || nLower.contains('x-hib')) {
-                score += 15;
-              }
-              if (nLower.contains('local') || nLower.contains('network')) {
-                score += 5;
+              if (nLower.contains('network') || nLower.contains('natural')) {
+                score += 10;
               }
               if (score > highestScore) {
                 highestScore = score;
@@ -365,23 +439,22 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     }
   }
 
-  /// Computes the platform-calibrated speech rate for genuinely slow, contemplative scripture recitation.
-  /// On Android, FlutterTtsPlugin maps android 1.0 to flutter 0.5 (multiplies input rate by 2.0).
-  /// A flutter rate of 0.15 produces 0.30 in Android TextToSpeech (~45-50 WPM: slow, calm, dignified, reverent).
-  /// On iOS, AVSpeechUtterance raw rate 0.28 produces matching meditative pace.
+  /// Computes the platform-calibrated speech rate for a calm, serene scripture chanting speed.
+  /// Android: 0.25 delivers peaceful, meditative, clearly articulated sacred chanting.
+  /// iOS: 0.28 produces smooth, sacred recitation.
   double get _calibratedSpeechRate {
-    final double baseRate = Platform.isAndroid ? 0.15 : 0.28;
-    return (baseRate * _speedMultiplier).clamp(0.06, 0.60);
+    final double baseRate = Platform.isAndroid ? 0.25 : 0.28;
+    return (baseRate * _speedMultiplier).clamp(0.12, 0.85);
   }
 
   /// Explicitly applies rate, pitch, and volume before speech begins.
   Future<void> _applySpeechSettings() async {
     final rate = _calibratedSpeechRate;
     await _tts.setSpeechRate(rate);
-    await _tts.setPitch(0.94);
+    await _tts.setPitch(1.0); // Pure, natural human vocal resonance
     await _tts.setVolume(1.0);
     debugPrint(
-      '[TTS] Applied speech settings -> platform: ${Platform.operatingSystem}, rate: $rate (effective native: ${Platform.isAndroid ? (rate * 2.0).toStringAsFixed(2) : rate.toStringAsFixed(2)}), pitch: 0.94',
+      '[TTS] Applied speech settings -> platform: ${Platform.operatingSystem}, rate: $rate, pitch: 1.0',
     );
   }
 
@@ -395,126 +468,64 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       debugPrint('[TTS] Could not set Google TTS engine: $e');
     }
 
+    try {
+      await _tts.awaitSpeakCompletion(true);
+    } catch (_) {}
+
     _ttsLang = _detectTtsLanguage();
     await _tts.setLanguage(_ttsLang);
     await _selectOptimalVoice(_ttsLang);
     await _applySpeechSettings();
 
-    // Start callback: fired at the exact millisecond the audio track starts playing from the speaker!
     _tts.setStartHandler(() {
-      if (!mounted || !_isPlaying) return;
-      _sectionStartTimeMs = DateTime.now().millisecondsSinceEpoch;
-      if (_currentSectionIndex < _activeVerseSections.length) {
-        final sec = _activeVerseSections[_currentSectionIndex];
-        setState(() {
-          _activeSection = sec.section;
-          if (_currentLocalWord < 0) _currentLocalWord = 0;
-        });
-        _startSectionTicker(sec, _ttsSectionSession, 0);
-      }
+      _ttsPhraseStartCallback?.call();
     });
 
-    // Word progress callback (iOS real-time speaker callback)
     _tts.setProgressHandler((String text, int start, int end, String word) {
-      if (!mounted || !_isPlaying) return;
-      if (Platform.isIOS) {
-        if (_currentSectionIndex < _activeVerseSections.length) {
-          final sec = _activeVerseSections[_currentSectionIndex];
-          for (int i = 0; i < sec.words.length; i++) {
-            if (sec.words[i] == word.trim() && i >= _currentLocalWord) {
-              setState(() => _currentLocalWord = i);
-              break;
-            }
-          }
-        }
-      }
+      _ttsPhraseProgressCallback?.call(start);
     });
 
-    // Section completion callback: fired when TTS finishes speaking the current section
+    // Word completion callback: unblocks the lockstep chanting loop precisely when speaker finishes the word
     _tts.setCompletionHandler(() {
-      if (!mounted || !_isPlaying) return;
-      _paceTicker?.cancel();
-
-      if (_currentSectionIndex < _activeVerseSections.length) {
-        final sec = _activeVerseSections[_currentSectionIndex];
-        setState(() {
-          _currentLocalWord = sec.words.length; // section completed!
-        });
-      }
-
-      final nextSecIdx = _currentSectionIndex + 1;
-      if (nextSecIdx < _activeVerseSections.length) {
-        // Natural reverent pause between scripture sections (750ms)
-        _transitionTimer = Timer(const Duration(milliseconds: 750), () {
-          if (!mounted || !_isPlaying) return;
-          _currentSectionIndex = nextSecIdx;
-          _currentLocalWord = 0;
-          _speakCurrentSection();
-        });
-      } else {
-        // All sections of the verse finished!
-        _handlePageComplete();
+      if (_wordCompleter != null && !_wordCompleter!.isCompleted) {
+        _wordCompleter!.complete();
       }
     });
 
     _tts.setErrorHandler((msg) {
-      if (!mounted || !_isPlaying) return;
-      debugPrint('[TTS] Error: $msg - falling back to word timer');
-      _startWordTimerFallback();
+      if (_wordCompleter != null && !_wordCompleter!.isCompleted) {
+        _wordCompleter!.complete();
+      }
+      debugPrint('[TTS] Error notice: $msg');
     });
 
     if (mounted) setState(() => _ttsInitialized = true);
   }
 
-  void _startSectionTicker(
-    _VerseSection section,
-    int sessionId,
-    int initialOffsetMs,
-  ) {
-    _paceTicker?.cancel();
-    final timings = section.timings;
-    if (timings.isEmpty) return;
+  void _transitionToNextSection() {
+    _transitionTimer?.cancel();
+    if (!mounted || !_isPlaying) return;
 
-    _paceTicker = Timer.periodic(const Duration(milliseconds: 25), (timer) {
-      if (!mounted || !_isPlaying || _ttsSectionSession != sessionId) {
-        timer.cancel();
-        return;
-      }
-
-      final elapsedMs =
-          (DateTime.now().millisecondsSinceEpoch - _sectionStartTimeMs) +
-          initialOffsetMs;
-
-      int activeIndex = -1;
-      for (int i = 0; i < timings.length; i++) {
-        if (elapsedMs >= timings[i].startMs && elapsedMs < timings[i].endMs) {
-          activeIndex = timings[i].localWordIndex;
-          break;
-        } else if (elapsedMs < timings[i].startMs) {
-          if (i > 0) activeIndex = timings[i - 1].localWordIndex;
-          break;
-        }
-      }
-
-      if (activeIndex == -1 &&
-          timings.isNotEmpty &&
-          elapsedMs >= timings.last.endMs) {
-        activeIndex = timings.last.localWordIndex;
-      }
-
-      if (activeIndex >= 0 &&
-          activeIndex != _currentLocalWord &&
-          activeIndex < section.words.length) {
-        setState(() {
-          _currentLocalWord = activeIndex;
-        });
-      }
-    });
+    final nextSecIdx = _currentSectionIndex + 1;
+    if (nextSecIdx < _activeVerseSections.length) {
+      // Reverent 600ms pause between scripture sections (Sanskrit -> Transliteration -> Hindi)
+      _transitionTimer = Timer(const Duration(milliseconds: 600), () {
+        if (!mounted || !_isPlaying) return;
+        _currentSectionIndex = nextSecIdx;
+        _currentLocalWord = 0;
+        _speakCurrentSection();
+      });
+    } else {
+      // All sections of the verse finished!
+      _handlePageComplete();
+    }
   }
 
-  /// Speaks the current section in order: Sanskrit -> Transliteration -> Hindi -> English
+  /// Speaks the current section line-by-line / phrase-by-phrase in sacred cadence.
+  /// Every single word in the scripture is 100% vocalized by Google TTS (zero dropped words).
+  /// Words are highlighted in real-time as they are spoken via TTS audio callbacks.
+  /// Punctuation marks (।, ॥, |, ;, :, .) are never spoken aloud.
   Future<void> _speakCurrentSection() async {
-    _paceTicker?.cancel();
     _transitionTimer?.cancel();
 
     if (!mounted || !_isPlaying) return;
@@ -536,27 +547,138 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
 
     if (!mounted || !_isPlaying) return;
 
-    final capturedSession = ++_ttsSectionSession;
+    final currentSession = ++_speechLoopSession;
 
     setState(() {
       _activeSection = section.section;
     });
 
-    String textToSpeak = section.spokenText;
-    int resumeOffsetMs = 0;
-    if (_currentLocalWord > 0 && _currentLocalWord < section.timings.length) {
-      resumeOffsetMs = section.timings[_currentLocalWord].startMs;
-      final remainingWords = section.words.sublist(_currentLocalWord);
-      textToSpeak = remainingWords.join(' ');
-    } else {
-      _currentLocalWord = 0;
+    for (int p = 0; p < section.phrases.length; p++) {
+      if (!mounted || !_isPlaying || _speechLoopSession != currentSession) {
+        return;
+      }
+
+      final phrase = section.phrases[p];
+      if (phrase.wordIndices.isEmpty || phrase.spokenText.isEmpty) {
+        if (phrase.pauseMs > 0) {
+          await Future.delayed(
+            Duration(milliseconds: (phrase.pauseMs / _speedMultiplier).round()),
+          );
+        }
+        continue;
+      }
+
+      // Highlight the first word of the line immediately
+      setState(() {
+        _currentLocalWord = phrase.wordIndices.first;
+      });
+
+      final completer = Completer<void>();
+      _wordCompleter = completer;
+
+      bool audioStarted = false;
+      int audioStartTime = 0;
+      Timer? phraseTicker;
+
+      void startAudioTicker() {
+        if (audioStarted) return;
+        audioStarted = true;
+        audioStartTime = DateTime.now().millisecondsSinceEpoch;
+
+        phraseTicker?.cancel();
+        phraseTicker = Timer.periodic(const Duration(milliseconds: 25), (t) {
+          if (!mounted || !_isPlaying || _speechLoopSession != currentSession) {
+            t.cancel();
+            return;
+          }
+
+          final elapsed =
+              DateTime.now().millisecondsSinceEpoch - audioStartTime;
+          int activeIdx = phrase.wordIndices.first;
+          for (int k = 0; k < phrase.relativeOffsetsMs.length; k++) {
+            if (elapsed >= phrase.relativeOffsetsMs[k]) {
+              activeIdx = phrase.wordIndices[k];
+            } else {
+              break;
+            }
+          }
+
+          if (activeIdx != _currentLocalWord && mounted) {
+            setState(() {
+              _currentLocalWord = activeIdx;
+            });
+          }
+        });
+      }
+
+      _ttsPhraseStartCallback = () {
+        startAudioTicker();
+      };
+
+      _ttsPhraseProgressCallback = (int charOffset) {
+        audioStarted = true;
+        for (int k = 0; k < phrase.wordStarts.length; k++) {
+          if (charOffset >= phrase.wordStarts[k] &&
+              (k == phrase.wordStarts.length - 1 ||
+                  charOffset < phrase.wordStarts[k + 1])) {
+            final targetIdx = phrase.wordIndices[k];
+            if (targetIdx != _currentLocalWord && mounted) {
+              setState(() {
+                _currentLocalWord = targetIdx;
+              });
+            }
+            break;
+          }
+        }
+      };
+
+      // Speak the entire line naturally (every word is vocalized, zero words dropped)
+      await _tts.speak(phrase.spokenText);
+
+      // Fallback timer: if onStart didn't fire within 350ms, start ticker anyway
+      Timer(const Duration(milliseconds: 350), () {
+        if (!audioStarted && mounted && _speechLoopSession == currentSession) {
+          startAudioTicker();
+        }
+      });
+
+      final timeoutMs = math.max(2500, (phrase.totalDurationMs * 2.5).round());
+      try {
+        await completer.future.timeout(
+          Duration(milliseconds: (timeoutMs / _speedMultiplier).round()),
+          onTimeout: () {},
+        );
+      } catch (_) {}
+
+      phraseTicker?.cancel();
+
+      if (!mounted || !_isPlaying || _speechLoopSession != currentSession) {
+        return;
+      }
+
+      // Ensure last word of this line is reached
+      setState(() {
+        _currentLocalWord = phrase.wordIndices.last;
+      });
+
+      // Natural pause at line / verse boundary
+      if (phrase.pauseMs > 0) {
+        await Future.delayed(
+          Duration(milliseconds: (phrase.pauseMs / _speedMultiplier).round()),
+        );
+      }
     }
 
-    _sectionStartTimeMs =
-        DateTime.now().millisecondsSinceEpoch - resumeOffsetMs;
-    _startSectionTicker(section, capturedSession, resumeOffsetMs);
+    if (!mounted || !_isPlaying || _speechLoopSession != currentSession) {
+      return;
+    }
 
-    await _tts.speak(textToSpeak);
+    // Section completed!
+    setState(() {
+      _currentLocalWord = section.words.length;
+    });
+
+    _transitionToNextSection();
   }
 
   /// Start playback for the current page
@@ -640,7 +762,10 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   }
 
   void _handlePageComplete() {
-    _paceTicker?.cancel();
+    _speechLoopSession++;
+    if (_wordCompleter != null && !_wordCompleter!.isCompleted) {
+      _wordCompleter!.complete();
+    }
     _transitionTimer?.cancel();
     _wordTimer?.cancel();
     _tts.stop();
@@ -706,7 +831,10 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
 
   void _toggleAutoRead() {
     if (_isPlaying) {
-      _paceTicker?.cancel();
+      _speechLoopSession++;
+      if (_wordCompleter != null && !_wordCompleter!.isCompleted) {
+        _wordCompleter!.complete();
+      }
       _transitionTimer?.cancel();
       _wordTimer?.cancel();
       _tts.stop();
@@ -730,6 +858,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
         });
 
         if (_audioUrl != null) {
+          _audioPlayer.setVolume(0.18);
           _audioPlayer.play(UrlSource(_audioUrl!));
         }
 
@@ -753,6 +882,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
         });
 
         if (_audioUrl != null) {
+          _audioPlayer.setVolume(0.18);
           _audioPlayer.play(UrlSource(_audioUrl!));
         }
 
@@ -795,6 +925,10 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       _readingSpeedMs = (600 / _speedMultiplier).round();
     });
 
+    _speechLoopSession++;
+    if (_wordCompleter != null && !_wordCompleter!.isCompleted) {
+      _wordCompleter!.complete();
+    }
     _paceTicker?.cancel();
     _transitionTimer?.cancel();
     await _applySpeechSettings();
@@ -816,7 +950,10 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     if (!mounted) return;
     if (_currentPage == newPage) return;
 
-    _paceTicker?.cancel();
+    _speechLoopSession++;
+    if (_wordCompleter != null && !_wordCompleter!.isCompleted) {
+      _wordCompleter!.complete();
+    }
     _transitionTimer?.cancel();
     _wordTimer?.cancel();
 
@@ -870,7 +1007,10 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
 
   @override
   void dispose() {
-    _paceTicker?.cancel();
+    _speechLoopSession++;
+    if (_wordCompleter != null && !_wordCompleter!.isCompleted) {
+      _wordCompleter!.complete();
+    }
     _transitionTimer?.cancel();
     _wordTimer?.cancel();
     _tts.stop();
@@ -4489,9 +4629,10 @@ class _VersePageState extends State<_VersePage> {
   ) {
     if (text.isEmpty) return const SizedBox.shrink();
 
-    final wordPattern = RegExp(r'[^\s।॥\n\r,.:;!?]+');
-
-    final matches = wordPattern.allMatches(text).toList();
+    final matches = _GranthChapterReaderScreenState
+        .granthWordPattern
+        .allMatches(text)
+        .toList();
 
     if (matches.isEmpty) {
       return Text(text, textAlign: TextAlign.center, style: baseStyle);
@@ -4531,15 +4672,16 @@ class _VersePageState extends State<_VersePage> {
         );
       }
 
+      final wordStr = m.group(0)!;
+      final isCitation = _GranthChapterReaderScreenState.citationPattern.hasMatch(wordStr);
+
       final isHighlighted =
-          isSectionActive && (i == widget.activeLocalWordIndex);
+          isSectionActive && (i == widget.activeLocalWordIndex) && !isCitation;
 
       final isWordRead =
           isPageComplete ||
           isPastSection ||
           (isSectionActive && i < widget.activeLocalWordIndex);
-
-      final wordStr = m.group(0)!;
 
       if (isHighlighted) {
         // Pure text highlight without background box - glowing sacred saffron
