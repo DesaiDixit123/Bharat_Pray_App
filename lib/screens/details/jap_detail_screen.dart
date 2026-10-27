@@ -21,6 +21,7 @@ import '../../widgets/jap/divine_reveal_background.dart';
 import '../../widgets/jap/jap_effects_gallery_sheet.dart';
 import '../../widgets/jap/radial_mantra_burst_overlay.dart';
 import 'darshan_runtime_screen.dart';
+import 'cinematic_jap_screen.dart';
 
 /// Full-Screen Devotional Jap Experience 2.0 (Master Implementation).
 /// Includes:
@@ -1056,8 +1057,8 @@ class _JapDetailScreenState extends State<JapDetailScreen>
             // ── LAYER 1: Full-Screen Progressive Divine Image Reveal ─────────
             DivineRevealBackground(
               imageProvider: _imageProvider,
-              deityId: _activeTheme.id,
-              deityName: _activeTheme.name,
+              deityId: widget.entry.id.isNotEmpty ? widget.entry.id : _activeTheme.id,
+              deityName: widget.entry.name.isNotEmpty ? widget.entry.name : _activeTheme.name,
               count: _count,
               target: _target,
               startingStyle: _preferences.startingStyle,
@@ -1301,6 +1302,57 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                   ),
                 ),
               ),
+
+              if (_activeTheme.name.toLowerCase().contains('ram')) ...[
+                GestureDetector(
+                  onTap: () async {
+                    _dhunService.stop();
+                    final updated = await Navigator.push<int>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CinematicJapScreen(entry: widget.entry),
+                      ),
+                    );
+                    if (updated != null && mounted) {
+                      setState(() {
+                        _count = updated % _target;
+                        _completedMalas = updated ~/ _target;
+                      });
+                    }
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFF9900), Color(0xFFFF5500)],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFF7700).withValues(alpha: 0.5),
+                          blurRadius: 6,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.movie_filter_rounded, size: 14, color: Colors.white),
+                        const SizedBox(width: 4),
+                        Text(
+                          '108 Darshan',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
 
               // Effects Button
               GestureDetector(

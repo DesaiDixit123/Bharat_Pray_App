@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
 import '../models/yatra_model.dart';
 import '../models/journey_models.dart';
-import '../models/notification_model.dart';
 import 'fast2sms_service.dart';
 
 class ApiService {
@@ -13,8 +12,8 @@ class ApiService {
   static const bool isLive = false;
 
   // Local backend configuration:
-  // Active ADB Reverse Tunnel = 127.0.0.1, Wi-Fi IP = 192.168.29.113, Android Emulator = 10.0.2.2
-  static const String _localIp = '127.0.0.1';
+  // Active Wi-Fi IP = 192.168.29.227, Port = 3020
+  static const String _localIp = '192.168.29.227';
   static const int _localPort = 3020;
 
   static String get baseUrl {

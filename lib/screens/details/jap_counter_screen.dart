@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/jap_models.dart';
 import '../../services/api_service.dart';
@@ -14,8 +13,11 @@ import 'messages_screen.dart';
 import '../../services/yatra_personal_chat_service.dart';
 import '../../widgets/user_avatar.dart';
 import '../../models/jap_theme_config.dart';
+import '../../widgets/cinematic_jap/effects/jap_effect_selector_sheet.dart';
 import 'jap_detail_screen.dart';
+import 'cinematic_jap_screen.dart';
 export 'jap_detail_screen.dart';
+export 'cinematic_jap_screen.dart';
 
 // ─────────────────────────────────────────────
 // Main Jap List Screen
@@ -135,6 +137,10 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       if (!hasRadha) {
         combined.insert(0, _createRadhaPreset());
       }
+      final hasRam = combined.any((j) => j.name.toLowerCase().contains('ram'));
+      if (!hasRam) {
+        combined.insert(0, _createRamPreset());
+      }
     }
     try {
       for (final jap in combined) {
@@ -173,6 +179,20 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       targetCount: 108,
       progress: 0,
       effectPack: EffectPack.resolve(name: 'Shri Radha'),
+    );
+  }
+
+  static JapConfig _createRamPreset() {
+    return JapConfig(
+      id: JapThemeConfig.ram.id,
+      name: JapThemeConfig.ram.name,
+      thumbnailUrl: JapThemeConfig.ram.imageAsset,
+      darshanImageUrl: JapThemeConfig.ram.imageAsset,
+      shlokText: JapThemeConfig.ram.mantraText,
+      shlokAudioUrl: JapThemeConfig.ram.audioAsset,
+      targetCount: 108,
+      progress: 0,
+      effectPack: EffectPack.resolve(name: 'Lord Ram'),
     );
   }
 
@@ -252,9 +272,16 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
   }
 
   void _openJapDetail(JapConfig entry) async {
+    final bool isRam = entry.name.toLowerCase().contains('ram') ||
+        entry.shlokText.toLowerCase().contains('राम');
+
+    final Widget destination = isRam
+        ? CinematicJapScreen(entry: entry)
+        : JapDetailScreen(entry: entry);
+
     final updatedProgress = await Navigator.push<int>(
       context,
-      MaterialPageRoute(builder: (_) => JapDetailScreen(entry: entry)),
+      MaterialPageRoute(builder: (_) => destination),
     );
 
     if (updatedProgress != null) {
@@ -840,39 +867,90 @@ class _JapCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
 
-                    // Chant CTA Button (Always Orange)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [
-                              Color(0xFFFF9933),
-                              Color(0xFFFF6600),
+                    // Actions: [Effects ✨] (if Ram) & [Chant 📿]
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (entry.name.toLowerCase().contains('ram') ||
+                            entry.shlokText.toLowerCase().contains('राम')) ...[
+                          GestureDetector(
+                            onTap: () async {
+                              final currentEffect = await JapEffectSelectorSheet.loadSelectedEffect();
+                              if (!context.mounted) return;
+                              JapEffectSelectorSheet.show(
+                                context,
+                                currentEffect: currentEffect,
+                                onEffectSelected: (newEffect) {},
+                              );
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFF3E0),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: const Color(0xFFFF9900),
+                                  width: 1.0,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.auto_awesome_rounded,
+                                    size: 13,
+                                    color: Color(0xFFFF7700),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Effects',
+                                    style: GoogleFonts.outfit(
+                                      color: const Color(0xFFFF7700),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                        // Chant CTA Button (Always Orange)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [
+                                Color(0xFFFF9933),
+                                Color(0xFFFF6600),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFFF7700).withValues(alpha: 0.3),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
                             ],
                           ),
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFFF7700).withValues(alpha: 0.3),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
+                          child: Text(
+                            'Chant 📿',
+                            style: GoogleFonts.outfit(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
                             ),
-                          ],
-                        ),
-                        child: Text(
-                          'Chant 📿',
-                          style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ),
+                      ],
                     ),
                   ],
                 ),
