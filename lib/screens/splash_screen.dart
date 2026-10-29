@@ -288,10 +288,10 @@ class _SplashScreenState extends State<SplashScreen>
                                       colors: [
                                         const Color(
                                           0xFFFF7A00,
-                                        ).withValues(alpha: 0.6),
+                                        ).withValues(alpha: 0.35),
                                         const Color(
                                           0xFFFF4500,
-                                        ).withValues(alpha: 0.15),
+                                        ).withValues(alpha: 0.10),
                                         Colors.transparent,
                                       ],
                                     ),
@@ -314,38 +314,42 @@ class _SplashScreenState extends State<SplashScreen>
                               child: Transform.rotate(
                                 angle: _logoRotate.value,
                                 child: Container(
-                                  width: 120,
-                                  height: 120,
+                                  width: 140,
+                                  height: 140,
+                                  alignment: Alignment.center,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     boxShadow: [
                                       BoxShadow(
                                         color: const Color(
                                           0xFFFF7A00,
-                                        ).withValues(alpha: 0.35),
-                                        blurRadius: 28,
-                                        spreadRadius: 2,
-                                        offset: const Offset(0, 10),
+                                        ).withValues(alpha: 0.25),
+                                        blurRadius: 24,
+                                        spreadRadius: 1,
+                                        offset: const Offset(0, 6),
                                       ),
                                     ],
                                   ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(60),
-                                    child: Image.asset(
-                                      'assets/images/app_logo.png',
-                                      fit: BoxFit.cover,
-                                      errorBuilder:
-                                          (context, error, stackTrace) {
-                                            return Container(
-                                              color: const Color(0xFFFF7A00),
-                                              child: const Icon(
-                                                Icons.temple_hindu_rounded,
-                                                color: Colors.white,
-                                                size: 56,
-                                              ),
-                                            );
-                                          },
-                                    ),
+                                  child: Image.asset(
+                                    'assets/images/app_logo.png',
+                                    fit: BoxFit.contain,
+                                    filterQuality: FilterQuality.high,
+                                    errorBuilder:
+                                        (context, error, stackTrace) {
+                                          return Container(
+                                            width: 120,
+                                            height: 120,
+                                            decoration: const BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: Color(0xFFFF7A00),
+                                            ),
+                                            child: const Icon(
+                                              Icons.temple_hindu_rounded,
+                                              color: Colors.white,
+                                              size: 56,
+                                            ),
+                                          );
+                                        },
                                   ),
                                 ),
                               ),

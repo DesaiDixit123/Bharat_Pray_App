@@ -85,6 +85,9 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
         _isLoading = false;
         _error = '';
       });
+
+      // Fetch / verify exact chapter counts from backend in background
+      _refreshChapterCountsInBackground(list);
     } catch (e) {
       if (!mounted) return;
       final categoryId = (widget.category['_id'] ?? widget.category['id'] ?? '').toString();
@@ -95,7 +98,86 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
         _isLoading = false;
         _error = '';
       });
+      _refreshChapterCountsInBackground(list);
     }
+  }
+
+  Future<void> _refreshChapterCountsInBackground(List<dynamic> granths) async {
+    try {
+      final updatedList = List<dynamic>.from(granths);
+      bool hasChanges = false;
+
+      for (int i = 0; i < updatedList.length; i++) {
+        final g = Map<String, dynamic>.from(updatedList[i] as Map);
+        final gId = (g['_id'] ?? g['id'] ?? '').toString();
+        if (gId.isEmpty) continue;
+
+        try {
+          final chapters = await ApiService.getChaptersByGranth(gId);
+          if (chapters.isNotEmpty) {
+            final name = (g['name'] ?? g['title'] ?? '').toString().toLowerCase();
+            final isGita = name.contains('gita');
+            if (isGita || chapters != ApiService.defaultGitaChapters) {
+              final realCount = chapters.length;
+              if (g['totalChapters'] != realCount) {
+                g['totalChapters'] = realCount;
+                g['chaptersCount'] = realCount;
+                g['chapterCount'] = realCount;
+                updatedList[i] = g;
+                hasChanges = true;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (hasChanges && mounted) {
+        setState(() {
+          _granths = updatedList;
+        });
+      }
+    } catch (_) {}
+  }
+
+  int _resolveChapterCount(Map<String, dynamic> granth) {
+    // 1. Check if backend provided a valid chapter count
+    final dynamic totalChapters = granth['totalChapters'] ?? granth['chaptersCount'] ?? granth['chapterCount'];
+    if (totalChapters != null) {
+      final parsed = int.tryParse(totalChapters.toString());
+      if (parsed != null && parsed > 0) return parsed;
+    }
+
+    // 2. Check if embedded chapters list exists
+    if (granth['chapters'] is List && (granth['chapters'] as List).isNotEmpty) {
+      return (granth['chapters'] as List).length;
+    }
+
+    // 3. Fallback based on canonical scripture structure
+    final name = (granth['name'] ?? granth['title'] ?? '').toString().toLowerCase().trim();
+    if (name.contains('gita')) return 18;
+    if (name.contains('ramcharitmanas') || name.contains('ramayana')) return 7;
+    if (name.contains('chalisa') || name.contains('aarti') || name.contains('stotra') || name.contains('kavach')) return 1;
+    if (name.contains('durga saptashati') || name.contains('chandi')) return 13;
+    if (name.contains('rigveda') || name.contains('rig veda')) return 10;
+    if (name.contains('samaveda') || name.contains('sama veda')) return 6;
+    if (name.contains('yajurveda') || name.contains('yajur veda')) return 40;
+    if (name.contains('atharvaveda') || name.contains('atharva veda')) return 20;
+    if (name.contains('bhagavat puran') || name.contains('bhagavata')) return 12;
+    if (name.contains('shiv mahapuran') || name.contains('shiva puran')) return 7;
+    if (name.contains('vishnu puran')) return 6;
+    if (name.contains('garuda puran')) return 2;
+    if (name.contains('mahabharat')) return 18;
+    if (name.contains('upanishad')) return 10;
+    if (name.contains('veda')) return 4;
+
+    // 4. Check totalPages if > 0
+    final dynamic totalPages = granth['totalPages'];
+    if (totalPages != null) {
+      final parsedPages = int.tryParse(totalPages.toString());
+      if (parsedPages != null && parsedPages > 0) return parsedPages;
+    }
+
+    return 1;
   }
 
   Future<void> _toggleGranthSave(Map<String, dynamic> granth) async {
@@ -209,23 +291,27 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
       children: [
+        // ── Royal Saffron Category Hero Banner ──────────────────────────
         Container(
-          constraints: const BoxConstraints(minHeight: 160),
-          padding: const EdgeInsets.all(18),
+          constraints: const BoxConstraints(minHeight: 145),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(24),
             gradient: const LinearGradient(
-              colors: [Color(0xFF8A4A18), Color(0xFFD9892C)],
+              colors: [
+                Color(0xFFFF6F00),
+                Color(0xFFFF9E3D),
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFFF7700).withValues(alpha: 0.2),
-                blurRadius: 24,
-                offset: const Offset(0, 10),
+                color: const Color(0xFFFF7700).withValues(alpha: 0.28),
+                blurRadius: 22,
+                offset: const Offset(0, 8),
               ),
             ],
           ),
@@ -233,10 +319,18 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: SizedBox(
-                  width: 110,
-                  height: 130,
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  width: 96,
+                  height: 110,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.45),
+                      width: 1.5,
+                    ),
+                  ),
                   child: _buildHeaderImage(),
                 ),
               ),
@@ -246,24 +340,49 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.24),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.menu_book_rounded, color: Colors.white, size: 11),
+                          const SizedBox(width: 4),
+                          Text(
+                            'SACRED COLLECTION',
+                            style: GoogleFonts.outfit(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 7),
                     Text(
                       (widget.category['name'] ?? widget.category['title'] ?? 'Granth Category').toString(),
                       style: GoogleFonts.outfit(
                         fontSize: 20,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
                         color: Colors.white,
+                        letterSpacing: 0.2,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Text(
                       (widget.category['description'] ?? 'Explore sacred scriptures and timeless teachings.').toString(),
                       style: GoogleFonts.outfit(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w500,
-                        height: 1.4,
-                        color: Colors.white.withValues(alpha: 0.92),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        height: 1.35,
+                        color: Colors.white.withValues(alpha: 0.94),
                       ),
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
@@ -274,7 +393,40 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
             ],
           ),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 22),
+
+        // ── Section Title & Count ───────────────────────────────────────
+        Row(
+          children: [
+            Text(
+              'Available Scriptures',
+              style: GoogleFonts.outfit(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF2E2A36),
+              ),
+            ),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF7700).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '${_granths.length} ${_granths.length == 1 ? 'Granth' : 'Granths'}',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFFD35400),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // ── Granth List ────────────────────────────────────────────────
         ..._granths.map((granth) => _buildGranthCard(granth as Map<String, dynamic>)),
       ],
     );
@@ -287,33 +439,36 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
     if (resolvedUrl.startsWith('http')) {
       return Image.network(
         resolvedUrl,
-        width: 110,
-        height: 130,
+        width: double.infinity,
+        height: double.infinity,
         fit: BoxFit.cover,
+        filterQuality: FilterQuality.high,
         errorBuilder: (_, _, _) => _placeholderImage(),
       );
     } else if (rawImg.startsWith('assets/')) {
       return Image.asset(
         rawImg,
-        width: 110,
-        height: 130,
+        width: double.infinity,
+        height: double.infinity,
         fit: BoxFit.cover,
+        filterQuality: FilterQuality.high,
         errorBuilder: (_, _, _) => _placeholderImage(),
       );
     }
     return Image.asset(
-      'assets/images/bhagavad_gita.png',
-      width: 110,
-      height: 130,
+      'assets/images/image_2.png',
+      width: double.infinity,
+      height: double.infinity,
       fit: BoxFit.cover,
+      filterQuality: FilterQuality.high,
       errorBuilder: (_, _, _) => _placeholderImage(),
     );
   }
 
   Widget _placeholderImage() {
     return Container(
-      width: 110,
-      height: 130,
+      width: double.infinity,
+      height: double.infinity,
       alignment: Alignment.center,
       color: Colors.white.withValues(alpha: 0.15),
       child: const Icon(
@@ -324,27 +479,82 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
     );
   }
 
+  Widget _buildGranthImage(Map<String, dynamic> granth) {
+    final rawImg = (granth['coverImage'] ?? granth['image'] ?? '').toString();
+    final name = (granth['name'] ?? granth['title'] ?? '').toString().toLowerCase();
+
+    String finalPath = rawImg;
+    if (finalPath.isEmpty) {
+      if (name.contains('ramcharitmanas') || name.contains('ram')) {
+        finalPath = 'assets/images/bal_kand_cover.jpg';
+      } else if (name.contains('hanuman')) {
+        finalPath = 'assets/images/image_4.png';
+      } else if (name.contains('shiv')) {
+        finalPath = 'assets/images/deity_shiva.png';
+      } else if (name.contains('durga') || name.contains('saptashati')) {
+        finalPath = 'assets/images/image_4_1.png';
+      } else {
+        finalPath = 'assets/images/bhagavad_gita.png';
+      }
+    }
+
+    final resolved = ApiService.resolveImageUrl(finalPath);
+    if (resolved.startsWith('http')) {
+      return Image.network(
+        resolved,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        filterQuality: FilterQuality.high,
+        errorBuilder: (_, _, _) => _granthImageFallback(),
+      );
+    }
+    return Image.asset(
+      finalPath.startsWith('assets/') ? finalPath : 'assets/images/bal_kand_cover.jpg',
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      filterQuality: FilterQuality.high,
+      errorBuilder: (_, _, _) => _granthImageFallback(),
+    );
+  }
+
+  Widget _granthImageFallback() {
+    return Container(
+      color: const Color(0xFF8F4D18),
+      alignment: Alignment.center,
+      child: const Icon(
+        Icons.menu_book_rounded,
+        color: Colors.white,
+        size: 28,
+      ),
+    );
+  }
+
   Widget _buildGranthCard(Map<String, dynamic> granth) {
     final granthId = (granth['_id'] ?? granth['id'] ?? '').toString();
     final isSaved = _savedGranthIds.contains(granthId);
-    final chapterCount = granth['totalChapters'] ?? granth['chaptersCount'] ?? granth['chapterCount'] ?? granth['totalPages'] ?? (granth['chapters'] is List ? (granth['chapters'] as List).length : null) ?? 1;
+    final int chapterCount = _resolveChapterCount(granth);
+    final String chapterText = chapterCount == 1 ? '1 Chapter' : '$chapterCount Chapters';
+    final author = (granth['author'] ?? '').toString();
+    final language = (granth['language'] ?? '').toString();
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFF3E4D6)),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFF3E4D6), width: 1.2),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFFFF7700).withValues(alpha: 0.06),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(20),
         onTap: () {
           Navigator.push(
             context,
@@ -357,93 +567,142 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
           );
         },
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF1E5),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: ApiService.resolveImageUrl((granth['coverImage'] ?? granth['image'] ?? '').toString()).startsWith('http')
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
-                          child: Image.network(
-                            ApiService.resolveImageUrl((granth['coverImage'] ?? granth['image'] ?? '').toString()),
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => const Icon(
-                              Icons.menu_book_rounded,
-                              color: Color(0xFFB56E28),
-                              size: 26,
-                            ),
-                          ),
-                        )
-                      : Image.asset(
-                          'assets/images/bhagavad_gita.png',
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => const Icon(
-                            Icons.menu_book_rounded,
-                            color: Color(0xFFB56E28),
-                            size: 26,
-                          ),
-                        ),
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Book cover thumbnail
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  width: 76,
+                  height: 96,
+                  color: const Color(0xFFF7ECE1),
+                  child: _buildGranthImage(granth),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        (granth['name'] ?? granth['title'] ?? 'Sacred Granth').toString(),
-                        style: GoogleFonts.outfit(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF2E2A36),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '$chapterCount Chapters',
-                        style: GoogleFonts.outfit(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF2E2A36).withValues(alpha: 0.52),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Row(
+              ),
+              const SizedBox(width: 14),
+              // Granth information
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    InkWell(
-                      onTap: () => _toggleGranthSave(granth),
-                      borderRadius: BorderRadius.circular(20),
-                      child: Padding(
-                        padding: const EdgeInsets.all(6),
-                        child: Icon(
-                          isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                          color: isSaved ? const Color(0xFFFF8C1A) : const Color(0xFFBFA58B),
-                          size: 22,
-                        ),
+                    Text(
+                      (granth['name'] ?? granth['title'] ?? 'Sacred Granth').toString(),
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF2E2A36),
+                        letterSpacing: 0.2,
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(width: 4),
-                    const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      color: Color(0xFFFF9B38),
-                      size: 16,
+                    if (author.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        author,
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    // Badges row
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF2E6),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFFFD4AE), width: 0.8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.auto_stories_rounded, size: 12, color: Color(0xFFFF7700)),
+                              const SizedBox(width: 4),
+                              Text(
+                                chapterText,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFFD35400),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (language.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF4EFEA),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              language,
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF5A524A),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              // Action buttons: Bookmark and Arrow
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    onTap: () => _toggleGranthSave(granth),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: isSaved ? const Color(0xFFFFF1E5) : const Color(0xFFF7F3EF),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isSaved ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
+                        color: isSaved ? const Color(0xFFFF7700) : const Color(0xFFA28D7B),
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: 32,
+                    height: 32,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF7700).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.arrow_forward_rounded,
+                      color: Color(0xFFFF7700),
+                      size: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),

@@ -9,7 +9,7 @@ import 'fast2sms_service.dart';
 
 class ApiService {
   // Set to true to use the live production server, false for local testing
-  static const bool isLive = false;
+  static const bool isLive = true;
 
   // Local backend configuration:
   // Active Wi-Fi IP = 192.168.29.73, Port = 3020
@@ -90,6 +90,10 @@ class ApiService {
     trimmed = trimmed.replaceAll('http://localhost:3020', baseUrl);
     trimmed = trimmed.replaceAll('https://127.0.0.1:3020', baseUrl);
     trimmed = trimmed.replaceAll('http://127.0.0.1:3020', baseUrl);
+    trimmed = trimmed.replaceAll('http://192.168.29.73:3020', baseUrl);
+    trimmed = trimmed.replaceAll('http://192.168.29.73:3021', baseUrl);
+    trimmed = trimmed.replaceAll('http://192.168.29.227:3020', baseUrl);
+    trimmed = trimmed.replaceAll('http://192.168.29.227:3021', baseUrl);
     trimmed = trimmed.replaceAll('http://192.168.29.249:3020', baseUrl);
     trimmed = trimmed.replaceAll('http://192.168.29.249:3021', baseUrl);
     trimmed = trimmed.replaceAll('http://192.168.29.113:3021', baseUrl);
@@ -108,7 +112,9 @@ class ApiService {
     return '$baseUrl${isUploads ? "" : "/uploads"}$pathPrefix$trimmed';
   }
 
-  static final List<String> _fallbackHosts = ['192.168.29.73', '127.0.0.1', '10.0.2.2', 'api.bharatpray.com'];
+  static final List<String> _fallbackHosts = isLive
+      ? const ['api.bharatpray.com']
+      : const ['192.168.29.73', '127.0.0.1', '10.0.2.2', 'api.bharatpray.com'];
 
   static Future<http.Response> _safeGet(Uri uri, {Map<String, String>? headers}) async {
     try {
@@ -914,6 +920,24 @@ class ApiService {
     return _processResponse(response)['Data'];
   }
 
+  // POST /user/live-darshan/join (Record unique user darshan view)
+  static Future<Map<String, dynamic>> recordDarshanView(String token, String darshanId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/user/live-darshan/join'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
+        body: json.encode({'darshan_id': darshanId}),
+      );
+      return _processResponse(response)['Data'] ?? {};
+    } catch (e) {
+      print('[ApiService] recordDarshanView error: $e');
+      return {};
+    }
+  }
+
   // ==========================================
   // Bhajan Flow APIs (User)
   // ==========================================
@@ -1419,7 +1443,7 @@ class ApiService {
       'name': 'Puranas',
       'title': 'Puranas',
       'description': 'Sacred Mahapuranas detailing cosmic creation and glory of the Divine.',
-      'image': 'assets/images/image_3.png',
+      'image': 'assets/images/deity_shiva.png',
       'granthCount': 3,
     },
     {
@@ -1459,7 +1483,7 @@ class ApiService {
         'author': 'Goswami Tulsidas',
         'language': 'Awadhi & Hindi',
         'description': 'The sublime epic depicting the divine life and pastimes of Maryada Purushottam Bhagwan Shri Ram across all 7 Kandas.',
-        'coverImage': 'assets/images/image_2.png',
+        'coverImage': 'assets/images/bal_kand_cover.jpg',
         'isPopular': true,
       },
       {
@@ -1489,7 +1513,7 @@ class ApiService {
         'author': 'Maharishi Ved Vyas',
         'language': 'Sanskrit & Hindi',
         'description': 'The divine glory, cosmic dance, and timeless teachings of Mahadeva Shiva, including the famous Shiva Tandava Stotram.',
-        'coverImage': 'assets/images/image_3.png',
+        'coverImage': 'assets/images/deity_shiva.png',
         'isPopular': true,
       },
       {
@@ -1499,7 +1523,7 @@ class ApiService {
         'author': 'Maharishi Ved Vyas',
         'language': 'Sanskrit & Hindi',
         'description': 'The crown jewel of Puranic literature detailing the divine avatars and pastimes of Lord Krishna.',
-        'coverImage': 'assets/images/bhagavad_gita.png',
+        'coverImage': 'assets/images/deity_krishna.png',
         'isPopular': true,
       },
     ];

@@ -135,6 +135,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                             ),
                             child: TextField(
                               controller: _phoneController,
+                              textAlignVertical: TextAlignVertical.center,
                               style: GoogleFonts.outfit(color: Colors.white, fontSize: 16),
                               keyboardType: TextInputType.number,
                               maxLength: 10,
@@ -142,21 +143,48 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                                 FilteringTextInputFormatter.digitsOnly,
                               ],
                               decoration: InputDecoration(
+                                isDense: true,
                                 counterText: '',
-                                hintText: 'Enter your number',
+                                hintText: 'Enter 10-digit number',
                                 hintStyle: GoogleFonts.outfit(
                                   color: Colors.white.withValues(alpha: 0.3),
                                   fontSize: 16,
                                 ),
-                                prefixIcon: const Icon(
-                                  Icons.phone_iphone_rounded,
-                                  color: Color(0xFFFF7700), // Match saffron phone outline icon
-                                  size: 22,
+                                prefixIconConstraints: const BoxConstraints(
+                                  minWidth: 0,
+                                  minHeight: 0,
+                                ),
+                                prefixIcon: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const SizedBox(width: 14),
+                                    const Icon(
+                                      Icons.phone_iphone_rounded,
+                                      color: Color(0xFFFF7700),
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '+91',
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      height: 18,
+                                      width: 1,
+                                      color: Colors.white.withValues(alpha: 0.2),
+                                    ),
+                                    const SizedBox(width: 10),
+                                  ],
                                 ),
                                 border: InputBorder.none,
                                 contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 16,
-                                  vertical: 16,
+                                  vertical: 14,
                                 ),
                               ),
                             ),

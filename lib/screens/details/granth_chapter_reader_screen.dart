@@ -5037,6 +5037,8 @@ class _VersePageState extends State<_VersePage> {
                     height: 56,
 
                     fit: BoxFit.contain,
+
+                    filterQuality: FilterQuality.high,
                   ),
                 ),
               ),

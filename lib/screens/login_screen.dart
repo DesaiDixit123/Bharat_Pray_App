@@ -249,7 +249,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
                       child: Container(
                         padding: const EdgeInsets.only(
-                          top: 48,
+                          top: 32,
                           left: 28,
                           right: 28,
                           bottom: 32,
@@ -266,6 +266,65 @@ class _LoginScreenState extends State<LoginScreen> {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Title
+                            Center(
+                              child: Text(
+                                'Login',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 22),
+
+                            // ── Phone / Email segmented toggle ──────────────────
+                            Container(
+                              height: 46,
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.12),
+                                  width: 1.0,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  _buildToggleBtn(
+                                    label: 'Phone',
+                                    icon: Icons.phone_android_rounded,
+                                    selected: _isPhoneLogin,
+                                    onTap: () {
+                                      if (!_isPhoneLogin) {
+                                        setState(() {
+                                          _isPhoneLogin = true;
+                                          _contactController.clear();
+                                        });
+                                      }
+                                    },
+                                  ),
+                                  _buildToggleBtn(
+                                    label: 'Email',
+                                    icon: Icons.mail_outline_rounded,
+                                    selected: !_isPhoneLogin,
+                                    onTap: () {
+                                      if (_isPhoneLogin) {
+                                        setState(() {
+                                          _isPhoneLogin = false;
+                                          _contactController.clear();
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+
                             // Phone/Email Label & Field
                             Text(
                               _isPhoneLogin ? 'Phone Number' : 'Email Address',
@@ -288,6 +347,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               child: TextField(
                                 controller: _contactController,
+                                textAlignVertical: TextAlignVertical.center,
                                 style: GoogleFonts.outfit(color: Colors.white, fontSize: 16),
                                 keyboardType: _isPhoneLogin
                                     ? TextInputType.number
@@ -297,6 +357,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ? [FilteringTextInputFormatter.digitsOnly]
                                     : null,
                                 decoration: InputDecoration(
+                                  isDense: true,
                                   counterText: '',
                                   hintText: _isPhoneLogin
                                       ? 'Enter 10-digit mobile number'
@@ -305,62 +366,51 @@ class _LoginScreenState extends State<LoginScreen> {
                                     color: Colors.white.withValues(alpha: 0.3),
                                     fontSize: 16,
                                   ),
-                                  prefixIcon: Icon(
-                                    _isPhoneLogin
-                                        ? Icons.phone_iphone_rounded
-                                        : Icons.mail_outline_rounded,
-                                    color: const Color(0xFFFF7A00),
-                                    size: 22,
+                                  prefixIconConstraints: const BoxConstraints(
+                                    minWidth: 0,
+                                    minHeight: 0,
                                   ),
-                                  prefixText: _isPhoneLogin ? '+91  ' : null,
-                                  prefixStyle: GoogleFonts.outfit(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                  prefixIcon: _isPhoneLogin
+                                      ? Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const SizedBox(width: 14),
+                                            const Icon(
+                                              Icons.phone_iphone_rounded,
+                                              color: Color(0xFFFF7A00),
+                                              size: 20,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              '+91',
+                                              style: GoogleFonts.outfit(
+                                                color: Colors.white,
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              height: 18,
+                                              width: 1,
+                                              color: Colors.white.withValues(alpha: 0.2),
+                                            ),
+                                            const SizedBox(width: 10),
+                                          ],
+                                        )
+                                      : const Padding(
+                                          padding: EdgeInsets.symmetric(horizontal: 14),
+                                          child: Icon(
+                                            Icons.mail_outline_rounded,
+                                            color: Color(0xFFFF7A00),
+                                            size: 22,
+                                          ),
+                                        ),
                                   border: InputBorder.none,
                                   contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 16,
                                     vertical: 14,
                                   ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Toggle between Phone & Email login
-                            GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _isPhoneLogin = !_isPhoneLogin;
-                                  _contactController.clear();
-                                });
-                              },
-                              child: SizedBox(
-                                height: 24,
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      _isPhoneLogin
-                                          ? Icons.mail_outline_rounded
-                                          : Icons.phone_iphone_rounded,
-                                      color: const Color(0xFFFF7A00),
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      _isPhoneLogin
-                                          ? 'Login with Email instead'
-                                          : 'Login with Phone Number instead',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                        color: const Color(0xFFFF7A00),
-                                        height: 1.5,
-                                        letterSpacing: 0,
-                                      ),
-                                    ),
-                                  ],
                                 ),
                               ),
                             ),
@@ -514,6 +564,65 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToggleBtn({
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeInOut,
+          height: double.infinity,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected
+                ? const Color(0xFFFF7A00)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFFFF7A00).withValues(alpha: 0.35),
+                      blurRadius: 6,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : [],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 17,
+                color: selected
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.70),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: GoogleFonts.outfit(
+                  fontSize: 14,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  color: selected
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: 0.70),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

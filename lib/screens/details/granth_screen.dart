@@ -38,22 +38,37 @@ class _GranthScreenState extends State<GranthScreen> {
       String resolvedImg = 'assets/images/bhagavad_gita.png';
       if (rawImg.isNotEmpty) {
         resolvedImg = ApiService.resolveImageUrl(rawImg);
-      } else if (title.toLowerCase().contains('veda') || title.toLowerCase().contains('puran')) {
+      } else if (title.toLowerCase().contains('gita')) {
         resolvedImg = 'assets/images/bhagavad_gita.png';
-      } else if (title.toLowerCase().contains('itihas')) {
+      } else if (title.toLowerCase().contains('itihas') || title.toLowerCase().contains('epic')) {
         resolvedImg = 'assets/images/image_2.png';
-      } else if (title.toLowerCase().contains('darshan')) {
-        resolvedImg = 'assets/images/image_3.png';
-      } else if (title.toLowerCase().contains('stotra')) {
+      } else if (title.toLowerCase().contains('puran')) {
+        resolvedImg = 'assets/images/deity_shiva.png';
+      } else if (title.toLowerCase().contains('stotra') || title.toLowerCase().contains('chalisa')) {
         resolvedImg = 'assets/images/image_4.png';
+      } else if (title.toLowerCase().contains('veda') || title.toLowerCase().contains('upanishad')) {
+        resolvedImg = 'assets/images/image_4_1.png';
       } else if (title.toLowerCase().contains('aarti')) {
         resolvedImg = 'assets/images/image_4_1.png';
+      }
+
+      int? countVal;
+      if (catMap['granthCount'] != null) {
+        countVal = int.tryParse(catMap['granthCount'].toString());
+      } else if (catMap['count'] != null) {
+        countVal = int.tryParse(catMap['count'].toString());
+      }
+
+      // If backend didn't supply a count, compute from default granths for this category
+      if (countVal == null) {
+        final defGranths = ApiService.getDefaultGranthsByCategory(catId, title);
+        countVal = defGranths.length;
       }
 
       res.add({
         '_id': catId,
         'title': title,
-        'count': catMap['granthCount'] ?? catMap['count'] ?? 1,
+        'count': countVal,
         'image': resolvedImg,
         'description': (catMap['description'] ?? '').toString().isNotEmpty
             ? catMap['description'].toString()
@@ -85,20 +100,62 @@ class _GranthScreenState extends State<GranthScreen> {
         _isLoading = false;
         _error = _categories.isEmpty ? 'No granth categories found.' : '';
       });
+
+      // Verify & refresh accurate counts in background for each category
+      _refreshCountsInBackground(fetched);
     } catch (e) {
       if (!mounted) return;
       if (_categories.isEmpty) {
+        final fallback = _mapCategories(ApiService.defaultGranthCategories);
         setState(() {
-          _categories = _mapCategories(ApiService.defaultGranthCategories);
+          _categories = fallback;
           _isLoading = false;
           _error = '';
         });
+        _refreshCountsInBackground(fallback);
       } else {
         setState(() {
           _isLoading = false;
         });
       }
     }
+  }
+
+  Future<void> _refreshCountsInBackground(List<Map<String, dynamic>> cats) async {
+    try {
+      final updatedList = List<Map<String, dynamic>>.from(cats);
+      bool hasChanges = false;
+
+      for (int i = 0; i < updatedList.length; i++) {
+        final item = Map<String, dynamic>.from(updatedList[i]);
+        final cId = item['_id']?.toString() ?? '';
+        if (cId.isEmpty) continue;
+
+        try {
+          final data = await ApiService.getGranthsByCategory(cId, limit: 1);
+          final dynamic totalDocs = data['totalDocs'];
+          final dynamic docs = data['docs'];
+          int? actualCount;
+          if (totalDocs != null) {
+            actualCount = int.tryParse(totalDocs.toString());
+          } else if (docs is List) {
+            actualCount = docs.length;
+          }
+
+          if (actualCount != null && actualCount != item['count']) {
+            item['count'] = actualCount;
+            updatedList[i] = item;
+            hasChanges = true;
+          }
+        } catch (_) {}
+      }
+
+      if (hasChanges && mounted) {
+        setState(() {
+          _categories = updatedList;
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -217,12 +274,18 @@ class _CategoryCard extends StatelessWidget {
       return Image.network(
         imgPath,
         fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        filterQuality: FilterQuality.high,
         errorBuilder: (_, _, _) => _fallbackImage(),
       );
     }
     return Image.asset(
       imgPath,
       fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      filterQuality: FilterQuality.high,
       errorBuilder: (_, _, _) => _fallbackImage(),
     );
   }
@@ -242,35 +305,39 @@ class _CategoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final title = (category['title'] ?? category['name'] ?? 'Granth').toString();
-    final count = (category['count'] ?? 1).toString();
+    final int count = category['count'] is int
+        ? category['count'] as int
+        : (int.tryParse(category['count']?.toString() ?? '0') ?? 0);
+    final String countText = count == 1 ? '1 Granth' : '$count Granths';
     final imgPath = (category['image'] ?? 'assets/images/bhagavad_gita.png').toString();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: const Color(0xFFF3E4D6)),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFFFF7700).withValues(alpha: 0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: SizedBox(
-                  height: 78,
-                  width: 102,
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  height: 74,
+                  width: 96,
+                  color: const Color(0xFFF6ECE1),
                   child: _buildImage(imgPath),
                 ),
               ),
@@ -290,7 +357,7 @@ class _CategoryCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '$count Granths',
+                      countText,
                       style: GoogleFonts.outfit(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,

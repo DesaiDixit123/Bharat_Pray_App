@@ -103,6 +103,15 @@ class _YatraScreenState extends State<YatraScreen> {
     try {
       final popularRes = await ApiService.getPopularYatra(token: token, forceRefresh: forceRefresh);
       final continueRes = await ApiService.getContinueYatra(token: token, forceRefresh: forceRefresh);
+      if (continueRes.data != null) {
+        prefs.setBool('has_continue_yatra', true);
+        final activeList = prefs.getStringList('active_yatra_ids') ?? [];
+        final cid = continueRes.data!.journeyId.isNotEmpty ? continueRes.data!.journeyId : continueRes.data!.routeId;
+        if (cid.isNotEmpty && !activeList.contains(cid)) {
+          activeList.add(cid);
+          prefs.setStringList('active_yatra_ids', activeList);
+        }
+      }
 
       setState(() {
         _popularYatras = (popularRes.data != null && popularRes.data!.isNotEmpty)

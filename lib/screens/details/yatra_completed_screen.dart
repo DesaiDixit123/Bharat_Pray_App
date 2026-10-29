@@ -45,6 +45,8 @@ class _YatraCompletedScreenState extends State<YatraCompletedScreen> {
   Future<void> _completeJourneyApi() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final current = prefs.getInt('completed_yatras_count') ?? 0;
+      await prefs.setInt('completed_yatras_count', current + 1);
       final token = prefs.getString('auth_token') ?? '';
       if (token.isNotEmpty && widget.journeyId.isNotEmpty) {
         await ApiService.completeJourney(token, widget.journeyId);

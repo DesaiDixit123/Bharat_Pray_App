@@ -1290,18 +1290,48 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
   Widget _buildPostsGridTab() {
     if (_posts.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.all(40.0),
+        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 48.0),
         child: Center(
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.photo_library_outlined, size: 48, color: Colors.grey),
-              const SizedBox(height: 12),
-              Text("No Posts Yet", style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold)),
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF7700).withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFFFF7700).withValues(alpha: 0.28),
+                    width: 1.5,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.photo_library_outlined,
+                  size: 38,
+                  color: Color(0xFFFF7700),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                "No Posts Yet",
+                style: GoogleFonts.outfit(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF2E2A36),
+                ),
+              ),
+              const SizedBox(height: 6),
               Text(
                 widget.isOwnProfile
                     ? "Tap 'Add Post' to share your first Mandal update!"
                     : "No posts shared by this Mandal yet.",
-                style: GoogleFonts.outfit(color: Colors.grey, fontSize: 12),
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
+                ),
               ),
             ],
           ),
@@ -1358,18 +1388,48 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
   Widget _buildReelsGridTab() {
     if (_reels.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.all(40.0),
+        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 48.0),
         child: Center(
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.video_library_outlined, size: 48, color: Colors.grey),
-              const SizedBox(height: 12),
-              Text("No Reels Yet", style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold)),
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF7700).withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFFFF7700).withValues(alpha: 0.28),
+                    width: 1.5,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.video_library_outlined,
+                  size: 38,
+                  color: Color(0xFFFF7700),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                "No Reels Yet",
+                style: GoogleFonts.outfit(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF2E2A36),
+                ),
+              ),
+              const SizedBox(height: 6),
               Text(
                 widget.isOwnProfile
                     ? "Tap 'Add Reel' to upload divine video clips!"
                     : "No reels uploaded by this Mandal yet.",
-                style: GoogleFonts.outfit(color: Colors.grey, fontSize: 12),
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
+                ),
               ),
             ],
           ),
@@ -1434,121 +1494,126 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (widget.isOwnProfile)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFD32F2F), Color(0xFFFF5252)],
-                ),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.sensors_rounded, color: Colors.white, size: 32),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Broadcast Live Stream Now",
-                          style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                        ),
-                        Text(
-                          _isFestivalStarted
-                              ? "Go Live for Aarti, Satsang & Special Events"
-                              : "Live Streaming unlocks on $_associatedFestivalName start ($_festivalStartDateStr)",
-                          style: GoogleFonts.outfit(color: Colors.white.withOpacity(0.9), fontSize: 11),
-                        ),
-                      ],
-                    ),
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _isFestivalStarted ? Colors.white : Colors.grey.shade300,
-                      foregroundColor: _isFestivalStarted ? const Color(0xFFD32F2F) : Colors.grey.shade600,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 0,
-                    ),
-                    onPressed: _openGoLiveStudioScreen,
-                    child: Text("Go LIVE", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-            ),
-          if (widget.isOwnProfile) const SizedBox(height: 20),
-
           Text(
             "Live Stream Broadcasts & History",
             style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
           ),
           const SizedBox(height: 12),
 
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _liveEvents.length,
-            itemBuilder: (context, index) {
-              final live = _liveEvents[index];
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFEFE6DB)),
-                ),
-                child: Row(
+          if (_liveEvents.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 36.0),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: buildSmartImage(live.thumbnailUrl, width: 60, height: 60, fit: BoxFit.cover),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: live.status == "Upcoming" ? Colors.orange : Colors.grey.shade200,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  live.status,
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: live.status == "Upcoming" ? Colors.white : Colors.black87,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(live.dateOrTime, style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey)),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            live.title,
-                            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
-                          ),
-                          Text(
-                            live.viewers,
-                            style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFFFF7700), fontWeight: FontWeight.bold),
-                          ),
-                        ],
+                    Container(
+                      width: 76,
+                      height: 76,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF7700).withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: const Color(0xFFFF7700).withValues(alpha: 0.28),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.live_tv_rounded,
+                        size: 38,
+                        color: Color(0xFFFF7700),
                       ),
                     ),
-                    const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    Text(
+                      "No Live Streams Yet",
+                      style: GoogleFonts.outfit(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF2E2A36),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.isOwnProfile
+                          ? "Use the 'Go Live' button above to start your live broadcast."
+                          : "No live broadcasts or past streams available.",
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
+                      ),
+                    ),
                   ],
                 ),
-              );
-            },
-          ),
+              ),
+            )
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _liveEvents.length,
+              itemBuilder: (context, index) {
+                final live = _liveEvents[index];
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFEFE6DB)),
+                  ),
+                  child: Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: buildSmartImage(live.thumbnailUrl, width: 60, height: 60, fit: BoxFit.cover),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: live.status == "Upcoming" ? Colors.orange : Colors.grey.shade200,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    live.status,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: live.status == "Upcoming" ? Colors.white : Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(live.dateOrTime, style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey)),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              live.title,
+                              style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
+                            ),
+                            Text(
+                              live.viewers,
+                              style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFFFF7700), fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                    ],
+                  ),
+                );
+              },
+            ),
         ],
       ),
     );
@@ -2385,9 +2450,36 @@ class _MandalPostsFeedScreenState extends State<MandalPostsFeedScreen> {
         ),
       body: _feedPosts.isEmpty
           ? Center(
-              child: Text(
-                "No posts available",
-                style: GoogleFonts.outfit(fontSize: 16, color: Colors.grey),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF7700).withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFFFF7700).withValues(alpha: 0.28),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.photo_library_outlined,
+                      size: 36,
+                      color: Color(0xFFFF7700),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    "No posts available",
+                    style: GoogleFonts.outfit(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF2E2A36),
+                    ),
+                  ),
+                ],
               ),
             )
           : ListView.builder(

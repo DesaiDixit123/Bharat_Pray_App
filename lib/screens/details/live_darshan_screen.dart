@@ -57,6 +57,11 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
   String _youtubeVideoId = '';
   YoutubePlayerController? _youtubeController;
 
+  // Fullscreen / Landscape State
+  bool _isLandscape = false;
+  bool _showLandscapeControls = true;
+  Timer? _landscapeControlsTimer;
+
   // Chat Feed State
   final List<Map<String, dynamic>> _liveFeed = [];
 
@@ -166,12 +171,27 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
 
   Future<void> _fetchDetailsAndComments() async {
     try {
+      // Record unique view for darshan
+      final prefs = await SharedPreferences.getInstance();
+      final viewedList = prefs.getStringList('viewed_darshan_ids') ?? [];
+      if (_darshanId.isNotEmpty && !viewedList.contains(_darshanId)) {
+        viewedList.add(_darshanId);
+        await prefs.setStringList('viewed_darshan_ids', viewedList);
+        final cur = prefs.getInt('darshan_views_$_darshanId') ?? 0;
+        await prefs.setInt('darshan_views_$_darshanId', cur + 1);
+        ApiService.recordDarshanView(_token, _darshanId);
+      }
+
       // 1. Fetch live details (joins stream as well)
       final details = await ApiService.getLiveDarshanDetails(_token, _darshanId);
       
       // Update counts (user is viewing, so viewer count is at least 1)
-      final rawViewers = details['current_viewers'] ?? details['currentViewers'] ?? 0;
-      _viewerCount = rawViewers > 0 ? rawViewers : 1;
+      final rawViewers = details['total_viewers'] ?? details['views'] ?? details['current_viewers'] ?? details['currentViewers'] ?? 0;
+      final savedLocal = prefs.getInt('darshan_views_$_darshanId');
+      final effectiveViewers = (savedLocal != null && savedLocal > (rawViewers is num ? rawViewers.toInt() : 0))
+          ? savedLocal
+          : (rawViewers is num ? rawViewers.toInt() : 1);
+      _viewerCount = effectiveViewers > 0 ? effectiveViewers : 1;
       _likesCount = details['like_count'] ?? details['likesCount'] ?? 0;
       _commentsCount = details['comments_count'] ?? details['commentsCount'] ?? 0;
       _shareCount = details['share_count'] ?? details['sharesCount'] ?? 0;
@@ -390,8 +410,47 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
     });
   }
 
+  void _toggleFullscreen([bool? forceLandscape]) {
+    final nextState = forceLandscape ?? !_isLandscape;
+    setState(() {
+      _isLandscape = nextState;
+      _showLandscapeControls = true;
+    });
+
+    if (_isLandscape) {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      _startLandscapeControlsTimer();
+    } else {
+      _landscapeControlsTimer?.cancel();
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+      ]);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
+  }
+
+  void _startLandscapeControlsTimer() {
+    _landscapeControlsTimer?.cancel();
+    _landscapeControlsTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted && _isLandscape) {
+        setState(() {
+          _showLandscapeControls = false;
+        });
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _landscapeControlsTimer?.cancel();
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _heartbeatTimer?.cancel();
     _socket?.emit('leave_stream');
     _socket?.disconnect();
@@ -676,26 +735,35 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
   @override
   Widget build(BuildContext context) {
     final imageUrl = _resolveImageUrl(widget.imageUrl);
+    final isHorizontal = _isLandscape || MediaQuery.of(context).orientation == Orientation.landscape;
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-        systemNavigationBarColor: Colors.black,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        body: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(
-                  color: Color(0xFFFF7A00),
-                ),
-              )
-            : (_isOffline || _isError)
-                ? _buildOfflineScreen(context)
-                : Stack(
+    return PopScope(
+      canPop: !isHorizontal,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (isHorizontal) {
+          _toggleFullscreen(false);
+        }
+      },
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+          systemNavigationBarColor: Colors.black,
+          systemNavigationBarIconBrightness: Brightness.light,
+        ),
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: _isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    color: Color(0xFFFF7A00),
+                  ),
+                )
+              : (_isOffline || _isError)
+                  ? _buildOfflineScreen(context)
+                  : Stack(
                     children: [
                       // 1. Full-screen Video Player / Image Fallback
                       Positioned.fill(
@@ -726,15 +794,24 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                         ),
                       ),
 
-                      // 1b. Touch interceptor overlay covering the player (captures double-taps for hearts, prevents webview taps)
+                      // 1b. Touch interceptor overlay covering the player (captures double-taps for hearts in portrait, toggles controls in landscape)
                       Positioned.fill(
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onDoubleTapDown: (details) {
-                            _spawnHeart(details.globalPosition.dx, details.globalPosition.dy);
+                            if (!isHorizontal) {
+                              _spawnHeart(details.globalPosition.dx, details.globalPosition.dy);
+                            }
                           },
                           onTap: () {
-                            // Suppress single taps so they never reach the webview
+                            if (isHorizontal) {
+                              setState(() {
+                                _showLandscapeControls = !_showLandscapeControls;
+                              });
+                              if (_showLandscapeControls) {
+                                _startLandscapeControlsTimer();
+                              }
+                            }
                           },
                           child: Container(
                             color: Colors.black.withValues(alpha: 0.02),
@@ -742,350 +819,502 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                         ),
                       ),
 
-                      // 2. Floating Heart Animations Layer
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: Stack(
-                            children: _hearts.map((heart) {
-                              return Positioned(
-                                left: heart.x - 40,
-                                top: heart.y - 40,
-                                child: FloatingHeartWidget(key: ValueKey(heart.id)),
-                              );
-                            }).toList(),
+                      // 2. Floating Heart Animations Layer (portrait only)
+                      if (!isHorizontal)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: Stack(
+                              children: _hearts.map((heart) {
+                                return Positioned(
+                                  left: heart.x - 40,
+                                  top: heart.y - 40,
+                                  child: FloatingHeartWidget(key: ValueKey(heart.id)),
+                                );
+                              }).toList(),
+                            ),
                           ),
                         ),
-                      ),
 
-                      // 3a. TOP gradient shadow (top ~20% of screen)
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        height: 160,
-                        child: IgnorePointer(
-                          child: Container(
-                            decoration: const BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Color(0xFF000000),
-                                  Colors.transparent,
-                                ],
-                                stops: [0.0, 1.0],
+                      // 3a. TOP gradient shadow (portrait only)
+                      if (!isHorizontal)
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          height: 160,
+                          child: IgnorePointer(
+                            child: Container(
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Color(0xFF000000),
+                                    Colors.transparent,
+                                  ],
+                                  stops: [0.0, 1.0],
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
 
-                      // 3b. BOTTOM gradient shadow (bottom ~30% of screen)
-                      Positioned(
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        height: 240,
-                        child: IgnorePointer(
-                          child: Container(
-                            decoration: const BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Colors.transparent,
-                                  Color(0xFF000000),
-                                ],
-                                stops: [0.0, 1.0],
+                      // 3b. BOTTOM gradient shadow (portrait only)
+                      if (!isHorizontal)
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          height: 240,
+                          child: IgnorePointer(
+                            child: Container(
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.transparent,
+                                    Color(0xFF000000),
+                                  ],
+                                  stops: [0.0, 1.0],
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
 
-                      // 4. Top Row Header (Avatar & Title)
-                      Positioned(
-                        top: 55,
-                        left: 20,
-                        width: 250,
-                        height: 60,
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white30, width: 1.0),
-                              ),
-                              child: ClipOval(
-                                child: imageUrl.isNotEmpty
-                                    ? Image.network(
-                                        imageUrl,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (c, e, s) => Image.asset(
+                      // 4. Top Row Header (Avatar & Title) - portrait only
+                      if (!isHorizontal)
+                        Positioned(
+                          top: 55,
+                          left: 20,
+                          width: 230,
+                          height: 60,
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white30, width: 1.0),
+                                ),
+                                child: ClipOval(
+                                  child: imageUrl.isNotEmpty
+                                      ? Image.network(
+                                          imageUrl,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (c, e, s) => Image.asset(
+                                            'assets/images/image_3.png',
+                                            fit: BoxFit.cover,
+                                          ),
+                                        )
+                                      : Image.asset(
                                           'assets/images/image_3.png',
                                           fit: BoxFit.cover,
                                         ),
-                                      )
-                                    : Image.asset(
-                                        'assets/images/image_3.png',
-                                        fit: BoxFit.cover,
-                                      ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                widget.templeName,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.outfit(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  shadows: [
-                                    const Shadow(
-                                      color: Colors.black45,
-                                      offset: Offset(0, 2),
-                                      blurRadius: 4,
-                                    ),
-                                  ],
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // 5. Close Button
-                      Positioned(
-                        top: 55,
-                        right: 20,
-                        child: GestureDetector(
-                          onTap: () => Navigator.pop(context),
-                          child: Container(
-                            height: 40,
-                            width: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.4),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1.0),
-                            ),
-                            child: const Center(
-                              child: Icon(Icons.close_rounded, color: Colors.white, size: 20),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      // 6. LIVE Status Badge
-                      Positioned(
-                        top: 125,
-                        left: 20,
-                        width: 80,
-                        height: 40,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFF3B42),
-                            borderRadius: BorderRadius.circular(9999),
-                          ),
-                          child: Center(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.sensors_rounded, color: Colors.white, size: 16),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Live',
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  widget.templeName,
+                                  overflow: TextOverflow.ellipsis,
                                   style: GoogleFonts.outfit(
                                     color: Colors.white,
-                                    fontSize: 13,
+                                    fontSize: 16,
                                     fontWeight: FontWeight.bold,
+                                    shadows: [
+                                      const Shadow(
+                                        color: Colors.black45,
+                                        offset: Offset(0, 2),
+                                        blurRadius: 4,
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      // 5a. Fullscreen Button (in header, next to close) - portrait only
+                      if (!isHorizontal)
+                        Positioned(
+                          top: 55,
+                          right: 68,
+                          child: GestureDetector(
+                            onTap: () => _toggleFullscreen(true),
+                            child: Container(
+                              height: 40,
+                              width: 40,
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.4),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1.0),
+                              ),
+                              child: const Center(
+                                child: Icon(Icons.fullscreen_rounded, color: Colors.white, size: 22),
+                              ),
                             ),
                           ),
                         ),
-                      ),
 
-                      // 7. Views Count Badge
-                      Positioned(
-                        top: 125,
-                        left: 110,
-                        width: 87,
-                        height: 40,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(47),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 4.6, sigmaY: 4.6),
+                      // 5b. Close Button - portrait only
+                      if (!isHorizontal)
+                        Positioned(
+                          top: 55,
+                          right: 20,
+                          child: GestureDetector(
+                            onTap: () => Navigator.pop(context),
                             child: Container(
+                              height: 40,
+                              width: 40,
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.25),
-                                borderRadius: BorderRadius.circular(47),
-                                border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1.0),
+                                color: Colors.black.withValues(alpha: 0.4),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1.0),
                               ),
-                              child: Center(
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.remove_red_eye_outlined, color: Colors.white, size: 16),
-                                    const SizedBox(width: 5),
-                                    Text(
-                                      _formatNumber(_viewerCount),
-                                      style: GoogleFonts.outfit(
-                                        color: Colors.white,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                              child: const Center(
+                                child: Icon(Icons.close_rounded, color: Colors.white, size: 20),
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      // 6. LIVE Status Badge - portrait only
+                      if (!isHorizontal)
+                        Positioned(
+                          top: 125,
+                          left: 20,
+                          width: 80,
+                          height: 40,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF3B42),
+                              borderRadius: BorderRadius.circular(9999),
+                            ),
+                            child: Center(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.sensors_rounded, color: Colors.white, size: 16),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Live',
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
                                     ),
-                                  ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      // 7. Views Count Badge - portrait only
+                      if (!isHorizontal)
+                        Positioned(
+                          top: 125,
+                          left: 110,
+                          width: 87,
+                          height: 40,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(47),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 4.6, sigmaY: 4.6),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.25),
+                                  borderRadius: BorderRadius.circular(47),
+                                  border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1.0),
+                                ),
+                                child: Center(
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.remove_red_eye_outlined, color: Colors.white, size: 16),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        _formatNumber(_viewerCount),
+                                        style: GoogleFonts.outfit(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
 
-                      // 8. Live Comments Feed Overlay
-                      Positioned(
-                        left: 20,
-                        bottom: 28,
-                        width: 250,
-                        height: 237,
-                        child: ShaderMask(
-                          shaderCallback: (rect) {
-                            return const LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [Colors.transparent, Colors.black, Colors.black],
-                              stops: [0.0, 0.15, 1.0],
-                            ).createShader(rect);
-                          },
-                          blendMode: BlendMode.dstIn,
-                          child: ListView.builder(
-                            controller: _chatScrollController,
-                            physics: const BouncingScrollPhysics(),
-                            itemCount: _liveFeed.length,
-                            padding: const EdgeInsets.only(top: 10),
-                            itemBuilder: (context, index) {
-                              final chat = _liveFeed[index];
-                              final avatarUrl = _resolveImageUrl(chat['avatar'] ?? '');
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 15.0),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      width: 28,
-                                      height: 28,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white30, width: 1.0),
-                                      ),
-                                      child: ClipOval(
-                                        child: avatarUrl.isNotEmpty
-                                            ? Image.network(
-                                                avatarUrl,
-                                                fit: BoxFit.cover,
-                                                errorBuilder: (c, e, s) => Image.asset(
+                      // 8. Live Comments Feed Overlay (portrait only)
+                      if (!isHorizontal)
+                        Positioned(
+                          left: 20,
+                          bottom: 28,
+                          width: 250,
+                          height: 237,
+                          child: ShaderMask(
+                            shaderCallback: (rect) {
+                              return const LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [Colors.transparent, Colors.black, Colors.black],
+                                stops: [0.0, 0.15, 1.0],
+                              ).createShader(rect);
+                            },
+                            blendMode: BlendMode.dstIn,
+                            child: ListView.builder(
+                              controller: _chatScrollController,
+                              physics: const BouncingScrollPhysics(),
+                              itemCount: _liveFeed.length,
+                              padding: const EdgeInsets.only(top: 10),
+                              itemBuilder: (context, index) {
+                                final chat = _liveFeed[index];
+                                final avatarUrl = _resolveImageUrl(chat['avatar'] ?? '');
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 15.0),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        width: 28,
+                                        height: 28,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.white30, width: 1.0),
+                                        ),
+                                        child: ClipOval(
+                                          child: avatarUrl.isNotEmpty
+                                              ? Image.network(
+                                                  avatarUrl,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (c, e, s) => Image.asset(
+                                                    'assets/images/image_3.png',
+                                                    fit: BoxFit.cover,
+                                                  ),
+                                                )
+                                              : Image.asset(
                                                   'assets/images/image_3.png',
                                                   fit: BoxFit.cover,
                                                 ),
-                                              )
-                                            : Image.asset(
-                                                'assets/images/image_3.png',
-                                                fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              chat['user'] ?? 'Devotee',
+                                              style: GoogleFonts.outfit(
+                                                color: const Color(0xFFFF8A00),
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
                                               ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            chat['user'] ?? 'Devotee',
-                                            style: GoogleFonts.outfit(
-                                              color: const Color(0xFFFF8A00),
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 12,
                                             ),
-                                          ),
-                                          const SizedBox(height: 1),
-                                          Text(
-                                            chat['message'] ?? '',
-                                            style: GoogleFonts.outfit(
-                                              color: Colors.white,
-                                              fontSize: 12,
+                                            const SizedBox(height: 1),
+                                            Text(
+                                              chat['message'] ?? '',
+                                              style: GoogleFonts.outfit(
+                                                color: Colors.white,
+                                                fontSize: 12,
+                                              ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              );
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+
+                      // 9. Right-Side Action Buttons (Like, Comment, Share) (portrait only)
+                      if (!isHorizontal) ...[
+                        // Like button: bottom: 180
+                        Positioned(
+                          right: 16,
+                          bottom: 180,
+                          width: 48,
+                          height: 74,
+                          child: _buildLiveActionButton(
+                            icon: Icon(
+                              _isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                              color: _isLiked ? const Color(0xFFFF2D55) : Colors.white,
+                              size: 22,
+                            ),
+                            label: _formatNumber(_likesCount),
+                            onTap: _toggleLike,
+                          ),
+                        ),
+                        // Comment button: bottom: 104 (Opens Half-Screen Instagram-style Comments Sheet)
+                        Positioned(
+                          right: 16,
+                          bottom: 104,
+                          width: 48,
+                          height: 74,
+                          child: _buildLiveActionButton(
+                            icon: const Icon(
+                              Icons.chat_bubble_outline_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            label: _formatNumber(_commentsCount),
+                            onTap: () {
+                              _showCommentsBottomSheet(context);
                             },
                           ),
                         ),
-                      ),
+                        // Share button: bottom: 28
+                        Positioned(
+                          right: 16,
+                          bottom: 28,
+                          width: 48,
+                          height: 74,
+                          child: _buildLiveActionButton(
+                            icon: const Icon(
+                              Icons.share_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            label: _formatNumber(_shareCount),
+                            onTap: _shareStream,
+                          ),
+                        ),
+                      ],
 
-                      // 9. Right-Side Action Buttons (Like, Comment, Share)
-                      // Like button: bottom: 180
-                      Positioned(
-                        right: 16,
-                        bottom: 180,
-                        width: 48,
-                        height: 74,
-                        child: _buildLiveActionButton(
-                          icon: Icon(
-                            _isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                            color: _isLiked ? const Color(0xFFFF2D55) : Colors.white,
-                            size: 22,
+                      // 10. Horizontal (Landscape) Minimal Clean Overlay Bar
+                      if (isHorizontal && _showLandscapeControls)
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.black87,
+                                  Colors.transparent,
+                                ],
+                              ),
+                            ),
+                            child: SafeArea(
+                              bottom: false,
+                              child: Row(
+                                children: [
+                                  GestureDetector(
+                                    onTap: () => _toggleFullscreen(false),
+                                    child: Container(
+                                      height: 38,
+                                      width: 38,
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withValues(alpha: 0.5),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white24, width: 1),
+                                      ),
+                                      child: const Center(
+                                        child: Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            widget.templeName,
+                                            style: GoogleFonts.outfit(
+                                              color: Colors.white,
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFF3B42),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.sensors_rounded, color: Colors.white, size: 12),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                'LIVE',
+                                                style: GoogleFonts.outfit(
+                                                  color: Colors.white,
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: _toggleSound,
+                                    child: Container(
+                                      height: 38,
+                                      width: 38,
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withValues(alpha: 0.5),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white24, width: 1),
+                                      ),
+                                      child: Center(
+                                        child: Icon(
+                                          _isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                                          color: Colors.white,
+                                          size: 20,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  GestureDetector(
+                                    onTap: () => _toggleFullscreen(false),
+                                    child: Container(
+                                      height: 38,
+                                      width: 38,
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withValues(alpha: 0.5),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white24, width: 1),
+                                      ),
+                                      child: const Center(
+                                        child: Icon(Icons.fullscreen_exit_rounded, color: Colors.white, size: 22),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                          label: _formatNumber(_likesCount),
-                          onTap: _toggleLike,
                         ),
-                      ),
-                      // Comment button: bottom: 104 (Opens Half-Screen Instagram-style Comments Sheet)
-                      Positioned(
-                        right: 16,
-                        bottom: 104,
-                        width: 48,
-                        height: 74,
-                        child: _buildLiveActionButton(
-                          icon: const Icon(
-                            Icons.chat_bubble_outline_rounded,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          label: _formatNumber(_commentsCount),
-                          onTap: () {
-                            _showCommentsBottomSheet(context);
-                          },
-                        ),
-                      ),
-                      // Share button: bottom: 28
-                      Positioned(
-                        right: 16,
-                        bottom: 28,
-                        width: 48,
-                        height: 74,
-                        child: _buildLiveActionButton(
-                          icon: const Icon(
-                            Icons.share_rounded,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          label: _formatNumber(_shareCount),
-                          onTap: _shareStream,
-                        ),
-                      ),
 
                       // (Bottom comment input removed as requested)
                     ],
                   ),
+        ),
       ),
     );
   }

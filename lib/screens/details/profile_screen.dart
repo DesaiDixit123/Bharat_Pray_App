@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,6 +21,8 @@ import 'create_mandal_post_screen.dart';
 import 'create_mandal_reel_screen.dart';
 import 'go_live_studio_screen.dart';
 import 'favourite_bhajans_screen.dart';
+import 'jap_counter_screen.dart';
+import 'yatra_screen.dart';
 import 'mandal_profile_screen.dart';
 import 'mandal_registration_screen.dart';
 import 'mandal_status_tab_content.dart';
@@ -38,10 +41,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _soundEffects = true;
   String _selectedLanguage = "English";
 
-  String _userName = 'Guest User';
-  String _userEmail = 'no-email@example.com';
+  String _userName = 'Devotee';
+  String _userEmail = '';
   String _userPhone = '';
   String _profilePic = '';
+
+  // Devotional real stats
+  int _totalJapCount = 0;
+  int _favouriteBhajanCount = 0;
+  int _streakDays = 1;
+  int _completedYatrasCount = 0;
 
   Map<String, dynamic>? _myMandalRegistration;
   bool _isMandalEventValid = false;
@@ -140,36 +149,259 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return const Center(child: Text("🛕", style: TextStyle(fontSize: 24)));
   }
 
+  String _formatCount(int number) {
+    return number.toString().replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]},',
+    );
+  }
+
   Future<void> _loadProfileData() async {
     final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
     final reg = await UtsavService.getMyMandalRegistration();
     final isRegValid = await UtsavService.isRegistrationActive(reg);
+
+    // 1. User details
+    String rawName = prefs.getString('user_name') ?? '';
+    String rawEmail = prefs.getString('user_email') ?? '';
+    String rawPic = prefs.getString('profile_pic') ?? '';
+    String phoneRaw = prefs.getString('user_phone') ?? '';
+
+    String formattedPhone = '';
+    if (phoneRaw.isNotEmpty) {
+      if (phoneRaw.startsWith('+91')) {
+        formattedPhone = phoneRaw;
+      } else if (phoneRaw.length == 10) {
+        formattedPhone = '+91 ${phoneRaw.substring(0, 5)} ${phoneRaw.substring(5)}';
+      } else {
+        formattedPhone = '+91 $phoneRaw';
+      }
+    }
+
+    // 2. Real Total Jap Calculation (Full Malas + In-Progress / Continue Japs)
+    int totalJaps = prefs.getInt('jap_stat_lifetime') ?? 0;
+    int sessionTotal = 0;
+    final checkedJapIds = <String>{};
+
+    for (final k in prefs.getKeys()) {
+      if (k.startsWith('jap_session_v2_')) {
+        final japId = k.replaceFirst('jap_session_v2_', '');
+        checkedJapIds.add(japId);
+        final val = prefs.getString(k);
+        if (val != null) {
+          try {
+            final m = jsonDecode(val);
+            final malas = (m['completedMalas'] as num?)?.toInt() ?? 0;
+            final current = (m['currentCount'] as num?)?.toInt() ?? 0;
+            final target = (m['targetCount'] as num?)?.toInt() ?? 108;
+            sessionTotal += (malas * target) + current;
+          } catch (_) {}
+        }
+      } else if (k.startsWith('offline_jap_session_')) {
+        final val = prefs.getString(k);
+        if (val != null) {
+          try {
+            final m = jsonDecode(val);
+            final malas = (m['completedMalas'] as num?)?.toInt() ?? 0;
+            final current = (m['currentCount'] as num?)?.toInt() ?? 0;
+            final target = (m['targetCount'] as num?)?.toInt() ?? 108;
+            sessionTotal += (malas * target) + current;
+          } catch (_) {}
+        }
+      }
+    }
+
+    // Include any in-progress counts from jap_count_ keys
+    for (final k in prefs.getKeys()) {
+      if (k.startsWith('jap_count_')) {
+        final japId = k.replaceFirst('jap_count_', '');
+        if (!checkedJapIds.contains(japId)) {
+          final count = prefs.getInt(k) ?? 0;
+          final malas = prefs.getInt('jap_malas_$japId') ?? 0;
+          sessionTotal += (malas * 108) + count;
+        }
+      }
+    }
+
+    if (sessionTotal > totalJaps) {
+      totalJaps = sessionTotal;
+    }
+
+    int dailySum = 0;
+    for (final k in prefs.getKeys()) {
+      if (k.startsWith('jap_stat_today_')) {
+        dailySum += prefs.getInt(k) ?? 0;
+      }
+    }
+    if (dailySum > totalJaps) {
+      totalJaps = dailySum;
+    }
+
+    // 3. Real Devotional Streak Calculation
+    final now = DateTime.now();
+    final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    final yesterday = now.subtract(const Duration(days: 1));
+    final yesterdayStr = "${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}";
+
+    final lastActiveDate = prefs.getString('devotional_last_active_date');
+    int streak = prefs.getInt('devotional_streak_days') ?? 0;
+
+    if (lastActiveDate == null) {
+      streak = 1;
+      await prefs.setString('devotional_last_active_date', todayStr);
+      await prefs.setInt('devotional_streak_days', streak);
+    } else if (lastActiveDate == todayStr) {
+      if (streak <= 0) streak = 1;
+    } else if (lastActiveDate == yesterdayStr) {
+      streak = (streak <= 0 ? 1 : streak) + 1;
+      await prefs.setString('devotional_last_active_date', todayStr);
+      await prefs.setInt('devotional_streak_days', streak);
+    } else {
+      streak = 1;
+      await prefs.setString('devotional_last_active_date', todayStr);
+      await prefs.setInt('devotional_streak_days', streak);
+    }
+
+    // 4. Cached Bhajans & Yatras (Completed + Continue / In-Progress)
+    int favBhajans = prefs.getInt('favourite_bhajans_count') ?? 0;
+    int completedYatras = prefs.getInt('completed_yatras_count') ?? 0;
+    final activeYatraIds = prefs.getStringList('active_yatra_ids') ?? [];
+    final hasContinueYatra = prefs.getBool('has_continue_yatra') ?? false;
+
+    int totalYatras = prefs.getInt('total_yatras_count') ?? 0;
+    final computedLocalYatras = math.max(
+      completedYatras + (activeYatraIds.isNotEmpty ? activeYatraIds.length : (hasContinueYatra ? 1 : 0)),
+      activeYatraIds.length,
+    );
+    if (computedLocalYatras > totalYatras) {
+      totalYatras = computedLocalYatras;
+    }
+    if (hasContinueYatra && totalYatras == 0) {
+      totalYatras = 1;
+    }
 
     if (mounted) {
       setState(() {
         _myMandalRegistration = reg;
         _isMandalEventValid = isRegValid;
-        _userName = prefs.getString('user_name') ?? 'Ayush Kyada';
-        _userEmail = prefs.getString('user_email') ?? 'ayush@example.com';
-        _profilePic = prefs.getString('profile_pic') ?? '';
-        String phoneRaw = prefs.getString('user_phone') ?? '8128753230';
-        if (phoneRaw.isEmpty) {
-          _userPhone = 'No phone number';
-        } else if (phoneRaw.startsWith('+91')) {
-          _userPhone = phoneRaw;
-        } else {
-          if (phoneRaw.length == 10) {
-            _userPhone = '+91 ${phoneRaw.substring(0, 5)} ${phoneRaw.substring(5)}';
-          } else {
-            _userPhone = '+91 $phoneRaw';
-          }
-        }
+        _userName = rawName.isNotEmpty ? rawName : 'Devotee';
+        _userEmail = rawEmail;
+        _profilePic = rawPic;
+        _userPhone = formattedPhone;
+
+        _totalJapCount = totalJaps;
+        _streakDays = streak;
+        _favouriteBhajanCount = favBhajans;
+        _completedYatrasCount = totalYatras;
       });
+
       if (reg != null && reg['status']?.toString().toLowerCase() == 'deleted' && !_deletedDialogShown) {
         _deletedDialogShown = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _showAccountDeletedDialog(context, reg);
         });
+      }
+    }
+
+    // 5. Asynchronous Live Refresh from Backend (if logged in)
+    if (token.isNotEmpty) {
+      // Refresh live profile data
+      try {
+        final userModel = await ApiService.getProfile(token);
+        if (mounted) {
+          setState(() {
+            if (userModel.name.isNotEmpty) _userName = userModel.name;
+            if (userModel.email != null && userModel.email!.isNotEmpty) _userEmail = userModel.email!;
+            if (userModel.mobile != null && userModel.mobile!.isNotEmpty) {
+              final m = userModel.mobile!;
+              if (m.startsWith('+91')) {
+                _userPhone = m;
+              } else if (m.length == 10) {
+                _userPhone = '+91 ${m.substring(0, 5)} ${m.substring(5)}';
+              } else {
+                _userPhone = '+91 $m';
+              }
+            }
+            if (userModel.profilePic.isNotEmpty) _profilePic = userModel.profilePic;
+          });
+        }
+      } catch (e) {
+        debugPrint('[ProfileScreen] Background profile refresh error: $e');
+      }
+
+      // Refresh real favourite bhajans count
+      try {
+        final rawList = await ApiService.getFavouriteBhajans(token);
+        favBhajans = rawList.length;
+        await prefs.setInt('favourite_bhajans_count', favBhajans);
+        if (mounted) {
+          setState(() => _favouriteBhajanCount = favBhajans);
+        }
+      } catch (e) {
+        debugPrint('[ProfileScreen] Error fetching favourite bhajans count: $e');
+      }
+
+      // Refresh real yatras count (Completed + Continue / In-Progress + Groups)
+      try {
+        final activeSet = <String>{};
+        activeSet.addAll(prefs.getStringList('active_yatra_ids') ?? []);
+
+        // A. Continue Yatra API (/user/yatra/journey/current)
+        final continueRes = await ApiService.getContinueYatra(token: token, forceRefresh: true);
+        if (continueRes.data != null) {
+          final cid = continueRes.data!.journeyId.isNotEmpty
+              ? continueRes.data!.journeyId
+              : continueRes.data!.routeId;
+          if (cid.isNotEmpty) {
+            activeSet.add(cid);
+          } else {
+            activeSet.add('continue_active_journey');
+          }
+          await prefs.setBool('has_continue_yatra', true);
+        }
+
+        // B. User Yatra Groups
+        final myGroups = await ApiService.getMyYatraGroups(token);
+        if (myGroups is List) {
+          for (final g in myGroups) {
+            final gid = (g['_id'] ?? g['id'] ?? g['groupId'])?.toString();
+            if (gid != null && gid.isNotEmpty) activeSet.add(gid);
+          }
+        } else if (myGroups is Map && myGroups['groups'] is List) {
+          for (final g in (myGroups['groups'] as List)) {
+            final gid = (g['_id'] ?? g['id'] ?? g['groupId'])?.toString();
+            if (gid != null && gid.isNotEmpty) activeSet.add(gid);
+          }
+        }
+
+        // C. Journey Timeline (Completed Journeys)
+        final timeline = await ApiService.getJourneyTimeline(token);
+        int completedRemote = 0;
+        if (timeline.isNotEmpty) {
+          completedRemote = timeline.length;
+          for (final t in timeline) {
+            final tid = (t['_id'] ?? t['journeyId'] ?? t['id'])?.toString();
+            if (tid != null && tid.isNotEmpty) activeSet.add(tid);
+          }
+        }
+
+        final combinedYatras = math.max(
+          activeSet.length,
+          math.max(completedYatras + (continueRes.data != null ? 1 : 0), completedRemote),
+        );
+
+        if (combinedYatras > totalYatras) {
+          totalYatras = combinedYatras;
+        }
+
+        await prefs.setStringList('active_yatra_ids', activeSet.toList());
+        await prefs.setInt('total_yatras_count', totalYatras);
+        if (mounted) {
+          setState(() => _completedYatrasCount = totalYatras);
+        }
+      } catch (e) {
+        debugPrint('[ProfileScreen] Error fetching yatra count: $e');
       }
     }
   }
@@ -506,28 +738,90 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         color: const Color(0xFF2E2A36),
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$_userPhone • $_userEmail',
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
+                    if (_userPhone.isNotEmpty || _userEmail.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        _userPhone.isNotEmpty && _userEmail.isNotEmpty
+                            ? '$_userPhone • $_userEmail'
+                            : (_userPhone.isNotEmpty ? _userPhone : _userEmail),
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
 
               const SizedBox(height: 24),
 
-              // Devotional Stats Row
+              // Devotional Real Stats Row
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildStatItem("1,296", "Total Jap", "📿"),
-                  _buildStatItem("14", "Bhajans", "🎵"),
-                  _buildStatItem("7 Days", "Streak", "🔥"),
-                  _buildStatItem("1 Tour", "Yatras", "⛰️"),
+                  _buildStatItem(
+                    _formatCount(_totalJapCount),
+                    "Total Jap",
+                    "📿",
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const JapCounterScreen()),
+                      );
+                      _loadProfileData();
+                    },
+                  ),
+                  _buildStatItem(
+                    "$_favouriteBhajanCount",
+                    "Bhajans",
+                    "🎵",
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const FavouriteBhajansScreen()),
+                      );
+                      _loadProfileData();
+                    },
+                  ),
+                  _buildStatItem(
+                    "$_streakDays ${_streakDays == 1 ? 'Day' : 'Days'}",
+                    "Streak",
+                    "🔥",
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          behavior: SnackBarBehavior.floating,
+                          backgroundColor: const Color(0xFF2E2A36),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          content: Row(
+                            children: [
+                              const Text("🔥", style: TextStyle(fontSize: 22)),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  "You are on a $_streakDays-day devotional streak! Keep praying daily.",
+                                  style: GoogleFonts.outfit(color: Colors.white, fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildStatItem(
+                    "$_completedYatrasCount ${_completedYatrasCount == 1 ? 'Tour' : 'Tours'}",
+                    "Yatras",
+                    "⛰️",
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const YatraScreen()),
+                      );
+                      _loadProfileData();
+                    },
+                  ),
                 ],
               ),
 
@@ -1116,28 +1410,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildStatItem(String value, String label, String emoji) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFFEFE6DB)),
+  Widget _buildStatItem(String value, String label, String emoji, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFFEFE6DB)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.02),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Text(emoji, style: const TextStyle(fontSize: 20)),
           ),
-          child: Text(emoji, style: const TextStyle(fontSize: 20)),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
-        ),
-        Text(
-          label,
-          style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF2E2A36).withValues(alpha: 0.5)),
-        ),
-      ],
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
+          ),
+          Text(
+            label,
+            style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF2E2A36).withValues(alpha: 0.5)),
+          ),
+        ],
+      ),
     );
   }
 

@@ -194,10 +194,22 @@ class _StartYatraOverviewScreenState extends State<StartYatraOverviewScreen> {
     String journeyId = '';
     try {
       final prefs = await SharedPreferences.getInstance();
+      final activeList = prefs.getStringList('active_yatra_ids') ?? [];
+      if (!activeList.contains(widget.id)) {
+        activeList.add(widget.id);
+        await prefs.setStringList('active_yatra_ids', activeList);
+      }
+      await prefs.setString('last_active_yatra_id', widget.id);
+      await prefs.setBool('has_continue_yatra', true);
+
       final token = prefs.getString('auth_token') ?? '';
       if (token.isNotEmpty) {
         final result = await ApiService.startYatra(token, widget.id);
         journeyId = result['_id'] ?? result['journeyId'] ?? '';
+        if (journeyId.isNotEmpty && !activeList.contains(journeyId)) {
+          activeList.add(journeyId);
+          await prefs.setStringList('active_yatra_ids', activeList);
+        }
       }
     } catch (e) {
       debugPrint('Error starting yatra: $e');

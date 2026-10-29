@@ -436,28 +436,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                             // ── Phone / Email toggle ──────────────────
                             Container(
-                              height: 48,
-                              padding: const EdgeInsets.all(4),
+                              height: 46,
+                              padding: const EdgeInsets.all(3),
                               decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.25),
-                                borderRadius: BorderRadius.circular(14),
+                                color: Colors.white.withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.10),
+                                  color: Colors.white.withValues(alpha: 0.12),
                                   width: 1.0,
                                 ),
                               ),
                               child: Row(
                                 children: [
                                   _buildToggleBtn(
-                                    label: 'Phone Number',
-                                    icon: Icons.phone_iphone_rounded,
+                                    label: 'Phone',
+                                    icon: Icons.phone_android_rounded,
                                     selected: _contactType == 'phone',
                                     onTap: () => setState(() => _contactType = 'phone'),
                                   ),
-                                  const SizedBox(width: 4),
                                   _buildToggleBtn(
                                     label: 'Email',
-                                    icon: Icons.alternate_email_rounded,
+                                    icon: Icons.mail_outline_rounded,
                                     selected: _contactType == 'email',
                                     onTap: () => setState(() => _contactType = 'email'),
                                   ),
@@ -488,6 +487,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 iconColor: const Color(0xFFFF7A00),
                                 keyboardType: TextInputType.number,
                                 maxLength: 10,
+                                isPhone: true,
                                 inputFormatters: [
                                   FilteringTextInputFormatter.digitsOnly
                                 ],
@@ -589,43 +589,47 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
+        behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
+          duration: const Duration(milliseconds: 180),
           curve: Curves.easeInOut,
+          height: double.infinity,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
             color: selected
                 ? const Color(0xFFFF7A00)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
             boxShadow: selected
                 ? [
                     BoxShadow(
-                      color: const Color(0xFFFF7A00).withValues(alpha: 0.30),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+                      color: const Color(0xFFFF7A00).withValues(alpha: 0.35),
+                      blurRadius: 6,
+                      offset: const Offset(0, 1),
                     ),
                   ]
                 : [],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Icon(
                 icon,
-                size: 16,
+                size: 17,
                 color: selected
                     ? Colors.white
-                    : Colors.white.withValues(alpha: 0.45),
+                    : Colors.white.withValues(alpha: 0.70),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Text(
                 label,
                 style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                  fontSize: 14,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                   color: selected
                       ? Colors.white
-                      : Colors.white.withValues(alpha: 0.50),
+                      : Colors.white.withValues(alpha: 0.70),
                 ),
               ),
             ],
@@ -654,6 +658,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     TextInputType keyboardType = TextInputType.text,
     int? maxLength,
     List<TextInputFormatter>? inputFormatters,
+    bool isPhone = false,
   }) {
     return Container(
       height: 48,
@@ -667,18 +672,51 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
       child: TextField(
         controller: controller,
+        textAlignVertical: TextAlignVertical.center,
         style: GoogleFonts.outfit(color: Colors.white, fontSize: 15),
         keyboardType: keyboardType,
         maxLength: maxLength,
         inputFormatters: inputFormatters,
         decoration: InputDecoration(
+          isDense: true,
           counterText: '',
           hintText: hint,
           hintStyle: GoogleFonts.outfit(
             color: Colors.white.withValues(alpha: 0.3),
             fontSize: 15,
           ),
-          prefixIcon: Icon(icon, color: iconColor, size: 20),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 0,
+            minHeight: 0,
+          ),
+          prefixIcon: isPhone
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(width: 12),
+                    Icon(icon, color: iconColor, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      '+91',
+                      style: GoogleFonts.outfit(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      height: 16,
+                      width: 1,
+                      color: Colors.white.withValues(alpha: 0.2),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                )
+              : Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Icon(icon, color: iconColor, size: 18),
+                ),
           border: InputBorder.none,
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
