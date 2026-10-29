@@ -3,16 +3,24 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../models/jap_animation_effect.dart';
+import '../../../models/jap_models.dart';
+import '../../../screens/details/cinematic_jap_screen.dart';
+import '../../../screens/details/dhup_jap_screen.dart';
+import '../../../screens/details/jal_jap_screen.dart';
+import '../../../screens/details/prakash_jap_screen.dart';
+import '../../../screens/details/pushp_varsha_jap_screen.dart';
 
 /// Devotional bottom sheet modal for choosing among the 5 Divine Darshan Animation Effects.
 /// - Preserves the existing approved effect as the default.
 /// - Persists user preference under SharedPreferences key 'jap_selected_reveal_effect'.
 class JapEffectSelectorSheet extends StatelessWidget {
+  final JapConfig? entry;
   final JapRevealEffectType currentEffect;
   final ValueChanged<JapRevealEffectType> onEffectSelected;
 
   const JapEffectSelectorSheet({
     super.key,
+    this.entry,
     required this.currentEffect,
     required this.onEffectSelected,
   });
@@ -40,6 +48,7 @@ class JapEffectSelectorSheet extends StatelessWidget {
 
   static void show(
     BuildContext context, {
+    JapConfig? entry,
     required JapRevealEffectType currentEffect,
     required ValueChanged<JapRevealEffectType> onEffectSelected,
   }) {
@@ -48,6 +57,7 @@ class JapEffectSelectorSheet extends StatelessWidget {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) => JapEffectSelectorSheet(
+        entry: entry,
         currentEffect: currentEffect,
         onEffectSelected: (selected) {
           saveSelectedEffect(selected);
@@ -142,10 +152,92 @@ class JapEffectSelectorSheet extends StatelessWidget {
                 physics: const BouncingScrollPhysics(),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  children: JapRevealEffectConfig.allEffects.map((effectConfig) {
-                    final bool isSelected = effectConfig.type == currentEffect;
-                    return _buildEffectTile(context, effectConfig, isSelected);
-                  }).toList(),
+                  children: [
+                    if (entry != null) ...[
+                      _buildSectionHeader('All 5 Jap Devotional Experiences'),
+                      _buildMasterEffectTile(
+                        context,
+                        name: 'Prakash Mandal — Divine Light Reveal',
+                        description: 'Expanding golden mandala rings, divine rays & radiant aura.',
+                        badge: 'PRAKASH ✨',
+                        icon: Icons.auto_awesome_rounded,
+                        gradientColors: const [Color(0xFFFFD54F), Color(0xFFFF8F00)],
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => PrakashJapScreen(entry: entry!)),
+                          );
+                        },
+                      ),
+                      _buildMasterEffectTile(
+                        context,
+                        name: 'Pushp Varsha — Divine Flower Shower',
+                        description: 'Shower of pink lotus petals, marigold petals & golden pollen.',
+                        badge: 'PUSHP 🌸',
+                        icon: Icons.spa_rounded,
+                        gradientColors: const [Color(0xFFFF80AB), Color(0xFFE91E63)],
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => PushpVarshaJapScreen(entry: entry!)),
+                          );
+                        },
+                      ),
+                      _buildMasterEffectTile(
+                        context,
+                        name: 'Divine Jal Darshan Effect',
+                        description: 'Lord Shri Ram emerges upward from the sacred water pool.',
+                        badge: 'JAL 🌊',
+                        icon: Icons.water_drop_rounded,
+                        gradientColors: const [Color(0xFF00ACC1), Color(0xFF004D40)],
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => JalJapScreen(entry: entry!)),
+                          );
+                        },
+                      ),
+                      _buildMasterEffectTile(
+                        context,
+                        name: 'Dhup Chanting Effect',
+                        description: 'Traditional brass incense burner with rising sacred smoke.',
+                        badge: 'DHUP 🪔',
+                        icon: Icons.waves_rounded,
+                        gradientColors: const [Color(0xFF8D6E63), Color(0xFFFFB300)],
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => DhupJapScreen(entry: entry!)),
+                          );
+                        },
+                      ),
+                      _buildMasterEffectTile(
+                        context,
+                        name: 'Ram Ram Chanting (Live Darshan)',
+                        description: 'Approved devotional animation with circular trajectory.',
+                        badge: 'DEFAULT',
+                        icon: Icons.temple_hindu_rounded,
+                        gradientColors: const [Color(0xFFFF9900), Color(0xFFFF5500)],
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => CinematicJapScreen(entry: entry!)),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      _buildSectionHeader('Live Darshan Reveal Styles'),
+                    ],
+                    ...JapRevealEffectConfig.allEffects.map((effectConfig) {
+                      final bool isSelected = effectConfig.type == currentEffect;
+                      return _buildEffectTile(context, effectConfig, isSelected);
+                    }),
+                  ],
                 ),
               ),
             ),
@@ -298,6 +390,151 @@ class JapEffectSelectorSheet extends StatelessWidget {
                       color: Colors.black,
                     )
                   : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 8, left: 4),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          title,
+          style: GoogleFonts.outfit(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFFFFD54F),
+            letterSpacing: 0.5,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMasterEffectTile(
+    BuildContext context, {
+    required String name,
+    required String description,
+    required String badge,
+    required IconData icon,
+    required List<Color> gradientColors,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E1714),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: gradientColors.first.withValues(alpha: 0.70),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: gradientColors.first.withValues(alpha: 0.18),
+              blurRadius: 10,
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Preview Icon Container with gradient
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: gradientColors,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: gradientColors.first.withValues(alpha: 0.35),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Icon(
+                  icon,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+
+            // Name and description
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          name,
+                          style: GoogleFonts.outfit(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: gradientColors.first.withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          badge,
+                          style: GoogleFonts.outfit(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: gradientColors.first,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    description,
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: Colors.white70,
+                      height: 1.25,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 14,
+              color: Colors.white54,
             ),
           ],
         ),

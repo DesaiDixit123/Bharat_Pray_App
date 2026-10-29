@@ -55,26 +55,33 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      String? receivedOtp;
       try {
-        await ApiService.sendOtp(contact);
+        final res = await ApiService.sendOtp(contact);
+        receivedOtp = res['Data']?['dev_mode_otp']?.toString() ?? res['Data']?['otp']?.toString();
       } catch (e) {
         if (e.toString().contains('not registered') || e.toString().contains('sign up')) {
-          await ApiService.registerUser(
+          final regRes = await ApiService.registerUser(
             name: _isPhoneLogin ? 'Devotee' : contact.split('@').first,
             contact: contact,
           );
+          receivedOtp = regRes['Data']?['dev_mode_otp']?.toString() ?? regRes['Data']?['otp']?.toString();
         } else {
           rethrow;
         }
       }
 
+      debugPrint('🔑 [CONSOLE OTP] Contact: $contact -> OTP: ${receivedOtp ?? '123456'}');
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              _isPhoneLogin
-                  ? 'OTP sent successfully via SMS to +91 $contact.'
-                  : 'OTP sent successfully to $contact.',
+              receivedOtp != null
+                  ? 'OTP generated! Console / Test OTP: $receivedOtp'
+                  : (_isPhoneLogin
+                      ? 'OTP sent! (If SMS delayed, use 123456)'
+                      : 'OTP sent successfully to $contact.'),
               style: GoogleFonts.outfit(color: Colors.white),
             ),
             backgroundColor: const Color(0xFFFF7A00),
@@ -86,6 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
           MaterialPageRoute(
             builder: (context) => OtpVerificationScreen(
               phoneNumber: contact,
+              initialOtp: receivedOtp,
             ),
           ),
         );

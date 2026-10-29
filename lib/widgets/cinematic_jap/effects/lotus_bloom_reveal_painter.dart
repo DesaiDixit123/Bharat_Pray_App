@@ -85,38 +85,21 @@ class LotusBloomRevealPainter extends CustomPainter {
       return;
     }
 
-    // 3. Background Lotus Petal Outline Glow
+    // Background Lotus Petal Outline Glow
     final double progressRatio = (revealedNodes.length / 108.0).clamp(0.0, 1.0);
-    final double petalSpread = (progressRatio * 1.15).clamp(0.0, 1.0);
+    final double petalSpread = (math.pow(progressRatio, 1.0) * 1.0).clamp(0.0, 1.0);
 
     _drawLotusAmbientGlow(canvas, lotusBase, dstRect.width * 0.65, petalSpread);
 
     // 4. SaveLayer for progressive feathered aperture masking
     canvas.saveLayer(screenRect, Paint());
 
-    // Exact screen coordinate rect for Lord Ram's sacred face
-    final faceRect = Rect.fromLTRB(
-      dstRect.left + (RamPathCalculator.faceBox.left * dstRect.width),
-      dstRect.top + (RamPathCalculator.faceBox.top * dstRect.height),
-      dstRect.left + (RamPathCalculator.faceBox.right * dstRect.width),
-      dstRect.top + (RamPathCalculator.faceBox.bottom * dstRect.height),
-    );
-    final faceRRect = RRect.fromRectAndRadius(faceRect, Radius.circular(faceRect.width * 0.38));
+    // Balanced progressive expansion:
+    final double expansion = 1.0 + (2.00 * math.pow(progressRatio, 2.2));
 
-    // Smooth progressive expansion
-    final double expansion = 1.0 + (1.20 * math.pow(progressRatio, 2.0));
-
-    // ── A. Draw Non-Face Mask Blobs with Strict Face Shield ─────────────
-    final faceClipPath = Path()
-      ..addRect(screenRect)
-      ..addRRect(faceRRect);
-    faceClipPath.fillType = PathFillType.evenOdd;
-
-    canvas.save();
-    canvas.clipPath(faceClipPath);
-
+    // ── A. Draw Non-Face Mask Blobs ─────────────────────────────────────
     // Blooming Lotus Petals Mask Paths
-    if (petalSpread > 0.05) {
+    if (petalSpread > 0.04) {
       final lotusPath = _buildLotusPetalMaskPath(lotusBase, dstRect.width, dstRect.height, petalSpread);
       final petalPaint = Paint()
         ..style = PaintingStyle.fill
@@ -133,7 +116,7 @@ class LotusBloomRevealPainter extends CustomPainter {
         dstRect.left + (node.u * dstRect.width),
         dstRect.top + (node.v * dstRect.height),
       );
-      final radius = node.radiusNorm * 1.10 * dstRect.width * expansion;
+      final radius = node.radiusNorm * 1.18 * dstRect.width * expansion;
 
       _maskBlobPaint.shader = ui.Gradient.radial(
         center,
@@ -144,11 +127,10 @@ class LotusBloomRevealPainter extends CustomPainter {
           Colors.white.withValues(alpha: 0.35),
           Colors.transparent,
         ],
-        [0.0, 0.45, 0.75, 1.0],
+        [0.0, 0.50, 0.78, 1.0],
       );
       canvas.drawCircle(center, radius, _maskBlobPaint);
     }
-    canvas.restore(); // Restores clip so face climax can be unmasked
 
     // ── B. Draw Sacred Face Climax Nodes (Japs 103..108) ────────────────
     for (final node in revealedNodes) {
@@ -158,18 +140,18 @@ class LotusBloomRevealPainter extends CustomPainter {
         dstRect.left + (node.u * dstRect.width),
         dstRect.top + (node.v * dstRect.height),
       );
-      final radius = node.radiusNorm * dstRect.width;
+      final radius = node.radiusNorm * 1.18 * dstRect.width;
 
       _maskBlobPaint.shader = ui.Gradient.radial(
         center,
         radius,
         [
           Colors.white,
-          Colors.white.withValues(alpha: 0.95),
-          Colors.white.withValues(alpha: 0.40),
+          Colors.white.withValues(alpha: 0.94),
+          Colors.white.withValues(alpha: 0.42),
           Colors.transparent,
         ],
-        [0.0, 0.50, 0.80, 1.0],
+        [0.0, 0.58, 0.82, 1.0],
       );
       canvas.drawCircle(center, radius, _maskBlobPaint);
     }
@@ -194,7 +176,7 @@ class LotusBloomRevealPainter extends CustomPainter {
         dstRect.top + (newestNode!.v * dstRect.height),
       );
       final double nodeExp = newestNode!.step < 102 ? expansion : 1.0;
-      final radius = newestNode!.radiusNorm * 1.10 * dstRect.width * nodeExp * 0.90;
+      final radius = newestNode!.radiusNorm * 1.18 * dstRect.width * nodeExp * 0.88;
 
       _shimmerPaint.color = const Color(0xFFFF80AB).withValues(alpha: shimmerAlpha);
       _shimmerPaint.maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.5);

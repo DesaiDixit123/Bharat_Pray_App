@@ -12,8 +12,8 @@ class ApiService {
   static const bool isLive = true;
 
   // Local backend configuration:
-  // Active Wi-Fi IP = 192.168.29.73, Port = 3020
-  static const String _localIp = '192.168.29.73';
+  // Active Wi-Fi IP = 192.168.29.227, Port = 3020
+  static const String _localIp = '192.168.29.227';
   static const int _localPort = 3020;
 
   static String get baseUrl {
@@ -151,7 +151,7 @@ class ApiService {
   static Future<http.Response> _safePost(Uri uri, {Map<String, String>? headers, Object? body}) async {
     try {
       _logApiCall('POST', uri, headers: headers);
-      final response = await http.post(uri, headers: headers, body: body).timeout(const Duration(seconds: 10));
+      final response = await http.post(uri, headers: headers, body: body).timeout(const Duration(seconds: 4));
       _logApiResponse('POST', uri, response);
       if (response.statusCode >= 500) {
         throw HttpException('Server returned error ${response.statusCode}');

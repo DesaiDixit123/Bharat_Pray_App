@@ -14,6 +14,10 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/api_service.dart';
+import '../../services/tts_service.dart';
+import '../../services/user_verse_recording_service.dart';
+import '../../widgets/granth/granth_voice_selector_sheet.dart';
+import '../../widgets/granth/record_verse_voice_sheet.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -86,6 +90,8 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
 
   // Audio Playback
   final AudioPlayer _audioPlayer = AudioPlayer();
+  final AudioPlayer _verseAudioPlayer = AudioPlayer();
+  final TtsService _ttsService = TtsService();
   bool _isPlaying = false;
   String? _audioUrl;
   bool _isLoadingAudio = false;
@@ -102,8 +108,6 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   int _currentLocalWord = -1;
   int _currentSectionIndex = 0;
   List<_VerseSection> _activeVerseSections = [];
-  int _ttsSectionSession = 0;
-  int _sectionStartTimeMs = 0;
   int _speechLoopSession = 0;
   Completer<void>? _wordCompleter;
   VoidCallback? _ttsPhraseStartCallback;
@@ -118,9 +122,15 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   StreamSubscription? _completeSub;
   bool _isFullScreen = false;
 
+  // My Voice Recording
+  final UserVerseRecordingService _userRecordingService = UserVerseRecordingService();
+  Map<int, String> _chapterUserRecordings = {};
+  String? _currentChapterId;
+
   @override
   void initState() {
     super.initState();
+    _ttsService.init();
     _loadChapterPagesAndVerses();
     _initAudioListeners();
     _initTts();
@@ -361,14 +371,25 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
             .toString()
             .toLowerCase();
 
-    if (langMeta.contains('hi') || langMeta.contains('hindi')) return 'hi-IN';
-    if (langMeta.contains('sa') || langMeta.contains('sanskrit'))
+    if (langMeta.contains('gu') || langMeta.contains('gujarat')) {
+      return 'gu-IN';
+    }
+    if (langMeta.contains('hi') || langMeta.contains('hindi')) {
       return 'hi-IN';
-    if (langMeta.contains('en') || langMeta.contains('english')) return 'en-IN';
+    }
+    if (langMeta.contains('sa') || langMeta.contains('sanskrit')) {
+      return 'hi-IN';
+    }
+    if (langMeta.contains('en') || langMeta.contains('english')) {
+      return 'en-IN';
+    }
 
     if (_verses.isNotEmpty) {
       final sample =
-          (_verses.first['sanskrit'] ?? '') + (_verses.first['hindi'] ?? '');
+          (_verses.first['sanskrit'] ?? '') + (_verses.first['hindi'] ?? '') + (_verses.first['english'] ?? '');
+      if (sample.runes.any((r) => r >= 0x0A80 && r <= 0x0AFF)) {
+        return 'gu-IN';
+      }
       if (sample.runes.any((r) => r >= 0x0900 && r <= 0x097F)) {
         return 'hi-IN';
       }
@@ -537,6 +558,30 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
 
     final section = _activeVerseSections[_currentSectionIndex];
 
+    // ── My Voice: if devotee recorded their own voice for this verse, play it ──
+    if (_currentSectionIndex == 0 && _currentChapterId != null && _currentChapterId!.isNotEmpty) {
+      final vi = _currentPage - 1;
+      final userAudio = await _userRecordingService.getAudioForVerse(_currentChapterId!, vi);
+      if (userAudio != null && userAudio.isNotEmpty && mounted && _isPlaying) {
+        final currentSession = ++_speechLoopSession;
+        setState(() { _activeSection = 'sanskrit'; });
+        try {
+          await _verseAudioPlayer.stop();
+          final completionFuture = _verseAudioPlayer.onPlayerComplete.first;
+          if (userAudio.startsWith('http')) {
+            await _verseAudioPlayer.play(UrlSource(userAudio));
+          } else {
+            await _verseAudioPlayer.play(DeviceFileSource(userAudio));
+          }
+          await completionFuture.timeout(const Duration(seconds: 60), onTimeout: () {});
+        } catch (_) {}
+        if (mounted && _isPlaying && _speechLoopSession == currentSession) {
+          _handlePageComplete();
+        }
+        return;
+      }
+    }
+
     if (_ttsLang != section.langCode) {
       _ttsLang = section.langCode;
       await _tts.setLanguage(_ttsLang);
@@ -632,23 +677,62 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
         }
       };
 
-      // Speak the entire line naturally (every word is vocalized, zero words dropped)
-      await _tts.speak(phrase.spokenText);
-
-      // Fallback timer: if onStart didn't fire within 350ms, start ticker anyway
-      Timer(const Duration(milliseconds: 350), () {
-        if (!audioStarted && mounted && _speechLoopSession == currentSession) {
-          startAudioTicker();
-        }
-      });
-
-      final timeoutMs = math.max(2500, (phrase.totalDurationMs * 2.5).round());
+      // Speak the entire line naturally via Google Cloud TTS (zero dropped words)
+      String? cloudAudioUrl;
       try {
-        await completer.future.timeout(
-          Duration(milliseconds: (timeoutMs / _speedMultiplier).round()),
-          onTimeout: () {},
+        final isGujarati = phrase.spokenText.runes.any((r) => r >= 0x0A80 && r <= 0x0AFF);
+        final langCategory = isGujarati
+            ? 'Gujarati'
+            : (section.section == 'sanskrit'
+                ? 'Sanskrit'
+                : (section.langCode == 'en-IN' ? 'English' : 'Hindi'));
+
+        cloudAudioUrl = await _ttsService.synthesizeScriptureAudio(
+          text: phrase.spokenText,
+          language: langCategory,
+          speakingRate: _speedMultiplier,
+          sectionType: section.section,
         );
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[TTS] Cloud audio synthesis error: $e');
+      }
+
+      if (cloudAudioUrl != null &&
+          cloudAudioUrl.isNotEmpty &&
+          mounted &&
+          _isPlaying &&
+          _speechLoopSession == currentSession) {
+        startAudioTicker();
+        try {
+          await _verseAudioPlayer.stop();
+          final completionFuture = _verseAudioPlayer.onPlayerComplete.first;
+          await _verseAudioPlayer.play(UrlSource(cloudAudioUrl));
+
+          final timeoutMs = math.max(3500, (phrase.totalDurationMs * 2.8).round());
+          await completionFuture.timeout(
+            Duration(milliseconds: (timeoutMs / _speedMultiplier).round()),
+            onTimeout: () {},
+          );
+        } catch (_) {}
+      } else {
+        // Fallback to on-device TTS when network is unavailable
+        await _tts.speak(phrase.spokenText);
+
+        // Fallback timer: if onStart didn't fire within 350ms, start ticker anyway
+        Timer(const Duration(milliseconds: 350), () {
+          if (!audioStarted && mounted && _speechLoopSession == currentSession) {
+            startAudioTicker();
+          }
+        });
+
+        final timeoutMs = math.max(2500, (phrase.totalDurationMs * 2.5).round());
+        try {
+          await completer.future.timeout(
+            Duration(milliseconds: (timeoutMs / _speedMultiplier).round()),
+            onTimeout: () {},
+          );
+        } catch (_) {}
+      }
 
       phraseTicker?.cancel();
 
@@ -837,6 +921,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       }
       _transitionTimer?.cancel();
       _wordTimer?.cancel();
+      _verseAudioPlayer.stop();
       _tts.stop();
       if (_audioUrl != null) _audioPlayer.pause();
 
@@ -934,6 +1019,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     await _applySpeechSettings();
 
     if (_isPlaying) {
+      await _verseAudioPlayer.stop();
       await _tts.stop();
       final vi = _currentPage - 1;
       if (vi >= 0 && vi < _verses.length) {
@@ -956,6 +1042,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     }
     _transitionTimer?.cancel();
     _wordTimer?.cancel();
+    _verseAudioPlayer.stop();
 
     setState(() {
       _currentPage = newPage;
@@ -987,6 +1074,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   }
 
   void _goToPrevPage() {
+    _verseAudioPlayer.stop();
     if (_currentPage > 0) {
       _bookViewerKey.currentState?.autoTurnToPage(
         _currentPage - 1,
@@ -996,6 +1084,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   }
 
   void _goToNextPage() {
+    _verseAudioPlayer.stop();
     final totalPages = _verses.length + 2;
     if (_currentPage < totalPages - 1) {
       _bookViewerKey.currentState?.autoTurnToPage(
@@ -1013,9 +1102,12 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     }
     _transitionTimer?.cancel();
     _wordTimer?.cancel();
+    _verseAudioPlayer.stop();
+    _verseAudioPlayer.dispose();
     _tts.stop();
     _completeSub?.cancel();
     _audioPlayer.dispose();
+    _userRecordingService.dispose();
     super.dispose();
   }
 
@@ -1211,6 +1303,17 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
         _isLoadingPages = false;
       });
 
+      // Load user's personal voice recordings for this chapter
+      _currentChapterId = (widget.chapter['_id'] ?? widget.chapter['id'] ?? '').toString();
+      if (_currentChapterId!.isNotEmpty) {
+        try {
+          final recs = await _userRecordingService.fetchChapterRecordings(_currentChapterId!);
+          if (mounted) {
+            setState(() => _chapterUserRecordings = recs);
+          }
+        } catch (_) {}
+      }
+
       _loadOptionalAudio();
 
       // Re-detect language now that verses are available
@@ -1289,7 +1392,13 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       color: Colors.transparent,
 
       child: InkWell(
-        onTap: _goToNextPage,
+        onTap: () {
+          if (!_isPlaying) {
+            _toggleAutoRead();
+          } else {
+            _goToNextPage();
+          }
+        },
 
         borderRadius: BorderRadius.circular(28),
 
@@ -1530,6 +1639,31 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
                         onPageChanged: _onPageChanged,
 
                         onPageChanging: _onPageChanging,
+
+                        chapterUserRecordings: _chapterUserRecordings,
+
+                        onRecordVerseVoice: (vi) {
+                          if (_currentChapterId == null || _currentChapterId!.isEmpty) return;
+                          final verse = vi < _verses.length ? _verses[vi] : <String, String>{};
+                          final chTitle = (widget.chapter['name'] ?? widget.chapter['title'] ?? '').toString();
+                          RecordVerseVoiceSheet.show(
+                            context,
+                            chapterId: _currentChapterId!,
+                            chapterTitle: chTitle,
+                            verseIndex: vi,
+                            totalVerses: _verses.length,
+                            sanskritText: verse['sanskrit'] ?? '',
+                            transliterationText: verse['transliteration'] ?? '',
+                            meaningText: verse['hindi'] ?? verse['english'] ?? '',
+                            onRecordingSaved: () {
+                              _userRecordingService
+                                  .fetchChapterRecordings(_currentChapterId!)
+                                  .then((recs) {
+                                if (mounted) setState(() => _chapterUserRecordings = recs);
+                              });
+                            },
+                          );
+                        },
                       ),
                     ),
             ),
@@ -1604,6 +1738,52 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
               ),
             ),
 
+            // Floating Voice Settings button (top-right, adjacent to fullscreen)
+            Positioned(
+              top: topPadding + 8,
+
+              right: 56,
+
+              child: Material(
+                color: const Color(0xFF1E0A04).withValues(alpha: 0.65),
+
+                borderRadius: BorderRadius.circular(24),
+
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(24),
+
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    GranthVoiceSelectorSheet.show(
+                      context,
+                      initialLanguage: _detectTtsLanguage(),
+                      onVoiceChanged: () {
+                        if (_isPlaying) {
+                          _verseAudioPlayer.stop();
+                          _tts.stop();
+                          _speakCurrentSection();
+                        } else if (_currentPage >= 1 && _currentPage <= _verses.length) {
+                          _toggleAutoRead();
+                        }
+                      },
+                    );
+                  },
+
+                  child: const Padding(
+                    padding: EdgeInsets.all(10),
+
+                    child: Icon(
+                      Icons.record_voice_over_rounded,
+
+                      color: Color(0xFFFFD700),
+
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
             // ── Floating Controls: "Open Granth" on cover, full reading bar inside ──
             if (!_isLoadingPages)
               Positioned(
@@ -1643,6 +1823,22 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
                             onPrevPage: _goToPrevPage,
 
                             onNextPage: _goToNextPage,
+
+                            onVoiceSettings: () {
+                              GranthVoiceSelectorSheet.show(
+                                context,
+                                initialLanguage: _detectTtsLanguage(),
+                                onVoiceChanged: () {
+                                  if (_isPlaying) {
+                                    _verseAudioPlayer.stop();
+                                    _tts.stop();
+                                    _speakCurrentSection();
+                                  } else if (_currentPage >= 1 && _currentPage <= _verses.length) {
+                                    _toggleAutoRead();
+                                  }
+                                },
+                              );
+                            },
                           ),
                   ),
                 ),
@@ -1802,6 +1998,8 @@ class _SacredReaderControlBar extends StatefulWidget {
     required this.onPrevPage,
 
     required this.onNextPage,
+
+    this.onVoiceSettings,
   });
 
   final bool isPlaying;
@@ -1819,6 +2017,8 @@ class _SacredReaderControlBar extends StatefulWidget {
   final VoidCallback onPrevPage;
 
   final VoidCallback onNextPage;
+
+  final VoidCallback? onVoiceSettings;
 
   @override
   State<_SacredReaderControlBar> createState() =>
@@ -2081,6 +2281,21 @@ class _SacredReaderControlBarState extends State<_SacredReaderControlBar>
 
             constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
           ),
+
+          if (widget.onVoiceSettings != null) ...[
+            const SizedBox(width: 3),
+            IconButton(
+              icon: const Icon(
+                Icons.record_voice_over_rounded,
+                color: Color(0xFFFFD54F),
+                size: 18,
+              ),
+              tooltip: 'Choose Voice',
+              onPressed: widget.onVoiceSettings,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+            ),
+          ],
         ],
       ),
     );
@@ -2122,6 +2337,10 @@ class _BookViewer extends StatefulWidget {
     this.onPageChanged,
 
     this.onPageChanging,
+
+    this.chapterUserRecordings,
+
+    this.onRecordVerseVoice,
   });
 
   final Map<String, dynamic> granth;
@@ -2147,6 +2366,10 @@ class _BookViewer extends StatefulWidget {
   final ValueChanged<int>? onPageChanged;
 
   final ValueChanged<int>? onPageChanging;
+
+  final Map<int, String>? chapterUserRecordings;
+
+  final ValueChanged<int>? onRecordVerseVoice;
 
   @override
   State<_BookViewer> createState() => _BookViewerState();
@@ -3093,6 +3316,10 @@ class _BookViewerState extends State<_BookViewer>
             : -1,
 
         isPageCompleted: isThisVerseActive ? widget.isPageCompleted : false,
+
+        hasUserRecording: widget.chapterUserRecordings?.containsKey(vi) ?? false,
+
+        onRecordTap: () => widget.onRecordVerseVoice?.call(vi),
       );
     }
   }
@@ -4539,6 +4766,10 @@ class _VersePage extends StatefulWidget {
     required this.activeLocalWordIndex,
 
     this.isPageCompleted = false,
+
+    this.hasUserRecording = false,
+
+    this.onRecordTap,
   });
 
   final Map<String, String> verse;
@@ -4553,6 +4784,10 @@ class _VersePage extends StatefulWidget {
   final int activeLocalWordIndex; // -1 if none
 
   final bool isPageCompleted;
+
+  final bool hasUserRecording;
+
+  final VoidCallback? onRecordTap;
 
   @override
   State<_VersePage> createState() => _VersePageState();
@@ -4930,7 +5165,73 @@ class _VersePageState extends State<_VersePage> {
                             ),
                           ),
 
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 8),
+
+                          // ── My Voice recording badge / button ──
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              if (widget.hasUserRecording)
+                                Container(
+                                  margin: const EdgeInsets.only(right: 8),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF5A623).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: const Color(0xFFF5A623), width: 1),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.mic, size: 13, color: Color(0xFFD55F00)),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'તમારો અવાજ',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 11,
+                                          color: const Color(0xFFD55F00),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              GestureDetector(
+                                onTap: widget.onRecordTap,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF1E0A04).withValues(alpha: 0.07),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: const Color(0xFF8B6048).withValues(alpha: 0.35),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        widget.hasUserRecording ? Icons.mic : Icons.mic_none,
+                                        size: 14,
+                                        color: const Color(0xFF8B6048),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        widget.hasUserRecording ? 'ફેરફાર કરો' : 'અવાજ રેકોર્ડ',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 11,
+                                          color: const Color(0xFF8B6048),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 6),
 
                           // ── Sanskrit Text ──
                           if (sanskritText.isNotEmpty) ...[

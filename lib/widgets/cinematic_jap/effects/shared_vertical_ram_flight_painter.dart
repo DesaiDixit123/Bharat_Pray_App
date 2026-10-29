@@ -16,6 +16,7 @@ class SharedVerticalRamFlightPainter extends CustomPainter {
   final Offset startPoint;
   final Offset targetPoint;
   final Size screenSize;
+  final String chantText;
 
   final TextPainter _textPainter = TextPainter(
     textDirection: TextDirection.ltr,
@@ -26,6 +27,7 @@ class SharedVerticalRamFlightPainter extends CustomPainter {
     required this.startPoint,
     required this.targetPoint,
     required this.screenSize,
+    this.chantText = 'राम',
   });
 
   @override
@@ -137,9 +139,9 @@ class SharedVerticalRamFlightPainter extends CustomPainter {
       );
     canvas.drawCircle(currentPos, 36.0 * scale, haloPaint);
 
-    // Layout and render single "राम" text
+    // Layout and render chant text
     _textPainter.text = TextSpan(
-      text: 'राम',
+      text: chantText,
       style: GoogleFonts.notoSerifDevanagari(
         fontSize: 25.0 * scale,
         fontWeight: FontWeight.w800,

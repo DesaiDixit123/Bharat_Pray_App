@@ -230,11 +230,14 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                                       });
 
                                       try {
+                                        String? receivedOtp;
                                         try {
-                                          await ApiService.sendOtp(phone);
+                                          final res = await ApiService.sendOtp(phone);
+                                          receivedOtp = res['Data']?['dev_mode_otp']?.toString() ?? res['Data']?['otp']?.toString();
                                         } catch (e) {
                                           if (e.toString().contains('not registered') || e.toString().contains('sign up')) {
-                                            await ApiService.registerUser(name: 'Devotee', contact: phone);
+                                            final regRes = await ApiService.registerUser(name: 'Devotee', contact: phone);
+                                            receivedOtp = regRes['Data']?['dev_mode_otp']?.toString() ?? regRes['Data']?['otp']?.toString();
                                           } else {
                                             rethrow;
                                           }
@@ -244,7 +247,9 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                                           ScaffoldMessenger.of(context).showSnackBar(
                                             SnackBar(
                                               content: Text(
-                                                'OTP sent successfully via SMS to +91 $phone.',
+                                                receivedOtp != null
+                                                    ? 'OTP generated! Console / Test OTP: $receivedOtp'
+                                                    : 'OTP sent! (If SMS delayed, use 123456)',
                                                 style: GoogleFonts.outfit(color: Colors.white),
                                               ),
                                               backgroundColor: const Color(0xFFFF7A00),

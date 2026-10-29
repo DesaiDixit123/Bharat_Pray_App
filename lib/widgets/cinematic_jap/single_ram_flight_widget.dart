@@ -12,6 +12,7 @@ class SingleRamFlightPainter extends CustomPainter {
   final Offset malaCenter;
   final Offset targetPoint;
   final Size screenSize;
+  final String chantText;
 
   final TextPainter _textPainter = TextPainter(
     textDirection: TextDirection.ltr,
@@ -22,6 +23,7 @@ class SingleRamFlightPainter extends CustomPainter {
     required this.malaCenter,
     required this.targetPoint,
     required this.screenSize,
+    this.chantText = 'राम',
   });
 
   @override
@@ -128,7 +130,7 @@ class SingleRamFlightPainter extends CustomPainter {
     // 4. Draw arrival golden bloom burst at target point
     if (progress >= 0.78) {
       final burstT = ((progress - 0.78) / 0.22).clamp(0.0, 1.0);
-      final burstRadius = 24.0 + (50.0 * burstT);
+      final burstRadius = 32.0 + (65.0 * burstT);
       final burstAlpha = ((1.0 - burstT) * 0.88).clamp(0.0, 1.0);
 
       final burstPaint = Paint()
@@ -161,7 +163,7 @@ class SingleRamFlightPainter extends CustomPainter {
 
     // 6. Draw the single glowing Devanagari "राम"
     _textPainter.text = TextSpan(
-      text: 'राम',
+      text: chantText,
       style: GoogleFonts.notoSerifDevanagari(
         fontSize: 34.0 * scale,
         fontWeight: FontWeight.w800,
@@ -200,3 +202,37 @@ class SingleRamFlightPainter extends CustomPainter {
         oldDelegate.screenSize != screenSize;
   }
 }
+
+/// Represents an active flying "राम" text emerging from the circular mala center
+/// and soaring gracefully to its destination node on Lord Shri Ram.
+class CinematicRamFlight {
+  final int step;
+  final RevealNode? node;
+  final Offset startPoint;
+  final Offset targetPoint;
+  final double duration; // Calibrated meditative flight (~1.80s)
+  final VoidCallback? onArrived;
+  double elapsed = 0.0;
+  bool hasArrived = false;
+
+  CinematicRamFlight({
+    required this.step,
+    this.node,
+    required this.startPoint,
+    required this.targetPoint,
+    this.duration = 1.80,
+    this.onArrived,
+  });
+
+  double get progress => (elapsed / duration).clamp(0.0, 1.0);
+
+  bool update(double dt) {
+    elapsed += dt;
+    if (progress >= 0.78 && !hasArrived) {
+      hasArrived = true;
+      onArrived?.call();
+    }
+    return elapsed < duration;
+  }
+}
+

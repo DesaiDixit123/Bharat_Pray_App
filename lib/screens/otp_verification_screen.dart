@@ -44,6 +44,12 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     // Use dev-mode OTP from backend if provided
     _generatedOtp = widget.initialOtp ?? '';
+    debugPrint('🔑 [CONSOLE OTP SCREEN] Waiting for OTP for ${widget.phoneNumber} (Console/Test OTP: ${_generatedOtp.isNotEmpty ? _generatedOtp : '123456'})');
+    if (_generatedOtp.isNotEmpty && _generatedOtp.length == 6) {
+      for (int i = 0; i < 6; i++) {
+        _controllers[i].text = _generatedOtp[i];
+      }
+    }
 
     _startTimer();
   }
@@ -317,6 +323,28 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                     color: const Color(0xFFFF7700),
                                   ),
                                   textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    _generatedOtp.isNotEmpty
+                                        ? '⚡ Console OTP: $_generatedOtp (or 123456)'
+                                        : '⚡ Test / Console OTP: 123456',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFFFBBF24),
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
                                 ),
 
                                 const SizedBox(height: 24),

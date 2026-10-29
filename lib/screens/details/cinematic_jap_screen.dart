@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/jap_models.dart';
+import '../../models/jap_theme_config.dart';
 import '../../services/api_service.dart';
 import '../../services/jap_offline_repository.dart';
 import '../../widgets/cinematic_jap/ram_path_calculator.dart';
@@ -17,6 +18,10 @@ import '../../models/jap_animation_effect.dart';
 import '../../widgets/cinematic_jap/effects/multi_effect_ram_reveal_widget.dart';
 import '../../widgets/cinematic_jap/effects/shared_vertical_ram_flight_painter.dart';
 import '../../widgets/cinematic_jap/effects/jap_effect_selector_sheet.dart';
+import 'dhup_jap_screen.dart';
+import 'jal_jap_screen.dart';
+import 'prakash_jap_screen.dart';
+import 'pushp_varsha_jap_screen.dart';
 
 /// Master Implementation — Bharat Pray Flutter App
 /// Feature: Cinematic 108 Jap Chanting with Progressive Divine Image Reveal of Lord Shri Ram.
@@ -47,22 +52,43 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
   RevealNode? _newestNode;
 
   // Animation Controllers
-  late final AnimationController _flightController;
+  late final AnimationController _flightTicker;
   late final AnimationController _shimmerController;
   late final AnimationController _pulseController;
   late final AnimationController _completionController;
   late final AnimationController _uiFadeController;
 
-  // Audio Player
+  // Active flying "राम" text offerings
+  final List<CinematicRamFlight> _activeFlights = [];
+
+  // Audio Players: Polyphonic voice pool guarantees EVERY tap plays "राम" voice chant without drops or cutoff
   late final AudioPlayer _audioPlayer;
+  static const int _voicePoolSize = 8;
+  final List<AudioPlayer> _voicePlayers = [];
+  int _voicePlayerIndex = 0;
   bool _isSoundEnabled = true;
+
+  late final JapThemeConfig _theme = JapThemeConfig.resolveFromEntry(
+    name: widget.entry.name,
+    shlokText: widget.entry.shlokText,
+  );
+
+  String get _effectiveImageAsset {
+    if (widget.entry.darshanImageUrl.isNotEmpty &&
+        widget.entry.darshanImageUrl.startsWith('assets/')) {
+      return widget.entry.darshanImageUrl;
+    }
+    return _theme.imageAsset;
+  }
+
+  String get _audioAssetPath {
+    final a = _theme.audioAsset;
+    return a.startsWith('assets/') ? a.replaceFirst('assets/', '') : a;
+  }
 
   // Flight State
   bool _isFlightAnimating = false;
-  bool _hasArrivedAtTarget = false;
-  Offset _currentTargetPoint = Offset.zero;
   Offset? _malaCenterOffset;
-  int _currentFlightStep = 0;
   int _chantTrigger = 0;
   bool _isPaused = false;
   bool _isCompleted = false;
@@ -81,69 +107,30 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
     // 2. Initialize Count & Progress
     _count = widget.entry.progress % _target;
     _completedMalas = widget.entry.progress ~/ _target;
-    _isCompleted = _count >= _target || _completedMalas > 0;
+    _isCompleted = false; // Fresh chanting session always active on screen entry
 
     // Load previously revealed nodes if resuming existing session
-    if (_count > 0 && !_isCompleted) {
+    if (_count > 0) {
       _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count);
       _newestNode = _revealedNodes.isNotEmpty ? _revealedNodes.last : null;
-    } else if (_isCompleted) {
-      _revealedNodes = RamPathCalculator.revealNodes;
+    } else {
+      _revealedNodes = [];
+      _newestNode = null;
     }
 
-    // 3. Audio Setup
-    _audioPlayer = AudioPlayer();
-    _audioPlayer.setAudioContext(
-      AudioContext(
-        android: const AudioContextAndroid(
-          isSpeakerphoneOn: false,
-          stayAwake: false,
-          contentType: AndroidContentType.music,
-          usageType: AndroidUsageType.media,
-          audioFocus: AndroidAudioFocus.none,
-        ),
-        iOS: AudioContextIOS(
-          category: AVAudioSessionCategory.playback,
-          options: const {AVAudioSessionOptions.mixWithOthers},
-        ),
-      ),
-    );
+    // 3. Audio Setup (Polyphonic multi-voice pool ensures rapid taps never miss a chant)
+    _audioPlayer = _createChantPlayer();
+    for (int i = 0; i < _voicePoolSize; i++) {
+      _voicePlayers.add(_createChantPlayer());
+    }
 
     // 4. Animation Controllers
-    // A. Single "राम" flight controller: Synchronized to exact chant audio duration (5280ms)
-    _flightController = AnimationController(
+    // A. "राम" flight physics ticker: Smooth 60fps trajectory simulation
+    _flightTicker = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 5280),
-    );
-
-    _flightController.addListener(() {
-      // Arrives at target position at t = 0.72 (~3.8s, perfectly matching "जय जय राम")
-      if (_isFlightAnimating && _flightController.value >= 0.72 && !_hasArrivedAtTarget) {
-        _hasArrivedAtTarget = true;
-        _handleRamArrivedAtTarget();
-      }
-    });
-
-    _flightController.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        if (!mounted) return;
-
-        // Check for 108 Jap Completion
-        if (_count >= _target) {
-          setState(() {
-            _isFlightAnimating = false;
-          });
-          _handle108CompletionSequence();
-          return;
-        }
-
-        // Voice finished for this chant! Turn off play button and wait for user's next manual tap
-        setState(() {
-          _isFlightAnimating = false;
-          _isPaused = false;
-        });
-      }
-    });
+      duration: const Duration(seconds: 1),
+    )..addListener(_onFlightTick)
+     ..repeat();
 
     // B. Newly revealed node golden outline shimmer
     _shimmerController = AnimationController(
@@ -169,11 +156,6 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
       duration: const Duration(milliseconds: 950),
     );
 
-    if (_isCompleted) {
-      _uiFadeController.value = 1.0;
-      _completionController.value = 1.0;
-    }
-
     _loadPreferences();
   }
 
@@ -197,104 +179,151 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
     } catch (_) {}
   }
 
+  AudioPlayer _createChantPlayer() {
+    final p = AudioPlayer();
+    p.setAudioContext(
+      AudioContext(
+        android: const AudioContextAndroid(
+          isSpeakerphoneOn: false,
+          stayAwake: false,
+          contentType: AndroidContentType.music,
+          usageType: AndroidUsageType.media,
+          audioFocus: AndroidAudioFocus.none,
+        ),
+        iOS: AudioContextIOS(
+          category: AVAudioSessionCategory.playback,
+          options: const {AVAudioSessionOptions.mixWithOthers},
+        ),
+      ),
+    );
+    return p;
+  }
+
+  void _playRamVoiceChant() {
+    if (!_isSoundEnabled) return;
+    try {
+      final player = _voicePlayers[_voicePlayerIndex];
+      _voicePlayerIndex = (_voicePlayerIndex + 1) % _voicePoolSize;
+      player.stop().then((_) {
+        player.play(AssetSource(_audioAssetPath)).catchError((_) {});
+      }).catchError((_) {
+        player.play(AssetSource(_audioAssetPath)).catchError((_) {});
+      });
+    } catch (e) {
+      debugPrint('[CinematicJapScreen] Voice error: $e');
+    }
+  }
+
+  void _stopAllAudio() {
+    _audioPlayer.stop().catchError((_) {});
+    for (final p in _voicePlayers) {
+      p.stop().catchError((_) {});
+    }
+  }
+
   @override
   void dispose() {
     _syncDebounceTimer?.cancel();
-    _flightController.dispose();
+    _flightTicker.dispose();
     _shimmerController.dispose();
     _pulseController.dispose();
     _completionController.dispose();
     _uiFadeController.dispose();
+    _stopAllAudio();
+    for (final p in _voicePlayers) {
+      p.dispose();
+    }
     _audioPlayer.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
-  // ── Core Jap Chanting Action ─────────────────────────────────────────
+  // ── Flight Simulation Ticker ─────────────────────────────────────────
 
-  void _onCenterButtonTapped() {
-    if (_isCompleted) return;
-
-    if (_isFlightAnimating) {
-      if (!_isPaused) {
-        // Voice is playing -> Tap pauses playback!
-        _isPaused = true;
-        _flightController.stop();
-        _audioPlayer.pause().catchError((_) {});
-        HapticFeedback.selectionClick();
-        setState(() {});
-      } else {
-        // Paused -> Tap resumes playback!
-        _isPaused = false;
-        _flightController.forward();
-        if (_isSoundEnabled) {
-          _audioPlayer.resume().catchError((_) {});
-        }
-        HapticFeedback.selectionClick();
-        setState(() {});
+  void _onFlightTick() {
+    if (_activeFlights.isEmpty) {
+      if (_isFlightAnimating) {
+        setState(() {
+          _isFlightAnimating = false;
+        });
       }
-    } else {
-      // Idle -> Tap starts single chant & keeps play button active as long as voice plays!
-      _isPaused = false;
-      _startFlightChant();
+      return;
+    }
+    const double dt = 0.016;
+    _activeFlights.removeWhere((flight) => !flight.update(dt));
+    if (mounted) {
+      setState(() {});
     }
   }
 
-  void _startFlightChant() {
+  // ── Core Jap Chanting Action on Tap ──────────────────────────────────
+
+  void _onCenterButtonTapped() {
     if (_isCompleted || _count >= _target) return;
 
+    // 1. Advance Jap Count immediately on each tap!
+    final nextCount = math.min(_target, _count + 1);
+    final newlyNode = RamPathCalculator.getNodeForStep(_count);
+
+    // 2. Compute exact target coordinate on the aspect-ratio fitted portrait
     final Size screenSize = MediaQuery.of(context).size;
-    _currentFlightStep = _count; // 0..107
-
-    // Derive target coordinate on the aspect-ratio fitted portrait for the single "राम" flight
     final dstRect = RamPathCalculator.computeDstRect(screenSize);
-    final normTarget = RamPathCalculator.getTargetNormalizedPoint(_currentFlightStep);
-    if (_selectedEffect == JapRevealEffectType.divineVerticalReveal) {
-      _currentTargetPoint = Offset(
-        dstRect.left + (normTarget.dx * dstRect.width),
-        dstRect.top + (normTarget.dy * dstRect.height),
-      );
-    } else {
-      // Straight vertical trajectory centered horizontally for the 4 new effects
-      _currentTargetPoint = Offset(
-        dstRect.left + (0.50 * dstRect.width),
-        dstRect.top + (normTarget.dy * dstRect.height),
-      );
-    }
+    final normTarget = RamPathCalculator.getTargetNormalizedPoint(_count);
+    final targetPoint = (_selectedEffect == JapRevealEffectType.divineVerticalReveal)
+        ? Offset(
+            dstRect.left + (normTarget.dx * dstRect.width),
+            dstRect.top + (normTarget.dy * dstRect.height),
+          )
+        : Offset(
+            dstRect.left + (0.50 * dstRect.width),
+            dstRect.top + (normTarget.dy * dstRect.height),
+          );
 
+    final startPoint = _malaCenterOffset ??
+        Offset(screenSize.width * 0.50, screenSize.height * 0.70);
+
+    // 3. Launch flying "राम" text emerging from mala center!
+    // The image node reveals ONLY when "राम" arrives at its destination!
+    _activeFlights.add(
+      CinematicRamFlight(
+        step: _count,
+        node: newlyNode,
+        startPoint: startPoint,
+        targetPoint: targetPoint,
+        duration: 1.80, // Calibrated meditative flight; reveals image upon arrival
+        onArrived: () {
+          if (!mounted) return;
+          if (!_revealedNodes.any((n) => n.step == newlyNode.step)) {
+            _revealedNodes.add(newlyNode);
+            _revealedNodes.sort((a, b) => a.step.compareTo(b.step));
+          }
+          _newestNode = newlyNode;
+          _shimmerController.forward(from: 0.0);
+          _persistProgress();
+        },
+      ),
+    );
+
+    // 4. Update state: count increments immediately, mala pulses, flight starts
+    // (Image reveal is synchronized to "राम" arriving at its target spot)
     setState(() {
+      _count = nextCount;
       _chantTrigger++;
       _isFlightAnimating = true;
-      _hasArrivedAtTarget = false;
       _isPaused = false;
     });
 
     HapticFeedback.lightImpact();
 
-    // Play chant audio (if sound enabled)
-    if (_isSoundEnabled) {
-      _audioPlayer.stop().catchError((_) {});
-      _audioPlayer.play(AssetSource('audio/ram_chant.mp3')).catchError((_) {});
+    // 5. Play pure "राम" chant audio on EVERY tap without cut-off!
+    _playRamVoiceChant();
+
+    // 6. Check for 108 Jap Completion Sequence
+    if (_count >= _target) {
+      _handle108CompletionSequence();
+    } else {
+      _persistProgress();
     }
-
-    // Start single "राम" divine trajectory animation (5280ms - exact voice duration)
-    _flightController.forward(from: 0.0);
-  }
-
-  /// Triggered at t = 0.72 (~3.8s, matching "जय जय राम") when single "राम" arrives at target location
-  void _handleRamArrivedAtTarget() {
-    if (!mounted) return;
-
-    final newlyNode = RamPathCalculator.getNodeForStep(_currentFlightStep);
-
-    setState(() {
-      _count = math.min(_target, _count + 1);
-      _newestNode = newlyNode;
-      _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count);
-    });
-
-    _shimmerController.forward(from: 0.0);
-    _persistProgress();
   }
 
   /// Exact 108th Jap Completion Sequence (Mandatory Section 7 of Prompt)
@@ -307,6 +336,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
 
     // Stage 1 & 2: Divine golden light bloom & sacred temple bell
     _completionController.forward(from: 0.0);
+    _stopAllAudio();
     if (_isSoundEnabled) {
       _audioPlayer.play(AssetSource('audio/temple_bell.wav')).catchError((_) {});
     }
@@ -409,7 +439,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
   }
 
   void _performReset() {
-    _audioPlayer.stop().catchError((_) {});
+    _stopAllAudio();
     setState(() {
       _count = 0;
       _completedMalas = 0;
@@ -418,11 +448,10 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
       _revealedNodes = [];
       _newestNode = null;
       _isFlightAnimating = false;
-      _hasArrivedAtTarget = false;
       _isPaused = false;
     });
 
-    _flightController.reset();
+    _activeFlights.clear();
     _shimmerController.reset();
     _completionController.reset();
     _uiFadeController.reset();
@@ -436,7 +465,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
       _isSoundEnabled = !_isSoundEnabled;
     });
     if (!_isSoundEnabled) {
-      _audioPlayer.stop().catchError((_) {});
+      _stopAllAudio();
     }
     _saveSoundPreference(_isSoundEnabled);
   }
@@ -450,8 +479,6 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
   @override
   Widget build(BuildContext context) {
     final Size screenSize = MediaQuery.of(context).size;
-    final defaultMalaCenter = Offset(screenSize.width * 0.50, screenSize.height * 0.70);
-    final activeMalaCenter = _malaCenterOffset ?? defaultMalaCenter;
 
     return PopScope(
       canPop: true,
@@ -465,17 +492,18 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
           children: [
             // ── LAYER A: Full-Screen Progressive Feathered Divine Reveal ────
             AnimatedBuilder(
-              animation: Listenable.merge([_shimmerController, _completionController]),
+              animation: Listenable.merge([_shimmerController, _completionController, _uiFadeController]),
               builder: (context, _) {
+                final bool isFullCompleted = _isCompleted || _count >= _target;
                 if (_selectedEffect == JapRevealEffectType.divineVerticalReveal) {
                   // MANDATORY PRESERVATION: Exact existing approved widget
                   return ProgressiveRamRevealWidget(
                     revealedNodes: _revealedNodes,
                     newestNode: _newestNode,
                     shimmerProgress: _shimmerController.value,
-                    isCompleted: _isCompleted && _uiFadeController.value >= 0.95,
+                    isCompleted: isFullCompleted,
                     completionGlowProgress: _completionController.value,
-                    imageAsset: 'assets/images/lord_shri_ram_darshan.png',
+                    imageAsset: _effectiveImageAsset,
                   );
                 } else {
                   // 4 New Selectable Animation Effects
@@ -484,9 +512,9 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
                     revealedNodes: _revealedNodes,
                     newestNode: _newestNode,
                     shimmerProgress: _shimmerController.value,
-                    isCompleted: _isCompleted && _uiFadeController.value >= 0.95,
+                    isCompleted: isFullCompleted,
                     completionGlowProgress: _completionController.value,
-                    imageAsset: 'assets/images/lord_shri_ram_darshan.png',
+                    imageAsset: _effectiveImageAsset,
                   );
                 }
               },
@@ -592,39 +620,20 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
               ),
             ),
 
-            // ── LAYER C: Single Glowing Devanagari "राम" Text Flight ───────
-            // CRITICAL: Visual-only flying flight. Never intercepts user touches.
-            if (_isFlightAnimating)
+            // ── LAYER C: Single/Multiple Glowing Devanagari Text Flight ───────
+            // Visual-only flying flight. Never intercepts user touches.
+            if (_activeFlights.isNotEmpty)
               IgnorePointer(
-                child: AnimatedBuilder(
-                  animation: _flightController,
-                  builder: (context, _) {
-                    final CustomPainter flightPainter;
-                    if (_selectedEffect == JapRevealEffectType.divineVerticalReveal) {
-                      // MANDATORY PRESERVATION: Exact existing approved flight painter & curved trajectory
-                      flightPainter = SingleRamFlightPainter(
-                        progress: _flightController.value,
-                        malaCenter: activeMalaCenter,
-                        targetPoint: _currentTargetPoint,
-                        screenSize: screenSize,
-                      );
-                    } else {
-                      // Section 3A: Straight vertical slow trajectory for the 4 new effects
-                      flightPainter = SharedVerticalRamFlightPainter(
-                        progress: _flightController.value,
-                        startPoint: activeMalaCenter,
-                        targetPoint: _currentTargetPoint,
-                        screenSize: screenSize,
-                      );
-                    }
-
-                    return RepaintBoundary(
-                      child: CustomPaint(
-                        painter: flightPainter,
-                        size: Size.infinite,
-                      ),
-                    );
-                  },
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: MultiRamFlightPainter(
+                      flights: _activeFlights,
+                      effectType: _selectedEffect,
+                      screenSize: screenSize,
+                      chantText: _theme.mantraText,
+                    ),
+                    size: Size.infinite,
+                  ),
                 ),
               ),
 
@@ -639,8 +648,10 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
                     child: IgnorePointer(
                       ignoring: _uiFadeController.value < 0.85,
                       child: CinematicDarshanView(
-                        imageAsset: 'assets/images/lord_shri_ram_darshan.png',
-                        videoAsset: 'assets/videos/lord_shri_ram_live_darshan.mp4',
+                        imageAsset: _effectiveImageAsset,
+                        videoAsset: widget.entry.name.toLowerCase().contains('ram')
+                            ? 'assets/videos/lord_shri_ram_live_darshan.mp4'
+                            : null,
                         isSoundEnabled: _isSoundEnabled,
                         onExitRequested: () {
                           Navigator.maybePop(context, _totalProgress);
@@ -730,22 +741,21 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
           const SizedBox(height: 3),
 
           // Devotional chant subtitle
-          if (widget.entry.shlokText.isNotEmpty)
-            Text(
-              widget.entry.shlokText,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.outfit(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFFFFE082),
-                letterSpacing: 0.4,
-                shadows: const [
-                  Shadow(color: Colors.black, blurRadius: 6.0, offset: Offset(0, 1)),
-                ],
-              ),
+          Text(
+            _theme.mantraText,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.notoSerifDevanagari(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFFFFE082),
+              letterSpacing: 1.2,
+              shadows: const [
+                Shadow(color: Colors.black, blurRadius: 6.0, offset: Offset(0, 1)),
+              ],
             ),
+          ),
         ],
       ),
     );
@@ -784,9 +794,9 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
             ),
           ),
 
-          // Glowing Devanagari Title "राम"
+          // Glowing Devanagari Title
           Text(
-            'राम',
+            _theme.mantraText,
             style: GoogleFonts.notoSerifDevanagari(
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -797,10 +807,226 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
             ),
           ),
 
-          // Right Actions: [Effect Selector] & [Favorite Heart]
+          // Right Actions: [Dhup Mode] & [Effect Selector] & [Favorite Heart]
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Dedicated Dhup Chanting Mode Switcher
+              GestureDetector(
+                onTap: () async {
+                  if (_isFlightAnimating) return;
+                  _persistProgress();
+                  final updated = await Navigator.push<int>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DhupJapScreen(entry: widget.entry),
+                    ),
+                  );
+                  if (updated != null && mounted) {
+                    setState(() {
+                      _count = updated % _target;
+                      _completedMalas = updated ~/ _target;
+                      _isCompleted = _count >= _target;
+                      if (_count > 0 && !_isCompleted) {
+                        _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count);
+                        _newestNode = _revealedNodes.isNotEmpty ? _revealedNodes.last : null;
+                      } else if (_count == 0) {
+                        _revealedNodes = [];
+                        _newestNode = null;
+                      }
+                    });
+                  }
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E140F),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFFFFD54F),
+                      width: 1.2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFF9900).withValues(alpha: 0.35),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.waves_rounded,
+                      color: Color(0xFFFFD54F),
+                      size: 19,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Dedicated Jal Darshan Mode Switcher
+              GestureDetector(
+                onTap: () async {
+                  if (_isFlightAnimating) return;
+                  _persistProgress();
+                  final updated = await Navigator.push<int>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => JalJapScreen(entry: widget.entry),
+                    ),
+                  );
+                  if (updated != null && mounted) {
+                    setState(() {
+                      _count = updated % _target;
+                      _completedMalas = updated ~/ _target;
+                      _isCompleted = _count >= _target;
+                      if (_count > 0 && !_isCompleted) {
+                        _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count);
+                        _newestNode = _revealedNodes.isNotEmpty ? _revealedNodes.last : null;
+                      } else if (_count == 0) {
+                        _revealedNodes = [];
+                        _newestNode = null;
+                      }
+                    });
+                  }
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0A1C24),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFF80DEEA),
+                      width: 1.2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF00ACC1).withValues(alpha: 0.35),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.water_drop_rounded,
+                      color: Color(0xFF80DEEA),
+                      size: 19,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Dedicated Prakash Mandal Mode Switcher
+              GestureDetector(
+                onTap: () async {
+                  if (_isFlightAnimating) return;
+                  _persistProgress();
+                  final updated = await Navigator.push<int>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PrakashJapScreen(entry: widget.entry),
+                    ),
+                  );
+                  if (updated != null && mounted) {
+                    setState(() {
+                      _count = updated % _target;
+                      _completedMalas = updated ~/ _target;
+                      _isCompleted = _count >= _target;
+                      if (_count > 0 && !_isCompleted) {
+                        _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count);
+                        _newestNode = _revealedNodes.isNotEmpty ? _revealedNodes.last : null;
+                      } else if (_count == 0) {
+                        _revealedNodes = [];
+                        _newestNode = null;
+                      }
+                    });
+                  }
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E130B),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFFFFD54F),
+                      width: 1.2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFF9900).withValues(alpha: 0.35),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.light_mode_rounded,
+                      color: Color(0xFFFFD54F),
+                      size: 19,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Dedicated Pushp Varsha Mode Switcher
+              GestureDetector(
+                onTap: () async {
+                  if (_isFlightAnimating) return;
+                  _persistProgress();
+                  final updated = await Navigator.push<int>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PushpVarshaJapScreen(entry: widget.entry),
+                    ),
+                  );
+                  if (updated != null && mounted) {
+                    setState(() {
+                      _count = updated % _target;
+                      _completedMalas = updated ~/ _target;
+                      _isCompleted = _count >= _target;
+                      if (_count > 0 && !_isCompleted) {
+                        _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count);
+                        _newestNode = _revealedNodes.isNotEmpty ? _revealedNodes.last : null;
+                      } else if (_count == 0) {
+                        _revealedNodes = [];
+                        _newestNode = null;
+                      }
+                    });
+                  }
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF261217),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFFFF80AB),
+                      width: 1.2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFE91E63).withValues(alpha: 0.35),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.spa_rounded,
+                      color: Color(0xFFFF80AB),
+                      size: 19,
+                    ),
+                  ),
+                ),
+              ),
+
               // Animation Effect Selector Button
               GestureDetector(
                 onTap: () {
@@ -864,3 +1090,50 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
     );
   }
 }
+
+/// CustomPainter that renders multiple concurrent flying "राम" offerings,
+/// ensuring every single tap produces an advancing text without blocking.
+class MultiRamFlightPainter extends CustomPainter {
+  final List<CinematicRamFlight> flights;
+  final JapRevealEffectType effectType;
+  final Size screenSize;
+  final String chantText;
+
+  MultiRamFlightPainter({
+    required this.flights,
+    required this.effectType,
+    required this.screenSize,
+    this.chantText = 'राम',
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (flights.isEmpty) return;
+    for (final flight in flights) {
+      if (flight.progress <= 0.0 || flight.progress >= 1.0) continue;
+      if (effectType == JapRevealEffectType.divineVerticalReveal) {
+        final painter = SingleRamFlightPainter(
+          progress: flight.progress,
+          malaCenter: flight.startPoint,
+          targetPoint: flight.targetPoint,
+          screenSize: screenSize,
+          chantText: chantText,
+        );
+        painter.paint(canvas, size);
+      } else {
+        final painter = SharedVerticalRamFlightPainter(
+          progress: flight.progress,
+          startPoint: flight.startPoint,
+          targetPoint: flight.targetPoint,
+          screenSize: screenSize,
+          chantText: chantText,
+        );
+        painter.paint(canvas, size);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant MultiRamFlightPainter oldDelegate) => true;
+}
+

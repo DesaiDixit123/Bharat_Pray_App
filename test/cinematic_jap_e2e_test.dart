@@ -40,24 +40,22 @@ void main() {
     expect(find.byType(CinematicChantingControls), findsOneWidget);
     expect(find.text('0'), findsOneWidget);
     expect(find.text('/ 108'), findsOneWidget);
-    expect(find.text('श्री राम जय राम जय जय राम'), findsOneWidget);
+    expect(find.text('राम'), findsWidgets);
     expect(find.byType(CinematicDarshanView), findsNothing);
 
-    // 2. Tap Chant Action (Single "राम" emerges from mala center)
+    // 2. Tap Chant Action: Every tap emerges "राम" and advances count immediately!
     await tester.tap(find.byIcon(Icons.play_arrow_rounded));
-    await tester.pump(); // Start flight
-
-    // Play button stays active (showing Pause icon) while voice is playing!
-    expect(find.byIcon(Icons.pause_rounded), findsOneWidget);
-
-    // Advance flight past arrival threshold (0.72 of 5280ms = 3801ms)
-    await tester.pump(const Duration(milliseconds: 3900));
+    await tester.pump();
     expect(find.text('1'), findsOneWidget);
 
-    // Complete flight animation (voice duration ends: play button turns OFF and waits for next manual tap)
-    await tester.pump(const Duration(milliseconds: 1400));
+    // Second tap immediately advances to 2 and spawns next "राम" flight!
+    await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+    await tester.pump();
+    expect(find.text('2'), findsOneWidget);
+
+    // Advance flight animation frames (3300ms for slow graceful flight)
+    await tester.pump(const Duration(milliseconds: 3300));
     expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.pause_rounded), findsNothing);
 
     // 3. Test Reset
     await tester.tap(find.text('Reset'));
@@ -95,16 +93,10 @@ void main() {
     // Tap the final 108th Jap
     await tester.tap(find.byIcon(Icons.play_arrow_rounded));
     await tester.pump();
-
-    // Advance flight past arrival threshold (3900ms) -> count becomes 108
-    await tester.pump(const Duration(milliseconds: 3900));
     expect(find.text('108'), findsOneWidget);
 
-    // Complete flight animation (1400ms) -> triggers completion sequence
-    await tester.pump(const Duration(milliseconds: 1400));
-
-    // Advance UI fade animation (1000ms) -> Mala, counter, controls completely removed!
-    await tester.pump(const Duration(milliseconds: 1000));
+    // Advance UI fade animation (1200ms) -> Mala, counter, controls completely removed!
+    await tester.pump(const Duration(milliseconds: 1200));
     await tester.pump(const Duration(milliseconds: 300));
 
     // FINAL SCREEN RULE VERIFICATION:

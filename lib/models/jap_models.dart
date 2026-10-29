@@ -251,9 +251,11 @@ class JapConfig {
   static String defaultDeityImage(String name) {
     final n = name.toLowerCase();
     if (n.contains('shiv') || n.contains('mahadev') || n.contains('shankar') || n.contains('bhole')) {
-      return 'assets/images/deity_shiva.png';
-    } else if (n.contains('krishna') || n.contains('radha') || n.contains('kanha')) {
-      return 'assets/images/deity_krishna.png';
+      return 'assets/images/lord_shiva_darshan.jpg';
+    } else if (n.contains('radha') && !n.contains('krishna')) {
+      return 'assets/images/shri_radha_darshan.jpg';
+    } else if (n.contains('krishna') || n.contains('kanha')) {
+      return 'assets/images/shri_krishna_darshan.jpg';
     } else if (n.contains('ganesh') || n.contains('ganpati') || n.contains('ganapati')) {
       return 'assets/images/deity_ganesha.png';
     } else if (n.contains('hanuman') || n.contains('bajrang') || n.contains('maruti')) {

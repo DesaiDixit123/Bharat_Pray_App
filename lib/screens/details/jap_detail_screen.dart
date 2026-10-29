@@ -22,6 +22,10 @@ import '../../widgets/jap/jap_effects_gallery_sheet.dart';
 import '../../widgets/jap/radial_mantra_burst_overlay.dart';
 import 'darshan_runtime_screen.dart';
 import 'cinematic_jap_screen.dart';
+import 'dhup_jap_screen.dart';
+import 'jal_jap_screen.dart';
+import 'prakash_jap_screen.dart';
+import 'pushp_varsha_jap_screen.dart';
 
 /// Full-Screen Devotional Jap Experience 2.0 (Master Implementation).
 /// Includes:
@@ -1346,6 +1350,194 @@ class _JapDetailScreenState extends State<JapDetailScreen>
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
                             color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () async {
+                    _dhunService.stop();
+                    final updated = await Navigator.push<int>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => DhupJapScreen(entry: widget.entry),
+                      ),
+                    );
+                    if (updated != null && mounted) {
+                      setState(() {
+                        _count = updated % _target;
+                        _completedMalas = updated ~/ _target;
+                      });
+                    }
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E140F),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFFFB300), width: 1.2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFF9900).withValues(alpha: 0.35),
+                          blurRadius: 6,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.waves_rounded, size: 14, color: Color(0xFFFFD54F)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Dhup Darshan',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: const Color(0xFFFFD54F),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () async {
+                    _dhunService.stop();
+                    final updated = await Navigator.push<int>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => JalJapScreen(entry: widget.entry),
+                      ),
+                    );
+                    if (updated != null && mounted) {
+                      setState(() {
+                        _count = updated % _target;
+                        _completedMalas = updated ~/ _target;
+                      });
+                    }
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0A1C24),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF80DEEA), width: 1.2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF00ACC1).withValues(alpha: 0.35),
+                          blurRadius: 6,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.water_drop_rounded, size: 14, color: Color(0xFF80DEEA)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Jal Darshan 🌊',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: const Color(0xFF80DEEA),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () async {
+                    _dhunService.stop();
+                    final updated = await Navigator.push<int>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => PrakashJapScreen(entry: widget.entry),
+                      ),
+                    );
+                    if (updated != null && mounted) {
+                      setState(() {
+                        _count = updated % _target;
+                        _completedMalas = updated ~/ _target;
+                      });
+                    }
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E130B),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFFFD54F), width: 1.2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFF9900).withValues(alpha: 0.35),
+                          blurRadius: 6,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.auto_awesome_rounded, size: 14, color: Color(0xFFFFD54F)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Prakash Mandal ✨',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: const Color(0xFFFFD54F),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () async {
+                    _dhunService.stop();
+                    final updated = await Navigator.push<int>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => PushpVarshaJapScreen(entry: widget.entry),
+                      ),
+                    );
+                    if (updated != null && mounted) {
+                      setState(() {
+                        _count = updated % _target;
+                        _completedMalas = updated ~/ _target;
+                      });
+                    }
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF261217),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFFF80AB), width: 1.2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFE91E63).withValues(alpha: 0.35),
+                          blurRadius: 6,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.spa_rounded, size: 14, color: Color(0xFFFF80AB)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Pushp Varsha 🌸',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: const Color(0xFFFF80AB),
                           ),
                         ),
                       ],

@@ -102,12 +102,8 @@ class CinematicChantingControls extends StatelessWidget {
                   width: 1.8,
                 ),
               ),
-              child: Center(
-                child: isPaused
-                    ? const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 36)
-                    : isChantingActive
-                        ? const Icon(Icons.pause_rounded, color: Colors.white, size: 32)
-                        : const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 36),
+              child: const Center(
+                child: Icon(Icons.play_arrow_rounded, color: Colors.white, size: 36),
               ),
             ),
           ),

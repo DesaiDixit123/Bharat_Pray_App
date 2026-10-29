@@ -31,14 +31,14 @@ class JapThemeConfig {
     required this.blessingSubtitle,
   });
 
-  /// 1. Shri Radha — “श्री राधा” (Primary/Critical Theme)
+  /// 1. Shri Radha — “राधे” (Primary/Critical Theme)
   static const JapThemeConfig radha = JapThemeConfig(
     id: 'shri_radha',
     name: 'Shri Radha',
     deityName: 'Radha',
-    mantraText: 'श्री राधा',
+    mantraText: 'राधे',
     audioAsset: 'assets/audio/radha_chant.mp3',
-    imageAsset: 'assets/images/deity_krishna.png',
+    imageAsset: 'assets/images/shri_radha_darshan.jpg',
     defaultBeadStyle: MalaBeadStyle.goldenBeads,
     activeColor: Color(0xFFFF80AB),
     glowColor: Color(0xFFFF4081),
@@ -46,14 +46,29 @@ class JapThemeConfig {
     blessingSubtitle: 'May Shri Radha Rani shower your soul with eternal devotion, unconditional love, and supreme divine grace.',
   );
 
-  /// 2. Radha Krishna — “राधे कृष्ण”
+  /// 2. Shri Krishna — “कृष्ण”
+  static const JapThemeConfig krishna = JapThemeConfig(
+    id: 'krishna',
+    name: 'Shri Krishna',
+    deityName: 'Krishna',
+    mantraText: 'कृष्ण',
+    audioAsset: 'assets/audio/krishna_chant.mp3',
+    imageAsset: 'assets/images/shri_krishna_darshan.jpg',
+    defaultBeadStyle: MalaBeadStyle.sandalwood,
+    activeColor: Color(0xFF00E5FF),
+    glowColor: Color(0xFFFFD54F),
+    blessingTitle: '🙏 हरे कृष्ण 🙏',
+    blessingSubtitle: 'May Lord Shri Krishna illuminate your spiritual path with divine love, wisdom, and eternal joy.',
+  );
+
+  /// 3. Radha Krishna — “राधे कृष्ण”
   static const JapThemeConfig radhaKrishna = JapThemeConfig(
     id: 'radha_krishna',
     name: 'Radha Krishna',
     deityName: 'Krishna',
     mantraText: 'राधे कृष्ण',
     audioAsset: 'assets/audio/radhe_krishna_chant.mp3',
-    imageAsset: 'assets/images/deity_krishna.png',
+    imageAsset: 'assets/images/shri_krishna_darshan.jpg',
     defaultBeadStyle: MalaBeadStyle.goldenBeads,
     activeColor: Color(0xFF00E5FF),
     glowColor: Color(0xFF00B0FF),
@@ -61,14 +76,14 @@ class JapThemeConfig {
     blessingSubtitle: 'May the divine couple Radha and Krishna fill your home with infinite joy, melody, and harmony.',
   );
 
-  /// 3. Lord Shiva — “ॐ नमः शिवाय”
+  /// 4. Lord Shiva — “शिव”
   static const JapThemeConfig shiva = JapThemeConfig(
     id: 'shiva',
     name: 'Lord Shiva',
     deityName: 'Shiva',
-    mantraText: 'ॐ नमः शिवाय',
+    mantraText: 'शिव',
     audioAsset: 'assets/audio/shiva_chant.mp3',
-    imageAsset: 'assets/images/deity_shiva.png',
+    imageAsset: 'assets/images/lord_shiva_darshan.jpg',
     defaultBeadStyle: MalaBeadStyle.rudraksha,
     activeColor: Color(0xFF81C784),
     glowColor: Color(0xFF64B5F6),
@@ -76,12 +91,12 @@ class JapThemeConfig {
     blessingSubtitle: 'May Mahadev grant you stillness of mind, detachment, deep peace, and divine liberation.',
   );
 
-  /// 4. Lord Ram — “श्री राम जय राम”
+  /// 4. Lord Ram — “राम”
   static const JapThemeConfig ram = JapThemeConfig(
     id: 'ram',
     name: 'Lord Ram',
     deityName: 'Ram',
-    mantraText: 'श्री राम जय राम जय जय राम',
+    mantraText: 'राम',
     audioAsset: 'assets/audio/ram_chant.mp3',
     imageAsset: 'assets/images/lord_shri_ram_darshan.png',
     defaultBeadStyle: MalaBeadStyle.rudraksha,
@@ -137,13 +152,14 @@ class JapThemeConfig {
   );
 
   static const List<JapThemeConfig> allThemes = [
-    radha,
-    radhaKrishna,
-    shiva,
     ram,
+    radha,
+    krishna,
+    shiva,
     hanuman,
-    ambe,
     ganesha,
+    ambe,
+    radhaKrishna,
   ];
 
   static JapThemeConfig resolveFromEntry({
@@ -156,9 +172,11 @@ class JapThemeConfig {
 
     if (lowerName.contains('radha') && !lowerName.contains('krishna')) {
       return radha;
+    } else if (lowerName.contains('krishna') && !lowerName.contains('radha')) {
+      return krishna;
     } else if (lowerName.contains('krishna') || lowerName.contains('radha') || lowerShlok.contains('कृष्ण')) {
       return radhaKrishna;
-    } else if (lowerName.contains('shiv') || lowerName.contains('mahadev') || lowerName.contains('bhole') || lowerShlok.contains('शिवाय')) {
+    } else if (lowerName.contains('shiv') || lowerName.contains('mahadev') || lowerName.contains('bhole') || lowerShlok.contains('शिवाय') || lowerShlok.contains('शिव')) {
       return shiva;
     } else if (lowerName.contains('ram') || lowerName.contains('raghav') || lowerShlok.contains('राम')) {
       return ram;

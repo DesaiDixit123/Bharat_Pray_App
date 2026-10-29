@@ -16,8 +16,16 @@ import '../../models/jap_theme_config.dart';
 import '../../widgets/cinematic_jap/effects/jap_effect_selector_sheet.dart';
 import 'jap_detail_screen.dart';
 import 'cinematic_jap_screen.dart';
+import 'dhup_jap_screen.dart';
+import 'jal_jap_screen.dart';
+import 'prakash_jap_screen.dart';
+import 'pushp_varsha_jap_screen.dart';
 export 'jap_detail_screen.dart';
 export 'cinematic_jap_screen.dart';
+export 'dhup_jap_screen.dart';
+export 'jal_jap_screen.dart';
+export 'prakash_jap_screen.dart';
+export 'pushp_varsha_jap_screen.dart';
 
 // ─────────────────────────────────────────────
 // Main Jap List Screen
@@ -96,29 +104,34 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
     // 3. Load user's custom Japs from backend and offline cache
     List<JapConfig> customJaps = [];
     try {
+      // Clean up any stale custom test japs like 'dixit'
+      final localCustomsRaw = await JapOfflineRepository.getCustomJaps();
+      for (final raw in localCustomsRaw) {
+        final localName = (raw['name'] ?? '').toString().toLowerCase();
+        final localId = (raw['id'] ?? raw['_id'] ?? '').toString();
+        if (localName == 'dixit' || localName.contains('bike') || localName.contains('shivji')) {
+          await JapOfflineRepository.removeCustomJap(localId);
+        }
+      }
+
       if (_token.isNotEmpty) {
         final serverCustoms = await ApiService.getMyCustomJaps(_token);
         final serverIds = <String>{};
         for (final sc in serverCustoms) {
           final cfg = JapConfig.fromJson(sc);
-          customJaps.add(cfg);
-          serverIds.add(cfg.id);
-        }
-
-        // If a custom jap was deleted on server (by Admin or user), prune it locally so it disappears from user app too
-        final localCustomsRaw = await JapOfflineRepository.getCustomJaps();
-        for (final raw in localCustomsRaw) {
-          final localId = (raw['id'] ?? raw['_id'] ?? '').toString();
-          if (localId.length == 24 && !serverIds.contains(localId)) {
-            await JapOfflineRepository.removeCustomJap(localId);
+          if (cfg.name.toLowerCase() != 'dixit' && !cfg.name.toLowerCase().contains('bike')) {
+            customJaps.add(cfg);
+            serverIds.add(cfg.id);
           }
         }
       }
       final localCustoms = await JapOfflineRepository.getCustomJaps();
       for (final raw in localCustoms) {
         final cfg = JapConfig.fromJson(raw);
-        if (!customJaps.any((c) => c.id == cfg.id)) {
-          customJaps.add(cfg);
+        if (cfg.name.toLowerCase() != 'dixit' && !cfg.name.toLowerCase().contains('bike')) {
+          if (!customJaps.any((c) => c.id == cfg.id)) {
+            customJaps.add(cfg);
+          }
         }
       }
     } catch (e) {
@@ -130,20 +143,83 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       ...remoteJaps,
       ...customJaps.where((c) => !remoteJaps.any((r) => r.id == c.id)),
     ];
+
+    // Filter out test entries (dixit, shivji's jap, bike)
+    combined.removeWhere((j) {
+      final n = j.name.toLowerCase();
+      return n == 'dixit' ||
+          n.contains('bike') ||
+          n == "shivji's jap" ||
+          j.id == '6ad31b0a015c2a40cb3c584a' ||
+          j.id == '6a56119e039eb816c106f3b0' ||
+          j.id == '6aca2e1cfd3149164af9088f';
+    });
+
     if (combined.isEmpty) {
       combined = _getDefaultPresets();
     } else {
-      final hasRadha = combined.any((j) => j.name.toLowerCase().contains('radha'));
-      if (!hasRadha) {
-        combined.insert(0, _createRadhaPreset());
-      }
       final hasRam = combined.any((j) => j.name.toLowerCase().contains('ram'));
       if (!hasRam) {
         combined.insert(0, _createRamPreset());
       }
+      for (final p in _getDefaultPresets()) {
+        final exists = combined.any((j) =>
+            j.id == p.id ||
+            j.name.toLowerCase() == p.name.toLowerCase());
+        if (!exists) {
+          combined.add(p);
+        }
+      }
     }
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final hasResetRamV6 = prefs.getBool('has_reset_ram_v6') ?? false;
+      if (!hasResetRamV6) {
+        for (final jap in combined) {
+          if (jap.name.toLowerCase().contains('ram') || jap.id.toLowerCase().contains('ram')) {
+            jap.progress = 0;
+            await JapOfflineRepository.saveProgress(
+              japId: jap.id,
+              count: 0,
+              completedMalas: 0,
+              targetCount: jap.targetCount,
+            );
+            await JapOfflineRepository.saveProgress(
+              japId: '${jap.id}_jal',
+              count: 0,
+              completedMalas: 0,
+              targetCount: jap.targetCount,
+            );
+            await JapOfflineRepository.saveProgress(
+              japId: '${jap.id}_dhup',
+              count: 0,
+              completedMalas: 0,
+              targetCount: jap.targetCount,
+            );
+            await JapOfflineRepository.saveProgress(
+              japId: '${jap.id}_prakash',
+              count: 0,
+              completedMalas: 0,
+              targetCount: jap.targetCount,
+            );
+            await JapOfflineRepository.saveProgress(
+              japId: '${jap.id}_pushp',
+              count: 0,
+              completedMalas: 0,
+              targetCount: jap.targetCount,
+            );
+          }
+        }
+        await prefs.setBool('has_reset_ram_v6', true);
+      }
+
       for (final jap in combined) {
+        if (!hasResetRamV6 &&
+            (jap.name.toLowerCase().contains('ram') ||
+                jap.id.toLowerCase().contains('ram'))) {
+          jap.progress = 0;
+          continue;
+        }
         final cached = await JapOfflineRepository.getProgress(
           jap.id,
           defaultTarget: jap.targetCount,
@@ -166,20 +242,6 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
         _isLoading = false;
       });
     }
-  }
-
-  static JapConfig _createRadhaPreset() {
-    return JapConfig(
-      id: JapThemeConfig.radha.id,
-      name: JapThemeConfig.radha.name,
-      thumbnailUrl: JapThemeConfig.radha.imageAsset,
-      darshanImageUrl: JapThemeConfig.radha.imageAsset,
-      shlokText: JapThemeConfig.radha.mantraText,
-      shlokAudioUrl: JapThemeConfig.radha.audioAsset,
-      targetCount: 108,
-      progress: 0,
-      effectPack: EffectPack.resolve(name: 'Shri Radha'),
-    );
   }
 
   static JapConfig _createRamPreset() {
@@ -272,10 +334,22 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
   }
 
   void _openJapDetail(JapConfig entry) async {
-    final bool isRam = entry.name.toLowerCase().contains('ram') ||
-        entry.shlokText.toLowerCase().contains('राम');
+    final bool isCinematic = entry.name.toLowerCase().contains('ram') ||
+        entry.shlokText.toLowerCase().contains('राम') ||
+        entry.name.toLowerCase().contains('radha') ||
+        entry.shlokText.toLowerCase().contains('राधे') ||
+        entry.shlokText.toLowerCase().contains('राधा') ||
+        entry.name.toLowerCase().contains('krishna') ||
+        entry.shlokText.toLowerCase().contains('कृष्ण') ||
+        entry.name.toLowerCase().contains('shiv') ||
+        entry.shlokText.toLowerCase().contains('शिव') ||
+        entry.name.toLowerCase().contains('mahadev');
 
-    final Widget destination = isRam
+    if (entry.progress >= entry.targetCount || entry.progress % entry.targetCount == 0) {
+      entry.progress = 0;
+    }
+
+    final Widget destination = isCinematic
         ? CinematicJapScreen(entry: entry)
         : JapDetailScreen(entry: entry);
 
@@ -740,6 +814,70 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                           return _JapCard(
                             entry: jap,
                             onTap: () => _openJapDetail(jap),
+                            onDhupTap: () async {
+                              final updated = await Navigator.push<int>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => DhupJapScreen(entry: jap),
+                                ),
+                              );
+                              if (updated != null && mounted) {
+                                setState(() => jap.progress = updated);
+                                await JapOfflineRepository.saveProgress(
+                                  japId: jap.id,
+                                  count: updated % jap.targetCount,
+                                  completedMalas: updated ~/ jap.targetCount,
+                                );
+                              }
+                            },
+                            onJalTap: () async {
+                              final updated = await Navigator.push<int>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => JalJapScreen(entry: jap),
+                                ),
+                              );
+                              if (updated != null && mounted) {
+                                setState(() => jap.progress = updated);
+                                await JapOfflineRepository.saveProgress(
+                                  japId: jap.id,
+                                  count: updated % jap.targetCount,
+                                  completedMalas: updated ~/ jap.targetCount,
+                                );
+                              }
+                            },
+                            onPrakashTap: () async {
+                              final updated = await Navigator.push<int>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => PrakashJapScreen(entry: jap),
+                                ),
+                              );
+                              if (updated != null && mounted) {
+                                setState(() => jap.progress = updated);
+                                await JapOfflineRepository.saveProgress(
+                                  japId: jap.id,
+                                  count: updated % jap.targetCount,
+                                  completedMalas: updated ~/ jap.targetCount,
+                                );
+                              }
+                            },
+                            onPushpTap: () async {
+                              final updated = await Navigator.push<int>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => PushpVarshaJapScreen(entry: jap),
+                                ),
+                              );
+                              if (updated != null && mounted) {
+                                setState(() => jap.progress = updated);
+                                await JapOfflineRepository.saveProgress(
+                                  japId: jap.id,
+                                  count: updated % jap.targetCount,
+                                  completedMalas: updated ~/ jap.targetCount,
+                                );
+                              }
+                            },
                           );
                         },
                       ),
@@ -760,14 +898,26 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
 class _JapCard extends StatelessWidget {
   final JapConfig entry;
   final VoidCallback onTap;
+  final VoidCallback? onDhupTap;
+  final VoidCallback? onJalTap;
+  final VoidCallback? onPrakashTap;
+  final VoidCallback? onPushpTap;
 
-  const _JapCard({required this.entry, required this.onTap});
+  const _JapCard({
+    required this.entry,
+    required this.onTap,
+    this.onDhupTap,
+    this.onJalTap,
+    this.onPrakashTap,
+    this.onPushpTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final progress = entry.progress;
     final target = entry.targetCount;
-    final progressRatio = (progress / target).clamp(0.0, 1.0);
+    final currentCount = progress % target;
+    final progressRatio = (currentCount / target).clamp(0.0, 1.0);
 
     return GestureDetector(
       onTap: onTap,
@@ -856,7 +1006,7 @@ class _JapCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '$progress / $target',
+                          '$currentCount / $target',
                           style: GoogleFonts.outfit(
                             fontWeight: FontWeight.bold,
                             fontSize: 11,
@@ -867,90 +1017,243 @@ class _JapCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
 
-                    // Actions: [Effects ✨] (if Ram) & [Chant 📿]
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        if (entry.name.toLowerCase().contains('ram') ||
-                            entry.shlokText.toLowerCase().contains('राम')) ...[
-                          GestureDetector(
-                            onTap: () async {
-                              final currentEffect = await JapEffectSelectorSheet.loadSelectedEffect();
-                              if (!context.mounted) return;
-                              JapEffectSelectorSheet.show(
-                                context,
-                                currentEffect: currentEffect,
-                                onEffectSelected: (newEffect) {},
-                              );
-                            },
-                            child: Container(
-                              margin: const EdgeInsets.only(right: 8),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFF3E0),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: const Color(0xFFFF9900),
-                                  width: 1.0,
+                    // Actions: [Dhup 🪔] & [Effects ✨] (if Ram) & [Chant 📿]
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          if (entry.name.toLowerCase().contains('ram') ||
+                              entry.shlokText.toLowerCase().contains('राम')) ...[
+                            GestureDetector(
+                              onTap: onDhupTap,
+                              child: Container(
+                                margin: const EdgeInsets.only(right: 5),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1E140F),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: const Color(0xFFFFB300),
+                                    width: 1.0,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.waves_rounded,
+                                      size: 12,
+                                      color: Color(0xFFFFD54F),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'Dhup 🪔',
+                                      style: GoogleFonts.outfit(
+                                        color: const Color(0xFFFFD54F),
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.auto_awesome_rounded,
-                                    size: 13,
-                                    color: Color(0xFFFF7700),
+                            ),
+                            GestureDetector(
+                              onTap: onJalTap,
+                              child: Container(
+                                margin: const EdgeInsets.only(right: 5),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0A1C24),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: const Color(0xFF80DEEA),
+                                    width: 1.0,
                                   ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Effects',
-                                    style: GoogleFonts.outfit(
-                                      color: const Color(0xFFFF7700),
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.water_drop_rounded,
+                                      size: 12,
+                                      color: Color(0xFF80DEEA),
                                     ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'Jal Darshan 🌊',
+                                      style: GoogleFonts.outfit(
+                                        color: const Color(0xFF80DEEA),
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: onPrakashTap,
+                              child: Container(
+                                margin: const EdgeInsets.only(right: 5),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1E130B),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: const Color(0xFFFFD54F),
+                                    width: 1.0,
                                   ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.auto_awesome_rounded,
+                                      size: 12,
+                                      color: Color(0xFFFFD54F),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'Prakash ✨',
+                                      style: GoogleFonts.outfit(
+                                        color: const Color(0xFFFFD54F),
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: onPushpTap,
+                              child: Container(
+                                margin: const EdgeInsets.only(right: 5),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF261217),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: const Color(0xFFFF80AB),
+                                    width: 1.0,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.spa_rounded,
+                                      size: 12,
+                                      color: Color(0xFFFF80AB),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'Pushp 🌸',
+                                      style: GoogleFonts.outfit(
+                                        color: const Color(0xFFFF80AB),
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () async {
+                                final currentEffect = await JapEffectSelectorSheet.loadSelectedEffect();
+                                if (!context.mounted) return;
+                                JapEffectSelectorSheet.show(
+                                  context,
+                                  entry: entry,
+                                  currentEffect: currentEffect,
+                                  onEffectSelected: (newEffect) {},
+                                );
+                              },
+                              child: Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFF3E0),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: const Color(0xFFFF9900),
+                                    width: 1.0,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.auto_awesome_rounded,
+                                      size: 12,
+                                      color: Color(0xFFFF7700),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'Effects',
+                                      style: GoogleFonts.outfit(
+                                        color: const Color(0xFFFF7700),
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                          // Chant CTA Button (Always Orange)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 11,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Color(0xFFFF9933),
+                                  Color(0xFFFF6600),
                                 ],
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFFF7700).withValues(alpha: 0.3),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              'Chant 📿',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ),
                         ],
-                        // Chant CTA Button (Always Orange)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [
-                                Color(0xFFFF9933),
-                                Color(0xFFFF6600),
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFFFF7700).withValues(alpha: 0.3),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Text(
-                            'Chant 📿',
-                            style: GoogleFonts.outfit(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ],
                 ),

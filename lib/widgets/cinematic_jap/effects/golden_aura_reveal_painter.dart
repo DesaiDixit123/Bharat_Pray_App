@@ -93,30 +93,13 @@ class GoldenAuraRevealPainter extends CustomPainter {
     // 4. SaveLayer for progressive feathered aperture masking
     canvas.saveLayer(screenRect, Paint());
 
-    // Exact screen coordinate rect for Lord Ram's sacred face
-    final faceRect = Rect.fromLTRB(
-      dstRect.left + (RamPathCalculator.faceBox.left * dstRect.width),
-      dstRect.top + (RamPathCalculator.faceBox.top * dstRect.height),
-      dstRect.left + (RamPathCalculator.faceBox.right * dstRect.width),
-      dstRect.top + (RamPathCalculator.faceBox.bottom * dstRect.height),
-    );
-    final faceRRect = RRect.fromRectAndRadius(faceRect, Radius.circular(faceRect.width * 0.38));
-
-    // Smooth progressive expansion
-    final double expansion = 1.0 + (1.20 * math.pow(progressRatio, 2.0));
+    // Balanced progressive expansion:
+    final double expansion = 1.0 + (2.00 * math.pow(progressRatio, 2.2));
 
     // Concentric expanding golden halo aperture centered on crown/halo
-    final double haloApertureRadius = dstRect.width * 0.55 * math.pow(progressRatio, 1.3);
+    final double haloApertureRadius = dstRect.width * 0.45 * math.pow(progressRatio, 1.35);
 
-    // ── A. Draw Non-Face Mask Blobs with Strict Face Shield ─────────────
-    final faceClipPath = Path()
-      ..addRect(screenRect)
-      ..addRRect(faceRRect);
-    faceClipPath.fillType = PathFillType.evenOdd;
-
-    canvas.save();
-    canvas.clipPath(faceClipPath);
-
+    // ── A. Draw Non-Face Mask Blobs ─────────────────────────────────────
     // Halo radial unmasking ring (centered on halo)
     if (haloApertureRadius > 10.0) {
       _maskBlobPaint.shader = ui.Gradient.radial(
@@ -124,7 +107,7 @@ class GoldenAuraRevealPainter extends CustomPainter {
         haloApertureRadius,
         [
           Colors.white,
-          Colors.white.withValues(alpha: 0.85),
+          Colors.white.withValues(alpha: 0.88),
           Colors.transparent,
         ],
         [0.0, 0.65, 1.0],
@@ -140,7 +123,7 @@ class GoldenAuraRevealPainter extends CustomPainter {
         dstRect.left + (node.u * dstRect.width),
         dstRect.top + (node.v * dstRect.height),
       );
-      final radius = node.radiusNorm * 1.10 * dstRect.width * expansion;
+      final radius = node.radiusNorm * 1.18 * dstRect.width * expansion;
 
       _maskBlobPaint.shader = ui.Gradient.radial(
         center,
@@ -151,11 +134,10 @@ class GoldenAuraRevealPainter extends CustomPainter {
           Colors.white.withValues(alpha: 0.35),
           Colors.transparent,
         ],
-        [0.0, 0.45, 0.75, 1.0],
+        [0.0, 0.50, 0.78, 1.0],
       );
       canvas.drawCircle(center, radius, _maskBlobPaint);
     }
-    canvas.restore(); // Restores clip so face climax can be unmasked
 
     // ── B. Draw Sacred Face Climax Nodes (Japs 103..108) ────────────────
     for (final node in revealedNodes) {
@@ -165,18 +147,18 @@ class GoldenAuraRevealPainter extends CustomPainter {
         dstRect.left + (node.u * dstRect.width),
         dstRect.top + (node.v * dstRect.height),
       );
-      final radius = node.radiusNorm * dstRect.width;
+      final radius = node.radiusNorm * 1.18 * dstRect.width;
 
       _maskBlobPaint.shader = ui.Gradient.radial(
         center,
         radius,
         [
           Colors.white,
-          Colors.white.withValues(alpha: 0.95),
-          Colors.white.withValues(alpha: 0.40),
+          Colors.white.withValues(alpha: 0.94),
+          Colors.white.withValues(alpha: 0.42),
           Colors.transparent,
         ],
-        [0.0, 0.50, 0.80, 1.0],
+        [0.0, 0.58, 0.82, 1.0],
       );
       canvas.drawCircle(center, radius, _maskBlobPaint);
     }
@@ -201,7 +183,7 @@ class GoldenAuraRevealPainter extends CustomPainter {
         dstRect.top + (newestNode!.v * dstRect.height),
       );
       final double nodeExp = newestNode!.step < 102 ? expansion : 1.0;
-      final radius = newestNode!.radiusNorm * 1.10 * dstRect.width * nodeExp * 0.90;
+      final radius = newestNode!.radiusNorm * 1.18 * dstRect.width * nodeExp * 0.88;
 
       _shimmerPaint.color = const Color(0xFFFFD700).withValues(alpha: shimmerAlpha);
       _shimmerPaint.maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.5);
