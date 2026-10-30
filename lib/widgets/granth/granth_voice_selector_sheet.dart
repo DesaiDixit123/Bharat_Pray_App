@@ -37,15 +37,10 @@ class GranthVoiceSelectorSheet extends StatefulWidget {
       _GranthVoiceSelectorSheetState();
 }
 
-class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
-    with SingleTickerProviderStateMixin {
+class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
   final TtsService _ttsService = TtsService();
   final UserVerseRecordingService _recordingService =
       UserVerseRecordingService();
-
-  late TabController _tabController;
-  final List<String> _languages = ['Gujarati', 'Hindi', 'Sanskrit', 'English'];
-  final List<String> _tabLabels = ['ગુજરાતી', 'हिन्दी', 'संस्कृत', 'English'];
 
   List<TtsVoice> _allVoices = [];
   bool _isLoading = true;
@@ -59,25 +54,6 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
   @override
   void initState() {
     super.initState();
-    int initialIdx = 0;
-    if (widget.initialLanguage != null) {
-      final lang = widget.initialLanguage!.toLowerCase();
-      if (lang.contains('gujarat')) {
-        initialIdx = 0;
-      } else if (lang.contains('hindi')) {
-        initialIdx = 1;
-      } else if (lang.contains('sanskrit')) {
-        initialIdx = 2;
-      } else if (lang.contains('english')) {
-        initialIdx = 3;
-      }
-    }
-
-    _tabController = TabController(
-      length: _languages.length,
-      vsync: this,
-      initialIndex: initialIdx,
-    );
 
     _previewSub = _ttsService.previewStateStream.listen((isPlaying) {
       if (mounted) {
@@ -94,7 +70,6 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
   void dispose() {
     _previewSub?.cancel();
     _ttsService.stopPreview();
-    _tabController.dispose();
     super.dispose();
   }
 
@@ -125,14 +100,6 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
         });
       }
     }
-  }
-
-  void _onSelectVoice(String langCategory, String voiceId) {
-    HapticFeedback.selectionClick();
-    final selectedVoice = _allVoices.firstWhere((voice) => voice.id == voiceId);
-    setState(() {
-      _ttsService.applyGranthVoiceSelection(_preferences, selectedVoice);
-    });
   }
 
   Future<void> _saveAndClose() async {
@@ -303,377 +270,6 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
     );
   }
 
-  /*
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetCtx) {
-        return StatefulBuilder(
-          builder: (ctx, setSheetState) {
-            final bottomPad = MediaQuery.of(ctx).viewInsets.bottom;
-            final minStr = (recordSecs ~/ 60).toString().padLeft(2, '0');
-            final secStr = (recordSecs % 60).toString().padLeft(2, '0');
-
-            return Container(
-              margin: EdgeInsets.only(bottom: bottomPad),
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-              decoration: const BoxDecoration(
-                color: Color(0xFFFFFDF8),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 44,
-                        height: 4,
-                        margin: const EdgeInsets.only(bottom: 14),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE2D6C3),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFEF3C7),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.mic_rounded,
-                            color: Color(0xFFD97706),
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'તમારો પોતાનો અવાજ ઉમેરો',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: const Color(0xFF3E1F07),
-                                ),
-                              ),
-                              Text(
-                                'Add & Apply Your Personal Voice for Granth',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 12,
-                                  color: const Color(0xFF8C7355),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () {
-                            recTimer?.cancel();
-                            Navigator.pop(sheetCtx);
-                          },
-                          icon: const Icon(Icons.close_rounded, color: Color(0xFF8C7355)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    Text(
-                      '૧. તમારા અવાજનું નામ (Voice Name):',
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF5A442E),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: nameCtrl,
-                      style: GoogleFonts.outfit(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF3E1F07),
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'દા.ત. મારો અવાજ / My Voice',
-                        filled: true,
-                        fillColor: Colors.white,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFE2D6C3)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFE2D6C3)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFD97706), width: 1.5),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    Text(
-                      '૨. અવાજનો પ્રકાર પસંદ કરો (Voice Tone):',
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF5A442E),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _buildToneChip(
-                          label: '🌸 મધુર સ્ત્રી અવાજ (Sweet Female)',
-                          isSelected: selectedStyle == 'female_sweet',
-                          onTap: () => setSheetState(() => selectedStyle = 'female_sweet'),
-                        ),
-                        _buildToneChip(
-                          label: '👦 બાળક / યુવા અવાજ (Boy Voice)',
-                          isSelected: selectedStyle == 'boy_young',
-                          onTap: () => setSheetState(() => selectedStyle = 'boy_young'),
-                        ),
-                        _buildToneChip(
-                          label: '🎙️ સ્પષ્ટ પુરુષ અવાજ (Clear Male)',
-                          isSelected: selectedStyle == 'male_deep',
-                          onTap: () => setSheetState(() => selectedStyle = 'male_deep'),
-                        ),
-                        _buildToneChip(
-                          label: '🙏 કથાવાચક પુરુષ (Warm Narrator)',
-                          isSelected: selectedStyle == 'male_warm',
-                          onTap: () => setSheetState(() => selectedStyle = 'male_warm'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-
-                    // Voice Sample Recorder Box
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFAF6EE),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: isRecording
-                              ? Colors.redAccent
-                              : (hasRecorded ? const Color(0xFF10B981) : const Color(0xFFE2D6C3)),
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            '૩. તમારો અવાજ રેકોર્ડ કરો (Speak this Mantra):',
-                            style: GoogleFonts.outfit(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF7A6A55),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '"ૐ નમો ભગવતે વાસુદેવાય. શ્રી કૃષ્ણ શરણં મમ."',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.outfit(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: const Color(0xFFB45309),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          if (isRecording) ...[
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: List.generate(12, (i) {
-                                final h = 8.0 + ((i * 7 + recordSecs * 11) % 20);
-                                return Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 2),
-                                  width: 4,
-                                  height: h,
-                                  decoration: BoxDecoration(
-                                    color: Colors.redAccent,
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                );
-                              }),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'રેકોર્ડિંગ ચાલુ છે... $minStr:$secStr',
-                              style: GoogleFonts.outfit(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.redAccent,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                          ] else if (hasRecorded) ...[
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 18),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'તમારો અવાજ સેમ્પલ રેકોર્ડ થઈ ગયો છે ($minStr:$secStr)',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: const Color(0xFF047857),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                          ],
-                          OutlinedButton.icon(
-                            onPressed: () {
-                              HapticFeedback.lightImpact();
-                              if (isRecording) {
-                                recTimer?.cancel();
-                                setSheetState(() {
-                                  isRecording = false;
-                                  hasRecorded = true;
-                                });
-                              } else {
-                                setSheetState(() {
-                                  isRecording = true;
-                                  hasRecorded = false;
-                                  recordSecs = 0;
-                                });
-                                recTimer?.cancel();
-                                recTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-                                  setSheetState(() {
-                                    recordSecs++;
-                                  });
-                                });
-                              }
-                            },
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: isRecording ? Colors.redAccent : const Color(0xFFD97706),
-                              side: BorderSide(
-                                color: isRecording ? Colors.redAccent : const Color(0xFFD97706),
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                            ),
-                            icon: Icon(
-                              isRecording ? Icons.stop_circle_rounded : Icons.mic_rounded,
-                              size: 18,
-                            ),
-                            label: Text(
-                              isRecording
-                                  ? 'રેકોર્ડિંગ રોકો (Stop Recording)'
-                                  : (hasRecorded ? 'ફરીથી રેકોર્ડ કરો (Re-record)' : 'મારો અવાજ રેકોર્ડ કરો (Record Voice)'),
-                              style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Save & Apply Button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton.icon(
-                        onPressed: isSaving
-                            ? null
-                            : () async {
-                                recTimer?.cancel();
-                                setSheetState(() => isSaving = true);
-
-                                String gender = 'Female';
-                                String baseVoice = 'gu-IN-Chirp3-HD-Kore';
-                                double pitchVal = 0.0;
-
-                                if (selectedStyle == 'boy_young') {
-                                  gender = 'Male';
-                                  baseVoice = 'gu-IN-Chirp3-HD-Puck';
-                                  pitchVal = 1.0;
-                                } else if (selectedStyle == 'male_deep') {
-                                  gender = 'Male';
-                                  baseVoice = 'gu-IN-Chirp3-HD-Fenrir';
-                                  pitchVal = -1.0;
-                                } else if (selectedStyle == 'male_warm') {
-                                  gender = 'Male';
-                                  baseVoice = 'gu-IN-Chirp3-HD-Charon';
-                                  pitchVal = 0.0;
-                                } else {
-                                  gender = 'Female';
-                                  baseVoice = 'gu-IN-Chirp3-HD-Kore';
-                                  pitchVal = 0.0;
-                                }
-
-                                final newCustomVoice = await _ttsService.addCustomVoice(
-                                  name: nameCtrl.text,
-                                  gender: gender,
-                                  language: _languages[_tabController.index],
-                                  baseVoiceId: baseVoice,
-                                  pitch: pitchVal,
-                                  speakingRate: _preferences.speakingRate,
-                                );
-
-                                final updatedList = await _ttsService.fetchVoices();
-                                if (mounted) {
-                                  setState(() {
-                                    _allVoices = updatedList;
-                                    _preferences.gujaratiVoiceId = newCustomVoice.id;
-                                    _preferences.hindiVoiceId = newCustomVoice.id;
-                                    _preferences.sanskritVoiceId = newCustomVoice.id;
-                                  });
-                                }
-
-                                if (sheetCtx.mounted) {
-                                  Navigator.pop(sheetCtx);
-                                }
-
-                                // Immediately save and apply so Granth speaks in this voice
-                                await _saveAndClose();
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFD97706),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        icon: isSaving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                              )
-                            : const Icon(Icons.check_circle_rounded),
-                        label: Text(
-                          isSaving ? 'સેવ થઈ રહ્યું છે...' : 'અવાજ સાચવો અને લાગુ કરો (Save & Apply)',
-                          style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-  */
 
   Widget _buildStepRow(String num, String text) {
     return Row(
@@ -800,28 +396,6 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
           ),
 
           const Divider(height: 1, color: Color(0xFFF3ECE0)),
-
-          // Language Tabs
-          Container(
-            color: const Color(0xFFFAF6EE),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: TabBar(
-              controller: _tabController,
-              labelColor: const Color(0xFFD97706),
-              unselectedLabelColor: const Color(0xFF7A6A55),
-              indicatorColor: const Color(0xFFD97706),
-              indicatorWeight: 3,
-              labelStyle: GoogleFonts.outfit(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
-              unselectedLabelStyle: GoogleFonts.outfit(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-              tabs: _tabLabels.map((lbl) => Tab(text: lbl)).toList(),
-            ),
-          ),
 
           // Authentic Voice Priority Banner
           if (!_isLoading)
@@ -954,12 +528,7 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                       ],
                     ),
                   )
-                : TabBarView(
-                    controller: _tabController,
-                    children: _languages.map((langCategory) {
-                      return _buildVoiceListForLanguage(langCategory);
-                    }).toList(),
-                  ),
+                : _buildUnifiedVoiceList(),
           ),
 
           // Speed & Rate Adjustment
@@ -1059,28 +628,23 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
     );
   }
 
-  Widget _buildVoiceListForLanguage(String langCategory) {
-    final voices = _allVoices
-        .where((v) => v.isCustom || v.languageCategory == langCategory)
-        .toList();
-
-        String selectedVoiceId = _preferences.selectedVoiceId ?? '';
-    if (selectedVoiceId.isEmpty) {
-      if (langCategory == 'Gujarati') {
-        selectedVoiceId = _preferences.gujaratiVoiceId;
-      } else if (langCategory == 'Hindi') {
-        selectedVoiceId = _preferences.hindiVoiceId;
-      } else if (langCategory == 'Sanskrit') {
-        selectedVoiceId = _preferences.sanskritVoiceId;
-      } else if (langCategory == 'English') {
-        selectedVoiceId = _preferences.englishVoiceId;
+  Widget _buildUnifiedVoiceList() {
+    final seen = <String>{};
+    final voices = <TtsVoice>[];
+    for (final v in _allVoices) {
+      if (!seen.contains(v.id)) {
+        seen.add(v.id);
+        voices.add(v);
       }
     }
+
+    final selectedVoiceId =
+        _preferences.selectedVoiceId ?? _preferences.gujaratiVoiceId;
 
     if (voices.isEmpty) {
       return Center(
         child: Text(
-          'No voices available for $langCategory',
+          'No voices available',
           style: GoogleFonts.outfit(color: const Color(0xFF8C7355)),
         ),
       );
@@ -1092,8 +656,7 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
       itemBuilder: (ctx, idx) {
         final voice = voices[idx];
         final isSelected = voice.id == selectedVoiceId;
-        final isPlaying =
-            _activePlayingUrl != null &&
+        final isPlaying = _activePlayingUrl != null &&
             voice.previewUrl.isNotEmpty &&
             (_activePlayingUrl!.contains(voice.previewUrl) ||
                 _activePlayingUrl!.contains(voice.id));
@@ -1119,13 +682,17 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
           ),
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap: () => _onSelectVoice(langCategory, voice.id),
+            onTap: () {
+              HapticFeedback.selectionClick();
+              setState(() {
+                _ttsService.applyGranthVoiceSelection(_preferences, voice);
+              });
+            },
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Radio selection indicator
                   Container(
                     margin: const EdgeInsets.only(top: 2, right: 12),
                     width: 22,
@@ -1146,8 +713,6 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                         ? const Icon(Icons.check, size: 14, color: Colors.white)
                         : null,
                   ),
-
-                  // Voice details
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1165,7 +730,6 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                               ),
                             ),
                             const SizedBox(width: 8),
-                            // Gender Badge
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 6,
@@ -1190,126 +754,59 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 6),
-                            // Tier Badge
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: voice.tier.contains('HD')
-                                    ? const Color(0xFFFEF3C7)
-                                    : voice.tier.contains('Standard')
-                                    ? const Color(0xFFF3F4F6)
-                                    : const Color(0xFFECFDF5),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                voice.tier,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: voice.tier.contains('HD')
-                                      ? const Color(0xFFB45309)
-                                      : voice.tier.contains('Standard')
-                                      ? const Color(0xFF4B5563)
-                                      : const Color(0xFF047857),
-                                ),
-                              ),
-                            ),
-                            if (voice.id.contains('Puck')) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFE0E7FF),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '👦 Boy Voice',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF3730A3),
-                                  ),
-                                ),
-                              ),
-                            ],
-                            if (voice.id.contains('Kore')) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFDF2F8),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '🌸 Sweet Voice',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF9D174D),
-                                  ),
-                                ),
-                              ),
-                            ],
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          voice.title,
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFFB45309),
+                        if (voice.title.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            voice.title,
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFFB45309),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          voice.description,
-                          style: GoogleFonts.outfit(
-                            fontSize: 11,
-                            color: const Color(0xFF6B5843),
-                            height: 1.3,
+                        ],
+                        if (voice.description.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            voice.description,
+                            style: GoogleFonts.outfit(
+                              fontSize: 11,
+                              color: const Color(0xFF6B5843),
+                              height: 1.3,
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
-
-                  // Preview Audio Button
-                  IconButton(
-                    onPressed: () {
-                      HapticFeedback.lightImpact();
-                      _ttsService.playPreview(voice.previewUrl);
-                    },
-                    icon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: isPlaying
-                            ? const Color(0xFFD97706)
-                            : const Color(0xFFFEF3C7),
-                        shape: BoxShape.circle,
+                  if (voice.previewUrl.isNotEmpty)
+                    IconButton(
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        _ttsService.playPreview(voice.previewUrl);
+                      },
+                      icon: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: isPlaying
+                              ? const Color(0xFFD97706)
+                              : const Color(0xFFFEF3C7),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isPlaying
+                              ? Icons.stop_rounded
+                              : Icons.play_arrow_rounded,
+                          color: isPlaying
+                              ? Colors.white
+                              : const Color(0xFFD97706),
+                          size: 20,
+                        ),
                       ),
-                      child: Icon(
-                        isPlaying
-                            ? Icons.stop_rounded
-                            : Icons.play_arrow_rounded,
-                        color: isPlaying
-                            ? Colors.white
-                            : const Color(0xFFD97706),
-                        size: 20,
-                      ),
+                      tooltip: isPlaying ? 'Stop Preview' : 'Play Preview',
                     ),
-                    tooltip: isPlaying ? 'Stop Preview' : 'Play Preview',
-                  ),
                 ],
               ),
             ),

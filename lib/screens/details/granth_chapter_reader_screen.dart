@@ -96,7 +96,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   String? _audioUrl;
   bool _isLoadingAudio = false;
   double _speedMultiplier = 1.0;
-  int _readingSpeedMs = 600;
+  int _readingSpeedMs = 800;
 
   // TTS engine
   final FlutterTts _tts = FlutterTts();
@@ -137,13 +137,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     _initTts();
   }
 
-  void _initAudioListeners() {
-    _completeSub = _audioPlayer.onPlayerComplete.listen((_) {
-      if (mounted && _isPlaying && _audioUrl != null) {
-        _audioPlayer.play(UrlSource(_audioUrl!));
-      }
-    });
-  }
+  void _initAudioListeners() {}
 
   /// Active section on the currently displayed verse ('sanskrit', 'transliteration', 'hindi', 'english', or '')
   String get activeSection {
@@ -170,7 +164,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   );
 
   /// Dynamically computes the natural speech duration (in ms) for a word using
-  /// Chhandas-inspired phonetic mora for Devanagari and syllable metrics for Latin text.
+  /// Chhandas-inspired phonetic mora for Devanagari and Gujarati, and syllable metrics for Latin text.
   static int _computePhoneticDurationMs(
     String word,
     String lang,
@@ -179,51 +173,44 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     if (word.isEmpty) return 0;
 
     final bool isDevanagari = word.runes.any((r) => r >= 0x0900 && r <= 0x097F);
+    final bool isGujarati = word.runes.any((r) => r >= 0x0A80 && r <= 0x0AFF);
 
     double baseMs;
-    if (isDevanagari) {
+    if (isDevanagari || isGujarati) {
       int morae = 0;
       final runes = word.runes.toList();
       for (int i = 0; i < runes.length; i++) {
         final r = runes[i];
-        if (r == 0x0906 ||
-            r == 0x0908 ||
-            r == 0x090A ||
-            r == 0x090F ||
-            r == 0x0910 ||
-            r == 0x0913 ||
-            r == 0x0914 ||
-            r == 0x093E ||
-            r == 0x0940 ||
-            r == 0x0942 ||
-            r == 0x0947 ||
-            r == 0x0948 ||
-            r == 0x094B ||
-            r == 0x094C) {
+        // Long vowels (Devanagari 0x0906-0x0914, 0x093E-0x094C | Gujarati 0x0A86-0x0A94, 0x0ABE-0x0ACC)
+        if ((r >= 0x0906 && r <= 0x0914) ||
+            (r >= 0x093E && r <= 0x094C) ||
+            (r >= 0x0A86 && r <= 0x0A94) ||
+            (r >= 0x0ABE && r <= 0x0ACC)) {
           morae += 2;
-        } else if (r == 0x0902 || r == 0x0903) {
+        } else if (r == 0x0902 || r == 0x0903 || r == 0x0A82 || r == 0x0A83) {
           morae += 1;
-        } else if (r >= 0x0915 && r <= 0x0939) {
+        } else if ((r >= 0x0915 && r <= 0x0939) || (r >= 0x0A95 && r <= 0x0AB9)) {
           morae += 1;
-        } else if (r >= 0x0904 && r <= 0x090B) {
+        } else if ((r >= 0x0904 && r <= 0x090B) || (r >= 0x0A85 && r <= 0x0A8B)) {
           morae += 1;
         }
       }
       if (morae < 1) morae = 1;
-      baseMs = 120.0 + (morae * 110.0);
+      // Devotional recitation speed: 320ms base + 160ms per mora for calm, serene chanting
+      baseMs = 320.0 + (morae * 160.0);
     } else {
       final vowelMatches = RegExp(
         r'[aeiouy]+',
         caseSensitive: false,
       ).allMatches(word).length;
       final syllables = math.max(1, vowelMatches);
-      baseMs = 130.0 + (syllables * 120.0);
+      baseMs = 320.0 + (syllables * 180.0);
     }
 
     final duration = (baseMs * rateScale).round();
     return duration.clamp(
-      (220 * rateScale).round(),
-      (2200 * rateScale).round(),
+      (400 * rateScale).round(),
+      (3500 * rateScale).round(),
     );
   }
 
@@ -250,7 +237,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
 
     final rawList = [
       ('sanskrit', sanskrit, 'hi-IN'),
-      ('transliteration', transliteration, 'hi-IN'),
+      // transliteration intentionally skipped — not read aloud
       ('hindi', rawHindi, 'hi-IN'),
       ('english', rawEnglish, 'en-IN'),
     ];
@@ -298,7 +285,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
             final isCitation = citationPattern.hasMatch(rawWord);
             final clean = rawWord
                 .replaceAll(
-                  RegExp(r'[^\p{L}\p{N}\u0900-\u097F]', unicode: true),
+                  RegExp(r'[^\p{L}\p{N}\u0900-\u097F\u0A80-\u0AFF]', unicode: true),
                   '',
                 )
                 .trim();
@@ -323,17 +310,17 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
         }
 
         if (cleanSpokenWords.isNotEmpty) {
-          int pauseMs = 80;
+          int pauseMs = 450;
           if (delim.contains('॥') || delim.contains('\n\n')) {
-            pauseMs = 550;
+            pauseMs = 1200;
           } else if (delim.contains('।') ||
               delim.contains('.') ||
               delim.contains('|')) {
-            pauseMs = 350;
+            pauseMs = 850;
           } else if (delim.contains(',') || delim.contains(';')) {
-            pauseMs = 180;
+            pauseMs = 500;
           } else if (delim.contains('\n')) {
-            pauseMs = 240;
+            pauseMs = 600;
           }
 
           phrases.add(
@@ -402,52 +389,118 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     return 'hi-IN';
   }
 
-  /// Selects the most natural, human-like compatible voice available for the given language.
+  /// Selects the compatible Google TTS voice matching user's chosen persona / gender preference.
+  /// Selects the compatible Google TTS voice matching user's chosen persona / gender preference.
   Future<void> _selectOptimalVoice(String lang) async {
     try {
+      final prefs = await _ttsService.loadPreferences();
+
+      // Extract persona name from selectedVoiceId e.g. "gu-IN-Chirp3-HD-Aoede" → "aoede"
+      final selectedId = (prefs.selectedVoiceId ?? '').toLowerCase();
+      String targetGender = (prefs.selectedVoiceGender ?? 'Female').toLowerCase();
+
+      // Known female personas
+      final femalePersonas = ['aoede', 'kore', 'zephyr', 'kalyani', 'dhwani'];
+      // Known male personas
+      final malePersonas = ['puck', 'charon', 'fenrir', 'mukund', 'niranjan'];
+
+      String? pickedPersona;
+      for (final p in [...femalePersonas, ...malePersonas]) {
+        if (selectedId.contains(p)) {
+          pickedPersona = p;
+          break;
+        }
+      }
+
+      if (pickedPersona != null) {
+        if (femalePersonas.contains(pickedPersona)) {
+          targetGender = 'female';
+        } else if (malePersonas.contains(pickedPersona)) {
+          targetGender = 'male';
+        }
+      }
+
+      final bool wantFemale = targetGender == 'female';
+      final bool preferVariant2 = [
+        'aoede',
+        'zephyr',
+        'dhwani',
+        'charon',
+        'fenrir',
+        'niranjan',
+      ].contains(pickedPersona);
+
       final voices = await _tts.getVoices;
       if (voices is List && voices.isNotEmpty) {
-        final langPrefix = lang.toLowerCase().split('-').first;
-        final targetLocale = lang.toLowerCase();
-        Map<String, String>? fallbackMatch;
+        final langCode = lang.toLowerCase().replaceAll('_', '-');
+        final langPrefix = langCode.split('-').first;
+
         Map<String, String>? bestMatch;
-        int highestScore = -1;
+        Map<String, String>? fallbackMatch;
+        int highestScore = -99999;
 
         for (final item in voices) {
-          if (item is Map) {
-            final name = (item['name'] ?? '').toString();
-            final locale = (item['locale'] ?? '').toString();
-            final nLower = name.toLowerCase();
-            final lLower = locale.toLowerCase();
+          if (item is! Map) continue;
+          final name = (item['name'] ?? '').toString();
+          final locale = (item['locale'] ?? '').toString();
+          final nLower = name.toLowerCase();
+          final lLower = locale.toLowerCase().replaceAll('_', '-');
 
-            if (lLower == targetLocale ||
-                lLower.startsWith(langPrefix) ||
-                lLower.contains(langPrefix)) {
-              fallbackMatch ??= {'name': name, 'locale': locale};
-              int score = 0;
-              if (lLower == targetLocale) score += 15;
-              if (nLower.contains('neural') || nLower.contains('wavenet')) {
-                score += 35;
-              }
-              if (nLower.contains('x-hie') ||
-                  nLower.contains('x-hid') ||
-                  nLower.contains('x-ene') ||
-                  nLower.contains('x-end')) {
-                score += 25;
-              }
-              if (nLower.contains('x-hic') ||
-                  nLower.contains('x-hib') ||
-                  nLower.contains('x-hia')) {
-                score += 20;
-              }
-              if (nLower.contains('network') || nLower.contains('natural')) {
-                score += 10;
-              }
-              if (score > highestScore) {
-                highestScore = score;
-                bestMatch = {'name': name, 'locale': locale};
-              }
+          // Must match current language family (e.g. hi, gu, en)
+          if (!lLower.startsWith(langPrefix)) continue;
+
+          fallbackMatch ??= {'name': name, 'locale': locale};
+          int score = 0;
+
+          // Exact locale match bonus
+          if (lLower == langCode) score += 30;
+
+          // Detect gender in Android Google TTS voices
+          // Hindi: hia, hie (female) | hic, hid (male)
+          // Gujarati: guf, gub (female) | gua, gud (male)
+          // English: end, ene, enf (female) | ena, enc (male)
+          final bool isFemaleVoice = nLower.contains('female') ||
+              nLower.contains('hia') ||
+              nLower.contains('hie') ||
+              nLower.contains('guf') ||
+              nLower.contains('gub') ||
+              nLower.contains('end') ||
+              nLower.contains('ene') ||
+              nLower.contains('enf');
+
+          final bool isMaleVoice = nLower.contains('male') ||
+              nLower.contains('hic') ||
+              nLower.contains('hid') ||
+              nLower.contains('gua') ||
+              nLower.contains('gud') ||
+              nLower.contains('ena') ||
+              nLower.contains('enc');
+
+          if (wantFemale) {
+            if (isFemaleVoice) score += 300;
+            if (isMaleVoice) score -= 500; // Strict penalty: NEVER pick male voice when female requested
+            // Give hia / guf top preference as the premier sweet female voice
+            if (nLower.contains('hia') || nLower.contains('guf') || nLower.contains('end')) {
+              score += 80;
             }
+          } else {
+            if (isMaleVoice) score += 300;
+            if (isFemaleVoice) score -= 500; // Strict penalty: NEVER pick female voice when male requested
+            if (nLower.contains('hid') || nLower.contains('gud') || nLower.contains('enc')) {
+              score += 80;
+            }
+          }
+
+          // Quality bonus for network/neural/natural
+          if (nLower.contains('network') ||
+              nLower.contains('neural') ||
+              nLower.contains('natural')) {
+            score += 15;
+          }
+
+          if (score > highestScore) {
+            highestScore = score;
+            bestMatch = {'name': name, 'locale': locale};
           }
         }
 
@@ -455,32 +508,77 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
         if (selected != null) {
           await _tts.setVoice(selected);
           debugPrint(
-            '[TTS] Configured optimal voice: ${selected['name']} (${selected['locale']}) [score: $highestScore]',
+            '[TTS] Activated Voice: ${selected['name']} (${selected['locale']}) for Persona=$pickedPersona ($targetGender, Score=$highestScore)',
           );
         }
       }
+
+      // Persona Pitch Nuances (devotional, distinct character):
+      double pitch;
+      if (pickedPersona != null) {
+        switch (pickedPersona) {
+          case 'kore':
+            pitch = 1.28; // Sweet, bright female
+            break;
+          case 'aoede':
+            pitch = 1.20; // Melodious, lyrical, sweet female
+            break;
+          case 'zephyr':
+            pitch = 1.35; // Soft, light, ethereal female
+            break;
+          case 'kalyani':
+            pitch = 1.18; // Warm Gujarati devotional female
+            break;
+          case 'dhwani':
+            pitch = 1.15; // Calm classical female
+            break;
+          case 'puck':
+            pitch = 1.12; // Youthful boy voice (higher male pitch)
+            break;
+          case 'charon':
+            pitch = 0.80; // Warm resonant male narrator
+            break;
+          case 'fenrir':
+            pitch = 0.70; // Deep authoritative baritone male
+            break;
+          case 'mukund':
+            pitch = 0.88; // Gentle devotee male
+            break;
+          case 'niranjan':
+            pitch = 0.82; // Classical pandit male
+            break;
+          default:
+            pitch = wantFemale ? 1.22 : 0.82;
+        }
+      } else {
+        pitch = wantFemale ? 1.22 : 0.82;
+      }
+
+      await _tts.setPitch(pitch);
+      debugPrint('[TTS] Applied pitch=$pitch for persona=$pickedPersona (wantFemale=$wantFemale)');
     } catch (e) {
-      debugPrint('[TTS] Voice configuration notice: $e');
+      debugPrint('[TTS] Voice configuration error: $e');
     }
   }
 
-  /// Computes the platform-calibrated speech rate for a calm, serene scripture chanting speed.
-  /// Android: 0.25 delivers peaceful, meditative, clearly articulated sacred chanting.
-  /// iOS: 0.28 produces smooth, sacred recitation.
+  /// Calibrated speech rate getter for section calculations (reduced by 25% for calm devotional reading).
   double get _calibratedSpeechRate {
-    final double baseRate = Platform.isAndroid ? 0.25 : 0.28;
-    return (baseRate * _speedMultiplier).clamp(0.12, 0.85);
+    final double baseRate = Platform.isAndroid ? 0.225 : 0.262;
+    return (baseRate * _speedMultiplier).clamp(0.10, 0.85);
   }
 
-  /// Explicitly applies rate, pitch, and volume before speech begins.
+  /// Explicitly applies rate, pitch, and volume before speech begins (reduced by 25% for calm devotional reading).
   Future<void> _applySpeechSettings() async {
-    final rate = _calibratedSpeechRate;
-    await _tts.setSpeechRate(rate);
-    await _tts.setPitch(1.0); // Pure, natural human vocal resonance
-    await _tts.setVolume(1.0);
-    debugPrint(
-      '[TTS] Applied speech settings -> platform: ${Platform.operatingSystem}, rate: $rate, pitch: 1.0',
-    );
+    try {
+      final prefs = await _ttsService.loadPreferences();
+      final double userPacing = prefs.speakingRate > 0 ? prefs.speakingRate : 0.90;
+      final double baseRate = Platform.isAndroid ? 0.255 : 0.285;
+      final double rate = (baseRate * (userPacing / 0.90) * _speedMultiplier).clamp(0.10, 0.85);
+      await _tts.setSpeechRate(rate);
+      await _tts.setVolume(1.0);
+    } catch (e) {
+      debugPrint('[TTS] Apply speech settings notice: $e');
+    }
   }
 
   Future<void> _initTts() async {
@@ -596,12 +694,9 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       }
     }
 
-    if (_ttsLang != section.langCode) {
-      _ttsLang = section.langCode;
-      await _tts.setLanguage(_ttsLang);
-      await _selectOptimalVoice(_ttsLang);
-    }
-
+    _ttsLang = section.langCode;
+    await _tts.setLanguage(_ttsLang);
+    await _selectOptimalVoice(_ttsLang);
     await _applySpeechSettings();
 
     if (!mounted || !_isPlaying) return;
@@ -618,19 +713,12 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       }
 
       final phrase = section.phrases[p];
-      if (phrase.wordIndices.isEmpty || phrase.spokenText.isEmpty) {
-        if (phrase.pauseMs > 0) {
-          await Future.delayed(
-            Duration(milliseconds: (phrase.pauseMs / _speedMultiplier).round()),
-          );
-        }
+      if (phrase.wordIndices.isEmpty || phrase.spokenText.trim().isEmpty) {
         continue;
       }
 
-      // Highlight the first word of the line immediately
-      setState(() {
-        _currentLocalWord = phrase.wordIndices.first;
-      });
+      // Do NOT pre-highlight — highlight must happen ONLY after audio actually starts.
+      // _currentLocalWord stays at previous value until onStart fires.
 
       final completer = Completer<void>();
       _wordCompleter = completer;
@@ -639,13 +727,24 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       int audioStartTime = 0;
       Timer? phraseTicker;
 
-      void startAudioTicker() {
+      void startAudioTicker(int totalAudioMs) {
         if (audioStarted) return;
         audioStarted = true;
         audioStartTime = DateTime.now().millisecondsSinceEpoch;
 
+        // Highlight the very first word of this phrase ONLY when audio begins
+        if (mounted) {
+          setState(() {
+            _currentLocalWord = phrase.wordIndices.first;
+          });
+        }
+
+        // Compute per-word offsets scaled to actual audio duration
+        final int estimatedMs = phrase.totalDurationMs > 0 ? phrase.totalDurationMs : 1;
+        final double scale = totalAudioMs > 0 ? totalAudioMs / estimatedMs : 1.0;
+
         phraseTicker?.cancel();
-        phraseTicker = Timer.periodic(const Duration(milliseconds: 25), (t) {
+        phraseTicker = Timer.periodic(const Duration(milliseconds: 20), (t) {
           if (!mounted || !_isPlaying || _speechLoopSession != currentSession) {
             t.cancel();
             return;
@@ -655,7 +754,8 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
               DateTime.now().millisecondsSinceEpoch - audioStartTime;
           int activeIdx = phrase.wordIndices.first;
           for (int k = 0; k < phrase.relativeOffsetsMs.length; k++) {
-            if (elapsed >= phrase.relativeOffsetsMs[k]) {
+            final scaledOffset = (phrase.relativeOffsetsMs[k] * scale).round();
+            if (elapsed >= scaledOffset) {
               activeIdx = phrase.wordIndices[k];
             } else {
               break;
@@ -671,11 +771,12 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       }
 
       _ttsPhraseStartCallback = () {
-        startAudioTicker();
+        startAudioTicker(phrase.totalDurationMs);
       };
 
       _ttsPhraseProgressCallback = (int charOffset) {
-        audioStarted = true;
+        // Also trigger startAudioTicker if not started yet (onStart may have missed)
+        if (!audioStarted) startAudioTicker(phrase.totalDurationMs);
         for (int k = 0; k < phrase.wordStarts.length; k++) {
           if (charOffset >= phrase.wordStarts[k] &&
               (k == phrase.wordStarts.length - 1 ||
@@ -691,74 +792,117 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
         }
       };
 
-      // Speak the entire line naturally via Google Cloud TTS (zero dropped words)
+      // ── Synthesize with chosen Google Cloud Chirp 3 HD Voice ──
       String? cloudAudioUrl;
       try {
-                final prefs = await _ttsService.loadPreferences();
-        final selectedVoiceId = prefs.selectedVoiceId ?? _ttsService.getVoiceForLanguage('Gujarati', prefs: prefs);
-
-        final isGujarati = phrase.spokenText.runes.any(
-          (r) => r >= 0x0A80 && r <= 0x0AFF,
-        );
-        final langCategory = isGujarati
-            ? 'Gujarati'
-            : (section.section == 'sanskrit'
-                  ? 'Sanskrit'
-                  : (section.langCode == 'en-IN' ? 'English' : 'Hindi'));
-
+        final prefs = await _ttsService.loadPreferences();
+        final voiceId = prefs.selectedVoiceId ?? 'gu-IN-Chirp3-HD-Aoede';
         cloudAudioUrl = await _ttsService.synthesizeScriptureAudio(
           text: phrase.spokenText,
-          language: langCategory,
-          voiceId: selectedVoiceId,
-          speakingRate: _speedMultiplier,
+          language: section.langCode,
+          voiceId: voiceId,
+          speakingRate: (0.90 * _speedMultiplier),
+          chapterId: _currentChapterId,
           sectionType: section.section,
         );
+
+        // Pre-cache next phrase asynchronously in background
+        if (p + 1 < section.phrases.length) {
+          final nextPhrase = section.phrases[p + 1];
+          if (nextPhrase.spokenText.trim().isNotEmpty) {
+            _ttsService.synthesizeScriptureAudio(
+              text: nextPhrase.spokenText,
+              language: section.langCode,
+              voiceId: voiceId,
+              speakingRate: (0.90 * _speedMultiplier),
+              chapterId: _currentChapterId,
+              sectionType: section.section,
+            );
+          }
+        }
       } catch (e) {
-        debugPrint('[TTS] Cloud audio synthesis error: $e');
+        debugPrint('[Chirp] Synthesis notice: $e');
       }
 
-      if (cloudAudioUrl != null &&
-          cloudAudioUrl.isNotEmpty &&
-          mounted &&
-          _isPlaying &&
-          _speechLoopSession == currentSession) {
-        startAudioTicker();
+      if (!mounted || !_isPlaying || _speechLoopSession != currentSession) {
+        return;
+      }
+
+      if (cloudAudioUrl != null && cloudAudioUrl.isNotEmpty) {
+        // ── Authentic Google Cloud Chirp 3 HD Playback ──
         try {
           await _verseAudioPlayer.stop();
-          final completionFuture = _verseAudioPlayer.onPlayerComplete.first;
+
+          // Use a Completer + StreamSubscription instead of .first (avoids stale-event race)
+          final audioCompleter = Completer<void>();
+          StreamSubscription<void>? completeSub;
+          completeSub = _verseAudioPlayer.onPlayerComplete.listen((_) {
+            if (!audioCompleter.isCompleted) audioCompleter.complete();
+            completeSub?.cancel();
+          });
+
           await _verseAudioPlayer.play(UrlSource(cloudAudioUrl));
 
-          final timeoutMs = math.max(
-            3500,
-            (phrase.totalDurationMs * 2.8).round(),
+          // Fetch actual audio duration from the player (gives precise ms)
+          int actualDurationMs = 0;
+          for (int attempt = 0; attempt < 8; attempt++) {
+            await Future.delayed(const Duration(milliseconds: 80));
+            try {
+              final dur = await _verseAudioPlayer.getDuration();
+              if (dur != null && dur.inMilliseconds > 0) {
+                actualDurationMs = dur.inMilliseconds;
+                break;
+              }
+            } catch (_) {}
+          }
+
+          // Start ticker now, scaled to actual audio length
+          startAudioTicker(actualDurationMs > 0 ? actualDurationMs : phrase.totalDurationMs);
+
+          // Generous fallback: actual duration × 1.5 or at least 4 seconds
+          final fallbackMs = math.max(
+            4000,
+            actualDurationMs > 0
+                ? (actualDurationMs * 1.5).round()
+                : (phrase.totalDurationMs * 3.5 / _speedMultiplier).round(),
           );
-          await completionFuture.timeout(
-            Duration(milliseconds: (timeoutMs / _speedMultiplier).round()),
-            onTimeout: () {},
-          );
-        } catch (_) {}
+
+          try {
+            await audioCompleter.future.timeout(
+              Duration(milliseconds: fallbackMs),
+              onTimeout: () {
+                completeSub?.cancel();
+              },
+            );
+          } catch (_) {
+            completeSub?.cancel();
+          }
+        } catch (e) {
+          debugPrint('[Chirp] Playback error: $e');
+        }
       } else {
+        // ── Fallback to on-device TTS if server offline ──
         try {
           await _tts.speak(phrase.spokenText);
         } catch (e) {
-          debugPrint('[TTS] Device TTS fallback error: $e');
+          debugPrint('[TTS] Device speak error: $e');
+          if (!completer.isCompleted) completer.complete();
         }
-        // Fallback timer: if onStart didn't fire within 350ms, start ticker anyway
-        Timer(const Duration(milliseconds: 350), () {
-          if (!audioStarted &&
-              mounted &&
-              _speechLoopSession == currentSession) {
-            startAudioTicker();
+
+        // Fallback: if onStart didn't fire within 150ms, start ticker anyway
+        Timer(const Duration(milliseconds: 150), () {
+          if (!audioStarted && mounted && _speechLoopSession == currentSession) {
+            startAudioTicker(phrase.totalDurationMs);
           }
         });
 
         final timeoutMs = math.max(
-          2500,
-          (phrase.totalDurationMs * 2.5).round(),
+          1500,
+          (phrase.totalDurationMs * 2.2 / _speedMultiplier).round(),
         );
         try {
           await completer.future.timeout(
-            Duration(milliseconds: (timeoutMs / _speedMultiplier).round()),
+            Duration(milliseconds: timeoutMs),
             onTimeout: () {},
           );
         } catch (_) {}
@@ -771,16 +915,27 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       }
 
       // Ensure last word of this line is reached
-      setState(() {
-        _currentLocalWord = phrase.wordIndices.last;
-      });
-
-      // Natural pause at line / verse boundary
-      if (phrase.pauseMs > 0) {
-        await Future.delayed(
-          Duration(milliseconds: (phrase.pauseMs / _speedMultiplier).round()),
-        );
+      if (mounted) {
+        setState(() {
+          _currentLocalWord = phrase.wordIndices.last;
+        });
       }
+
+      // Natural, small pause at line / verse delimiter (। or ॥ or , or .)
+      int delimPauseMs = 40;
+      if (phrase.delimiter.contains('॥') || phrase.delimiter.contains('\n\n')) {
+        delimPauseMs = 180;
+      } else if (phrase.delimiter.contains('।') ||
+          phrase.delimiter.contains('.') ||
+          phrase.delimiter.contains('|')) {
+        delimPauseMs = 100;
+      } else if (phrase.delimiter.contains(',') ||
+          phrase.delimiter.contains(';')) {
+        delimPauseMs = 60;
+      }
+      await Future.delayed(
+        Duration(milliseconds: (delimPauseMs / _speedMultiplier).round()),
+      );
     }
 
     if (!mounted || !_isPlaying || _speechLoopSession != currentSession) {
@@ -972,11 +1127,6 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
           _isPageCompleted = false;
         });
 
-        if (_audioUrl != null) {
-          _audioPlayer.setVolume(0.18);
-          _audioPlayer.play(UrlSource(_audioUrl!));
-        }
-
         Future.delayed(const Duration(milliseconds: 750), () {
           if (mounted && _isPlaying) {
             _currentPage = 1;
@@ -996,11 +1146,6 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
           _isPageCompleted = false;
         });
 
-        if (_audioUrl != null) {
-          _audioPlayer.setVolume(0.18);
-          _audioPlayer.play(UrlSource(_audioUrl!));
-        }
-
         Future.delayed(const Duration(milliseconds: 750), () {
           if (mounted && _isPlaying) {
             _startWordTimer();
@@ -1011,10 +1156,6 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
           _isPlaying = true;
           _isPageCompleted = false;
         });
-
-        if (_audioUrl != null) {
-          _audioPlayer.resume();
-        }
 
         if (_activeVerseSections.isNotEmpty &&
             _currentSectionIndex < _activeVerseSections.length) {
@@ -1037,7 +1178,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       } else {
         _speedMultiplier = 1.0;
       }
-      _readingSpeedMs = (600 / _speedMultiplier).round();
+      _readingSpeedMs = (800 / _speedMultiplier).round();
     });
 
     _speechLoopSession++;
@@ -1802,10 +1943,13 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
                     GranthVoiceSelectorSheet.show(
                       context,
                       initialLanguage: _detectTtsLanguage(),
-                      onVoiceChanged: () {
+                      onVoiceChanged: () async {
+                        _speechLoopSession++;
+                        await _selectOptimalVoice(_ttsLang);
+                        await _applySpeechSettings();
                         if (_isPlaying) {
-                          _verseAudioPlayer.stop();
-                          _tts.stop();
+                          await _verseAudioPlayer.stop();
+                          await _tts.stop();
                           _speakCurrentSection();
                         } else if (_currentPage >= 1 &&
                             _currentPage <= _verses.length) {
@@ -1874,10 +2018,13 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
                               GranthVoiceSelectorSheet.show(
                                 context,
                                 initialLanguage: _detectTtsLanguage(),
-                                onVoiceChanged: () {
+                                onVoiceChanged: () async {
+                                  _speechLoopSession++;
+                                  await _selectOptimalVoice(_ttsLang);
+                                  await _applySpeechSettings();
                                   if (_isPlaying) {
-                                    _verseAudioPlayer.stop();
-                                    _tts.stop();
+                                    await _verseAudioPlayer.stop();
+                                    await _tts.stop();
                                     _speakCurrentSection();
                                   } else if (_currentPage >= 1 &&
                                       _currentPage <= _verses.length) {
@@ -5317,24 +5464,7 @@ class _VersePageState extends State<_VersePage> {
                             const SizedBox(height: 16),
                           ],
 
-                          // ── Transliteration ──
-                          if (transliterationText.isNotEmpty) ...[
-                            _buildKaraokeText(
-                              transliterationText,
-
-                              GoogleFonts.outfit(
-                                fontSize: 14,
-                                height: 1.6,
-                                color: bodyColor.withValues(alpha: 0.85),
-                                fontStyle: FontStyle.italic,
-                                fontWeight: FontWeight.w500,
-                              ),
-
-                              'transliteration',
-                            ),
-
-                            const SizedBox(height: 16),
-                          ],
+                          // ── Transliteration intentionally hidden ──
 
                           // ── Hindi Meaning (भावार्थ) ──
                           if (rawHindi.isNotEmpty) ...[
