@@ -92,32 +92,33 @@ class TtsService {
   }
 
   /// Save user voice preferences to local persistent storage and backend
-  Future<void> savePreferences(TtsPreferences preferences,
-      {String? token}) async {
+  Future<void> savePreferences(
+    TtsPreferences preferences, {
+    String? token,
+  }) async {
     _currentPreferences = preferences;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-          'tts_voice_gujarati', preferences.gujaratiVoiceId);
+      await prefs.setString('tts_voice_gujarati', preferences.gujaratiVoiceId);
       await prefs.setString('tts_voice_hindi', preferences.hindiVoiceId);
-      await prefs.setString(
-          'tts_voice_sanskrit', preferences.sanskritVoiceId);
-      await prefs.setString(
-          'tts_voice_english', preferences.englishVoiceId);
+      await prefs.setString('tts_voice_sanskrit', preferences.sanskritVoiceId);
+      await prefs.setString('tts_voice_english', preferences.englishVoiceId);
       await prefs.setDouble('tts_speaking_rate', preferences.speakingRate);
       await prefs.setDouble('tts_pitch', preferences.pitch);
 
       // Also persist to backend if token available
       if (token != null && token.isNotEmpty) {
         final uri = Uri.parse('${ApiService.baseUrl}/api/tts/preferences');
-        await http.post(
-          uri,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $token',
-          },
-          body: jsonEncode(preferences.toJson()),
-        ).timeout(const Duration(seconds: 4));
+        await http
+            .post(
+              uri,
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer $token',
+              },
+              body: jsonEncode(preferences.toJson()),
+            )
+            .timeout(const Duration(seconds: 4));
       }
     } catch (e) {
       debugPrint('[TtsService] Error saving preferences: $e');
@@ -138,6 +139,33 @@ class TtsService {
     return p.hindiVoiceId;
   }
 
+  /// Keep one selected Granth voice persona across all spoken language sections.
+  void applyGranthVoiceSelection(TtsPreferences preferences, TtsVoice voice) {
+    final voiceId = voice.id;
+    final isCustom = voice.isCustom || voiceId.startsWith('custom-');
+    final chirpMarker = 'Chirp3-HD-';
+    final isChirp = voiceId.contains(chirpMarker);
+    final isFemale = voice.gender.toLowerCase() == 'female';
+    final neuralSuffix = isFemale ? 'A' : 'B';
+
+    if (isCustom) {
+      preferences.gujaratiVoiceId = voiceId;
+      preferences.hindiVoiceId = voiceId;
+      preferences.sanskritVoiceId = voiceId;
+    } else if (isChirp) {
+      final persona = voiceId.split(chirpMarker).last;
+      preferences.gujaratiVoiceId = 'gu-IN-$chirpMarker$persona';
+      preferences.hindiVoiceId = 'hi-IN-$chirpMarker$persona';
+      preferences.sanskritVoiceId = 'hi-IN-$chirpMarker$persona';
+    } else {
+      preferences.gujaratiVoiceId = 'gu-IN-Standard-$neuralSuffix';
+      preferences.hindiVoiceId = 'hi-IN-Neural2-$neuralSuffix';
+      preferences.sanskritVoiceId = 'hi-IN-Neural2-$neuralSuffix';
+    }
+
+    preferences.englishVoiceId = 'en-IN-Neural2-${isFemale ? 'A' : 'D'}';
+  }
+
   /// Load custom voices saved locally in persistent SharedPreferences
   Future<List<TtsVoice>> loadCustomVoices() async {
     try {
@@ -147,8 +175,10 @@ class TtsService {
         final decoded = jsonDecode(customJson);
         if (decoded is List) {
           _customVoices = decoded
-              .map((item) =>
-                  TtsVoice.fromJson(Map<String, dynamic>.from(item as Map)))
+              .map(
+                (item) =>
+                    TtsVoice.fromJson(Map<String, dynamic>.from(item as Map)),
+              )
               .toList();
           return _customVoices;
         }
@@ -223,7 +253,8 @@ class TtsService {
         final decoded = jsonDecode(response.body);
         if (decoded['Data'] != null) {
           newVoice = TtsVoice.fromJson(
-              Map<String, dynamic>.from(decoded['Data'] as Map));
+            Map<String, dynamic>.from(decoded['Data'] as Map),
+          );
         }
       }
     } catch (e) {
@@ -251,8 +282,9 @@ class TtsService {
     await prefs.setString('tts_custom_voices_list', jsonEncode(jsonList));
 
     try {
-      final uri =
-          Uri.parse('${ApiService.baseUrl}/api/tts/custom-voice/$voiceId');
+      final uri = Uri.parse(
+        '${ApiService.baseUrl}/api/tts/custom-voice/$voiceId',
+      );
       final headers = <String, String>{};
       if (token != null && token.isNotEmpty) {
         headers['Authorization'] = 'Bearer $token';
@@ -270,14 +302,15 @@ class TtsService {
     List<TtsVoice> standardVoices = [];
     try {
       final uri = Uri.parse('${ApiService.baseUrl}/api/tts/voices');
-      final response =
-          await http.get(uri).timeout(const Duration(seconds: 5));
+      final response = await http.get(uri).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['Data'] != null && data['Data']['voices'] is List) {
           standardVoices = (data['Data']['voices'] as List)
-              .map((item) =>
-                  TtsVoice.fromJson(Map<String, dynamic>.from(item as Map)))
+              .map(
+                (item) =>
+                    TtsVoice.fromJson(Map<String, dynamic>.from(item as Map)),
+              )
               .toList();
         }
       }
@@ -325,8 +358,9 @@ class TtsService {
 
     double effectivePitch = pitch ?? prefs.pitch;
     String? baseVoiceId;
-    final customMatch =
-        _customVoices.where((v) => v.id == effectiveVoice).firstOrNull;
+    final customMatch = _customVoices
+        .where((v) => v.id == effectiveVoice)
+        .firstOrNull;
     if (customMatch != null) {
       if (pitch == null || pitch == 0.0) {
         effectivePitch = customMatch.pitch;
@@ -335,7 +369,8 @@ class TtsService {
     }
 
     // 1. Check client-side in-memory cache
-    final localKey = '$trimmedText|$effectiveVoice|$effectiveRate|$effectivePitch';
+    final localKey =
+        '$trimmedText|$effectiveVoice|$effectiveRate|$effectivePitch';
     if (_localAudioCache.containsKey(localKey)) {
       return _localAudioCache[localKey];
     }
@@ -377,7 +412,8 @@ class TtsService {
         }
       } else {
         debugPrint(
-            '[TtsService] Synthesis failed status: ${response.statusCode}');
+          '[TtsService] Synthesis failed status: ${response.statusCode}',
+        );
       }
     } catch (e) {
       debugPrint('[TtsService] Error in synthesizeScriptureAudio: $e');
@@ -452,8 +488,10 @@ class TtsService {
         tier: 'Chirp 3 HD',
         languages: ['Gujarati'],
         title: 'અત્યંત મધુર સ્ત્રી અવાજ (Sweet Female Voice)',
-        description: 'શાંત, મીઠો અને સાચો માનવીય સ્ત્રી અવાજ. બિલકુલ રોબોટિક વગરનું પવિત્ર પઠન.',
-        previewUrl: 'uploads/granth_audio/previews/preview_gu-IN-Chirp3-HD-Kore.mp3',
+        description:
+            'શાંત, મીઠો અને સાચો માનવીય સ્ત્રી અવાજ. બિલકુલ રોબોટિક વગરનું પવિત્ર પઠન.',
+        previewUrl:
+            'uploads/granth_audio/previews/preview_gu-IN-Chirp3-HD-Kore.mp3',
         defaultRate: 0.92,
         isDefault: true,
         languageCategory: 'Gujarati',
@@ -466,8 +504,10 @@ class TtsService {
         tier: 'Chirp 3 HD',
         languages: ['Gujarati'],
         title: 'મધુર બાળક / યુવા અવાજ (Boy Voice)',
-        description: 'કુદરતી, નિર્દોષ અને મધુર બાળક/યુવાનનો અવાજ. ધાર્મિક કથાઓ માટે અત્યંત મધુર.',
-        previewUrl: 'uploads/granth_audio/previews/preview_gu-IN-Chirp3-HD-Puck.mp3',
+        description:
+            'કુદરતી, નિર્દોષ અને મધુર બાળક/યુવાનનો અવાજ. ધાર્મિક કથાઓ માટે અત્યંત મધુર.',
+        previewUrl:
+            'uploads/granth_audio/previews/preview_gu-IN-Chirp3-HD-Puck.mp3',
         defaultRate: 0.94,
         isDefault: false,
         languageCategory: 'Gujarati',
@@ -481,7 +521,8 @@ class TtsService {
         languages: ['Gujarati'],
         title: 'ભક્તિમય મીઠો સ્ત્રી કંઠ (Melodious Female)',
         description: 'મંદિરમાં ગવાતી સ્તુતિ જેવો મીઠો, સુમધુર સ્ત્રી અવાજ.',
-        previewUrl: 'uploads/granth_audio/previews/preview_gu-IN-Chirp3-HD-Aoede.mp3',
+        previewUrl:
+            'uploads/granth_audio/previews/preview_gu-IN-Chirp3-HD-Aoede.mp3',
         defaultRate: 0.92,
         isDefault: false,
         languageCategory: 'Gujarati',
@@ -494,8 +535,10 @@ class TtsService {
         tier: 'Chirp 3 HD',
         languages: ['Gujarati'],
         title: 'માનવીય કથાવાચક પુરુષ અવાજ (Natural Male Narrator)',
-        description: 'વાસ્તવિક શ્વાસ અને ભાવ સાથેનો મંદિર કથાવાચક જેવો પુરુષ અવાજ.',
-        previewUrl: 'uploads/granth_audio/previews/preview_gu-IN-Chirp3-HD-Charon.mp3',
+        description:
+            'વાસ્તવિક શ્વાસ અને ભાવ સાથેનો મંદિર કથાવાચક જેવો પુરુષ અવાજ.',
+        previewUrl:
+            'uploads/granth_audio/previews/preview_gu-IN-Chirp3-HD-Charon.mp3',
         defaultRate: 0.92,
         isDefault: false,
         languageCategory: 'Gujarati',
@@ -509,7 +552,8 @@ class TtsService {
         languages: ['Hindi'],
         title: 'अत्यंत मधुर स्त्री स्वर (Sweet Female Voice)',
         description: 'शांत, कोमल और स्वाभाविक मानवीय स्त्री स्वर।',
-        previewUrl: 'uploads/granth_audio/previews/preview_hi-IN-Chirp3-HD-Kore.mp3',
+        previewUrl:
+            'uploads/granth_audio/previews/preview_hi-IN-Chirp3-HD-Kore.mp3',
         defaultRate: 0.92,
         isDefault: true,
         languageCategory: 'Hindi',
@@ -523,7 +567,8 @@ class TtsService {
         languages: ['Hindi'],
         title: 'मधुर बालक / युवा स्वर (Boy Voice)',
         description: 'निर्दोष, कोमल और स्वाभाविक युवा बालक की आवाज।',
-        previewUrl: 'uploads/granth_audio/previews/preview_hi-IN-Chirp3-HD-Puck.mp3',
+        previewUrl:
+            'uploads/granth_audio/previews/preview_hi-IN-Chirp3-HD-Puck.mp3',
         defaultRate: 0.94,
         isDefault: false,
         languageCategory: 'Hindi',
@@ -536,8 +581,10 @@ class TtsService {
         tier: 'Chirp 3 HD',
         languages: ['Sanskrit'],
         title: 'કુદરતી સંસ્કૃત શ્લોક પઠન',
-        description: 'માનવીય શ્વાસ અને છંદોબદ્ધ વિરામ સાથેનું પવિત્ર સંસ્કૃત શ્લોક પઠન.',
-        previewUrl: 'uploads/granth_audio/previews/preview_hi-IN-Chirp3-HD-Charon-sa.mp3',
+        description:
+            'માનવીય શ્વાસ અને છંદોબદ્ધ વિરામ સાથેનું પવિત્ર સંસ્કૃત શ્લોક પઠન.',
+        previewUrl:
+            'uploads/granth_audio/previews/preview_hi-IN-Chirp3-HD-Charon-sa.mp3',
         defaultRate: 0.88,
         isDefault: true,
         languageCategory: 'Sanskrit',
@@ -550,8 +597,10 @@ class TtsService {
         tier: 'Chirp 3 HD',
         languages: ['Sanskrit'],
         title: 'મધુર સંસ્કૃત સ્તુતિ ગાન',
-        description: 'અત્યંત મધુર અને શાંત ભાવ સાથેનું સંસ્કૃત સ્તોત્ર અને મંત્ર ગાન.',
-        previewUrl: 'uploads/granth_audio/previews/preview_hi-IN-Chirp3-HD-Kore-sa.mp3',
+        description:
+            'અત્યંત મધુર અને શાંત ભાવ સાથેનું સંસ્કૃત સ્તોત્ર અને મંત્ર ગાન.',
+        previewUrl:
+            'uploads/granth_audio/previews/preview_hi-IN-Chirp3-HD-Kore-sa.mp3',
         defaultRate: 0.88,
         isDefault: false,
         languageCategory: 'Sanskrit',

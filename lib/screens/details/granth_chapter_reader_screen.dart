@@ -123,7 +123,8 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   bool _isFullScreen = false;
 
   // My Voice Recording
-  final UserVerseRecordingService _userRecordingService = UserVerseRecordingService();
+  final UserVerseRecordingService _userRecordingService =
+      UserVerseRecordingService();
   Map<int, String> _chapterUserRecordings = {};
   String? _currentChapterId;
 
@@ -164,8 +165,9 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   static final RegExp granthWordPattern = RegExp(
     r'''[^\s।॥\n\r,.:;!?~❖✦★☆◆◇_─━═()\[\]{}|‖¦/'"“”‘’–—]+''',
   );
-  static final RegExp citationPattern =
-      RegExp(r'^[\d०-९]+(?:[-–—.:][\d०-९]+)?$');
+  static final RegExp citationPattern = RegExp(
+    r'^[\d०-९]+(?:[-–—.:][\d०-९]+)?$',
+  );
 
   /// Dynamically computes the natural speech duration (in ms) for a word using
   /// Chhandas-inspired phonetic mora for Devanagari and syllable metrics for Latin text.
@@ -176,8 +178,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   ) {
     if (word.isEmpty) return 0;
 
-    final bool isDevanagari =
-        word.runes.any((r) => r >= 0x0900 && r <= 0x097F);
+    final bool isDevanagari = word.runes.any((r) => r >= 0x0900 && r <= 0x097F);
 
     double baseMs;
     if (isDevanagari) {
@@ -211,8 +212,10 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       if (morae < 1) morae = 1;
       baseMs = 120.0 + (morae * 110.0);
     } else {
-      final vowelMatches =
-          RegExp(r'[aeiouy]+', caseSensitive: false).allMatches(word).length;
+      final vowelMatches = RegExp(
+        r'[aeiouy]+',
+        caseSensitive: false,
+      ).allMatches(word).length;
       final syllables = math.max(1, vowelMatches);
       baseMs = 130.0 + (syllables * 120.0);
     }
@@ -311,8 +314,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
               phraseWordIndices.add(wordCursor);
               relativeOffsets.add(phraseDurationMs);
 
-              final wordMs =
-                  _computePhoneticDurationMs(clean, lang, rateScale);
+              final wordMs = _computePhoneticDurationMs(clean, lang, rateScale);
               phraseDurationMs += wordMs;
             }
 
@@ -386,7 +388,9 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
 
     if (_verses.isNotEmpty) {
       final sample =
-          (_verses.first['sanskrit'] ?? '') + (_verses.first['hindi'] ?? '') + (_verses.first['english'] ?? '');
+          (_verses.first['sanskrit'] ?? '') +
+          (_verses.first['hindi'] ?? '') +
+          (_verses.first['english'] ?? '');
       if (sample.runes.any((r) => r >= 0x0A80 && r <= 0x0AFF)) {
         return 'gu-IN';
       }
@@ -559,12 +563,19 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     final section = _activeVerseSections[_currentSectionIndex];
 
     // ── My Voice: if devotee recorded their own voice for this verse, play it ──
-    if (_currentSectionIndex == 0 && _currentChapterId != null && _currentChapterId!.isNotEmpty) {
+    if (_currentSectionIndex == 0 &&
+        _currentChapterId != null &&
+        _currentChapterId!.isNotEmpty) {
       final vi = _currentPage - 1;
-      final userAudio = await _userRecordingService.getAudioForVerse(_currentChapterId!, vi);
+      final userAudio = await _userRecordingService.getAudioForVerse(
+        _currentChapterId!,
+        vi,
+      );
       if (userAudio != null && userAudio.isNotEmpty && mounted && _isPlaying) {
         final currentSession = ++_speechLoopSession;
-        setState(() { _activeSection = 'sanskrit'; });
+        setState(() {
+          _activeSection = 'sanskrit';
+        });
         try {
           await _verseAudioPlayer.stop();
           final completionFuture = _verseAudioPlayer.onPlayerComplete.first;
@@ -573,7 +584,10 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
           } else {
             await _verseAudioPlayer.play(DeviceFileSource(userAudio));
           }
-          await completionFuture.timeout(const Duration(seconds: 60), onTimeout: () {});
+          await completionFuture.timeout(
+            const Duration(seconds: 60),
+            onTimeout: () {},
+          );
         } catch (_) {}
         if (mounted && _isPlaying && _speechLoopSession == currentSession) {
           _handlePageComplete();
@@ -680,12 +694,14 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       // Speak the entire line naturally via Google Cloud TTS (zero dropped words)
       String? cloudAudioUrl;
       try {
-        final isGujarati = phrase.spokenText.runes.any((r) => r >= 0x0A80 && r <= 0x0AFF);
+        final isGujarati = phrase.spokenText.runes.any(
+          (r) => r >= 0x0A80 && r <= 0x0AFF,
+        );
         final langCategory = isGujarati
             ? 'Gujarati'
             : (section.section == 'sanskrit'
-                ? 'Sanskrit'
-                : (section.langCode == 'en-IN' ? 'English' : 'Hindi'));
+                  ? 'Sanskrit'
+                  : (section.langCode == 'en-IN' ? 'English' : 'Hindi'));
 
         cloudAudioUrl = await _ttsService.synthesizeScriptureAudio(
           text: phrase.spokenText,
@@ -708,24 +724,32 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
           final completionFuture = _verseAudioPlayer.onPlayerComplete.first;
           await _verseAudioPlayer.play(UrlSource(cloudAudioUrl));
 
-          final timeoutMs = math.max(3500, (phrase.totalDurationMs * 2.8).round());
+          final timeoutMs = math.max(
+            3500,
+            (phrase.totalDurationMs * 2.8).round(),
+          );
           await completionFuture.timeout(
             Duration(milliseconds: (timeoutMs / _speedMultiplier).round()),
             onTimeout: () {},
           );
         } catch (_) {}
       } else {
-        // Fallback to on-device TTS when network is unavailable
-        await _tts.speak(phrase.spokenText);
-
+        debugPrint(
+          '[TTS] Cloud audio unavailable; skipping phrase to keep the selected voice consistent.',
+        );
         // Fallback timer: if onStart didn't fire within 350ms, start ticker anyway
         Timer(const Duration(milliseconds: 350), () {
-          if (!audioStarted && mounted && _speechLoopSession == currentSession) {
+          if (!audioStarted &&
+              mounted &&
+              _speechLoopSession == currentSession) {
             startAudioTicker();
           }
         });
 
-        final timeoutMs = math.max(2500, (phrase.totalDurationMs * 2.5).round());
+        final timeoutMs = math.max(
+          2500,
+          (phrase.totalDurationMs * 2.5).round(),
+        );
         try {
           await completer.future.timeout(
             Duration(milliseconds: (timeoutMs / _speedMultiplier).round()),
@@ -1304,10 +1328,13 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       });
 
       // Load user's personal voice recordings for this chapter
-      _currentChapterId = (widget.chapter['_id'] ?? widget.chapter['id'] ?? '').toString();
+      _currentChapterId = (widget.chapter['_id'] ?? widget.chapter['id'] ?? '')
+          .toString();
       if (_currentChapterId!.isNotEmpty) {
         try {
-          final recs = await _userRecordingService.fetchChapterRecordings(_currentChapterId!);
+          final recs = await _userRecordingService.fetchChapterRecordings(
+            _currentChapterId!,
+          );
           if (mounted) {
             setState(() => _chapterUserRecordings = recs);
           }
@@ -1643,9 +1670,17 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
                         chapterUserRecordings: _chapterUserRecordings,
 
                         onRecordVerseVoice: (vi) {
-                          if (_currentChapterId == null || _currentChapterId!.isEmpty) return;
-                          final verse = vi < _verses.length ? _verses[vi] : <String, String>{};
-                          final chTitle = (widget.chapter['name'] ?? widget.chapter['title'] ?? '').toString();
+                          if (_currentChapterId == null ||
+                              _currentChapterId!.isEmpty)
+                            return;
+                          final verse = vi < _verses.length
+                              ? _verses[vi]
+                              : <String, String>{};
+                          final chTitle =
+                              (widget.chapter['name'] ??
+                                      widget.chapter['title'] ??
+                                      '')
+                                  .toString();
                           RecordVerseVoiceSheet.show(
                             context,
                             chapterId: _currentChapterId!,
@@ -1654,13 +1689,17 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
                             totalVerses: _verses.length,
                             sanskritText: verse['sanskrit'] ?? '',
                             transliterationText: verse['transliteration'] ?? '',
-                            meaningText: verse['hindi'] ?? verse['english'] ?? '',
+                            meaningText:
+                                verse['hindi'] ?? verse['english'] ?? '',
                             onRecordingSaved: () {
                               _userRecordingService
                                   .fetchChapterRecordings(_currentChapterId!)
                                   .then((recs) {
-                                if (mounted) setState(() => _chapterUserRecordings = recs);
-                              });
+                                    if (mounted)
+                                      setState(
+                                        () => _chapterUserRecordings = recs,
+                                      );
+                                  });
                             },
                           );
                         },
@@ -1762,7 +1801,8 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
                           _verseAudioPlayer.stop();
                           _tts.stop();
                           _speakCurrentSection();
-                        } else if (_currentPage >= 1 && _currentPage <= _verses.length) {
+                        } else if (_currentPage >= 1 &&
+                            _currentPage <= _verses.length) {
                           _toggleAutoRead();
                         }
                       },
@@ -1833,7 +1873,8 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
                                     _verseAudioPlayer.stop();
                                     _tts.stop();
                                     _speakCurrentSection();
-                                  } else if (_currentPage >= 1 && _currentPage <= _verses.length) {
+                                  } else if (_currentPage >= 1 &&
+                                      _currentPage <= _verses.length) {
                                     _toggleAutoRead();
                                   }
                                 },
@@ -3317,7 +3358,8 @@ class _BookViewerState extends State<_BookViewer>
 
         isPageCompleted: isThisVerseActive ? widget.isPageCompleted : false,
 
-        hasUserRecording: widget.chapterUserRecordings?.containsKey(vi) ?? false,
+        hasUserRecording:
+            widget.chapterUserRecordings?.containsKey(vi) ?? false,
 
         onRecordTap: () => widget.onRecordVerseVoice?.call(vi),
       );
@@ -4864,8 +4906,7 @@ class _VersePageState extends State<_VersePage> {
   ) {
     if (text.isEmpty) return const SizedBox.shrink();
 
-    final matches = _GranthChapterReaderScreenState
-        .granthWordPattern
+    final matches = _GranthChapterReaderScreenState.granthWordPattern
         .allMatches(text)
         .toList();
 
@@ -4908,7 +4949,8 @@ class _VersePageState extends State<_VersePage> {
       }
 
       final wordStr = m.group(0)!;
-      final isCitation = _GranthChapterReaderScreenState.citationPattern.hasMatch(wordStr);
+      final isCitation = _GranthChapterReaderScreenState.citationPattern
+          .hasMatch(wordStr);
 
       final isHighlighted =
           isSectionActive && (i == widget.activeLocalWordIndex) && !isCitation;
@@ -5174,16 +5216,28 @@ class _VersePageState extends State<_VersePage> {
                               if (widget.hasUserRecording)
                                 Container(
                                   margin: const EdgeInsets.only(right: 8),
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFF5A623).withValues(alpha: 0.15),
+                                    color: const Color(
+                                      0xFFF5A623,
+                                    ).withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(color: const Color(0xFFF5A623), width: 1),
+                                    border: Border.all(
+                                      color: const Color(0xFFF5A623),
+                                      width: 1,
+                                    ),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      const Icon(Icons.mic, size: 13, color: Color(0xFFD55F00)),
+                                      const Icon(
+                                        Icons.mic,
+                                        size: 13,
+                                        color: Color(0xFFD55F00),
+                                      ),
                                       const SizedBox(width: 4),
                                       Text(
                                         'તમારો અવાજ',
@@ -5199,25 +5253,36 @@ class _VersePageState extends State<_VersePage> {
                               GestureDetector(
                                 onTap: widget.onRecordTap,
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF1E0A04).withValues(alpha: 0.07),
+                                    color: const Color(
+                                      0xFF1E0A04,
+                                    ).withValues(alpha: 0.07),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
-                                      color: const Color(0xFF8B6048).withValues(alpha: 0.35),
+                                      color: const Color(
+                                        0xFF8B6048,
+                                      ).withValues(alpha: 0.35),
                                     ),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Icon(
-                                        widget.hasUserRecording ? Icons.mic : Icons.mic_none,
+                                        widget.hasUserRecording
+                                            ? Icons.mic
+                                            : Icons.mic_none,
                                         size: 14,
                                         color: const Color(0xFF8B6048),
                                       ),
                                       const SizedBox(width: 5),
                                       Text(
-                                        widget.hasUserRecording ? 'ફેરફાર કરો' : 'અવાજ રેકોર્ડ',
+                                        widget.hasUserRecording
+                                            ? 'ફેરફાર કરો'
+                                            : 'અવાજ રેકોર્ડ',
                                         style: GoogleFonts.outfit(
                                           fontSize: 11,
                                           color: const Color(0xFF8B6048),

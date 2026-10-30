@@ -40,16 +40,12 @@ class GranthVoiceSelectorSheet extends StatefulWidget {
 class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
     with SingleTickerProviderStateMixin {
   final TtsService _ttsService = TtsService();
-  final UserVerseRecordingService _recordingService = UserVerseRecordingService();
+  final UserVerseRecordingService _recordingService =
+      UserVerseRecordingService();
 
   late TabController _tabController;
   final List<String> _languages = ['Gujarati', 'Hindi', 'Sanskrit', 'English'];
-  final List<String> _tabLabels = [
-    'ગુજરાતી',
-    'हिन्दी',
-    'संस्कृत',
-    'English',
-  ];
+  final List<String> _tabLabels = ['ગુજરાતી', 'हिन्दी', 'संस्कृत', 'English'];
 
   List<TtsVoice> _allVoices = [];
   bool _isLoading = true;
@@ -133,37 +129,9 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
 
   void _onSelectVoice(String langCategory, String voiceId) {
     HapticFeedback.selectionClick();
+    final selectedVoice = _allVoices.firstWhere((voice) => voice.id == voiceId);
     setState(() {
-      if (voiceId.startsWith('custom-')) {
-        // Apply custom voice across Gujarati, Hindi, and Sanskrit so every Granth speaks in this voice
-        _preferences.gujaratiVoiceId = voiceId;
-        _preferences.hindiVoiceId = voiceId;
-        _preferences.sanskritVoiceId = voiceId;
-      } else if (voiceId.contains('Chirp3-HD-')) {
-        // Synchronize Chirp 3 HD speaker persona across Gujarati, Hindi, and Sanskrit
-        final persona = voiceId.split('Chirp3-HD-').last;
-        _preferences.gujaratiVoiceId = 'gu-IN-Chirp3-HD-$persona';
-        _preferences.hindiVoiceId = 'hi-IN-Chirp3-HD-$persona';
-        _preferences.sanskritVoiceId = 'hi-IN-Chirp3-HD-$persona';
-      } else if (voiceId == 'gu-IN-Standard-A' || voiceId == 'hi-IN-Neural2-A') {
-        _preferences.gujaratiVoiceId = 'gu-IN-Standard-A';
-        _preferences.hindiVoiceId = 'hi-IN-Neural2-A';
-        _preferences.sanskritVoiceId = 'hi-IN-Neural2-A';
-      } else if (voiceId == 'gu-IN-Standard-B' || voiceId == 'hi-IN-Neural2-B') {
-        _preferences.gujaratiVoiceId = 'gu-IN-Standard-B';
-        _preferences.hindiVoiceId = 'hi-IN-Neural2-B';
-        _preferences.sanskritVoiceId = 'hi-IN-Neural2-B';
-      } else {
-        if (langCategory == 'Gujarati') {
-          _preferences.gujaratiVoiceId = voiceId;
-        } else if (langCategory == 'Hindi') {
-          _preferences.hindiVoiceId = voiceId;
-        } else if (langCategory == 'Sanskrit') {
-          _preferences.sanskritVoiceId = voiceId;
-        } else if (langCategory == 'English') {
-          _preferences.englishVoiceId = voiceId;
-        }
-      }
+      _ttsService.applyGranthVoiceSelection(_preferences, selectedVoice);
     });
   }
 
@@ -179,7 +147,11 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
         SnackBar(
           content: Row(
             children: [
-              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+              const Icon(
+                Icons.check_circle_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -264,7 +236,10 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(sheetCtx),
-                    icon: const Icon(Icons.close_rounded, color: Color(0xFF8C7355)),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: Color(0xFF8C7355),
+                    ),
                   ),
                 ],
               ),
@@ -274,17 +249,31 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                 decoration: BoxDecoration(
                   color: const Color(0xFFFEF3C7).withOpacity(0.4),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFD97706).withOpacity(0.3)),
+                  border: Border.all(
+                    color: const Color(0xFFD97706).withOpacity(0.3),
+                  ),
                 ),
                 child: Column(
                   children: [
-                    _buildStepRow('૧', 'ગ્રંથ વાચન સ્ક્રીન પર કોઈપણ શ્લોક ખોલો.'),
+                    _buildStepRow(
+                      '૧',
+                      'ગ્રંથ વાચન સ્ક્રીન પર કોઈપણ શ્લોક ખોલો.',
+                    ),
                     const SizedBox(height: 12),
-                    _buildStepRow('૨', 'શ્લોકની નીચે આપેલા "🎤 મારો અવાજ રેકોર્ડ કરો" બટન પર ટેપ કરો.'),
+                    _buildStepRow(
+                      '૨',
+                      'શ્લોકની નીચે આપેલા "🎤 મારો અવાજ રેકોર્ડ કરો" બટન પર ટેપ કરો.',
+                    ),
                     const SizedBox(height: 12),
-                    _buildStepRow('૩', 'માઇક પર ટેપ કરી શ્લોક બોલો, અને સાંભળીને "સાચવો" પર ક્લિક કરો.'),
+                    _buildStepRow(
+                      '૩',
+                      'માઇક પર ટેપ કરી શ્લોક બોલો, અને સાંભળીને "સાચવો" પર ક્લિક કરો.',
+                    ),
                     const SizedBox(height: 12),
-                    _buildStepRow('૪', 'બસ! હવે જ્યારે પણ તમે ગ્રંથ વાંચશો, ત્યારે ૧૦૦% તમારો જ સાચો અવાજ વાગશે!'),
+                    _buildStepRow(
+                      '૪',
+                      'બસ! હવે જ્યારે પણ તમે ગ્રંથ વાંચશો, ત્યારે ૧૦૦% તમારો જ સાચો અવાજ વાગશે!',
+                    ),
                   ],
                 ),
               ),
@@ -294,12 +283,17 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                   backgroundColor: const Color(0xFFD97706),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
                 onPressed: () => Navigator.pop(sheetCtx),
                 child: Text(
                   'સમજાયું (Got It)',
-                  style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold),
+                  style: GoogleFonts.outfit(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -695,7 +689,11 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
           ),
           child: Text(
             num,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
           ),
         ),
         const SizedBox(width: 10),
@@ -791,7 +789,10 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.close_rounded, color: Color(0xFF8C7355)),
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    color: Color(0xFF8C7355),
+                  ),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ],
@@ -827,7 +828,10 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [Color(0xFFFFFBEB), Color(0xFFFEF3C7)],
@@ -835,7 +839,10 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                     end: Alignment.centerRight,
                   ),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFD97706), width: 1.2),
+                  border: Border.all(
+                    color: const Color(0xFFD97706),
+                    width: 1.2,
+                  ),
                 ),
                 child: Column(
                   children: [
@@ -847,7 +854,11 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                             color: Color(0xFFD97706),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.mic_rounded, color: Colors.white, size: 20),
+                          child: const Icon(
+                            Icons.mic_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
@@ -888,7 +899,11 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                       onTap: _showAddCustomVoiceDialog,
                       child: Row(
                         children: [
-                          const Icon(Icons.info_outline, size: 14, color: Color(0xFFB45309)),
+                          const Icon(
+                            Icons.info_outline,
+                            size: 14,
+                            color: Color(0xFFB45309),
+                          ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
@@ -900,7 +915,11 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                               ),
                             ),
                           ),
-                          const Icon(Icons.chevron_right, size: 16, color: Color(0xFFB45309)),
+                          const Icon(
+                            Icons.chevron_right,
+                            size: 16,
+                            color: Color(0xFFB45309),
+                          ),
                         ],
                       ),
                     ),
@@ -916,31 +935,31 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                     child: CircularProgressIndicator(color: Color(0xFFD97706)),
                   )
                 : _errorMessage != null
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              _errorMessage!,
-                              style: GoogleFonts.outfit(color: Colors.red),
-                            ),
-                            const SizedBox(height: 8),
-                            ElevatedButton(
-                              onPressed: _loadData,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFD97706),
-                              ),
-                              child: const Text('Retry'),
-                            ),
-                          ],
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _errorMessage!,
+                          style: GoogleFonts.outfit(color: Colors.red),
                         ),
-                      )
-                    : TabBarView(
-                        controller: _tabController,
-                        children: _languages.map((langCategory) {
-                          return _buildVoiceListForLanguage(langCategory);
-                        }).toList(),
-                      ),
+                        const SizedBox(height: 8),
+                        ElevatedButton(
+                          onPressed: _loadData,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFD97706),
+                          ),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  )
+                : TabBarView(
+                    controller: _tabController,
+                    children: _languages.map((langCategory) {
+                      return _buildVoiceListForLanguage(langCategory);
+                    }).toList(),
+                  ),
           ),
 
           // Speed & Rate Adjustment
@@ -966,7 +985,8 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                   ),
                   const Spacer(),
                   ...[0.80, 0.90, 1.0, 1.10].map((rate) {
-                    final isSel = (_preferences.speakingRate - rate).abs() < 0.04;
+                    final isSel =
+                        (_preferences.speakingRate - rate).abs() < 0.04;
                     return GestureDetector(
                       onTap: () {
                         HapticFeedback.selectionClick();
@@ -979,9 +999,7 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: isSel
-                              ? const Color(0xFFD97706)
-                              : Colors.white,
+                          color: isSel ? const Color(0xFFD97706) : Colors.white,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
                             color: isSel
@@ -993,8 +1011,12 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                           '${rate.toStringAsFixed(2)}x',
                           style: GoogleFonts.outfit(
                             fontSize: 11,
-                            fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
-                            color: isSel ? Colors.white : const Color(0xFF5A442E),
+                            fontWeight: isSel
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: isSel
+                                ? Colors.white
+                                : const Color(0xFF5A442E),
                           ),
                         ),
                       ),
@@ -1068,10 +1090,11 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
       itemBuilder: (ctx, idx) {
         final voice = voices[idx];
         final isSelected = voice.id == selectedVoiceId;
-        final isPlaying = _activePlayingUrl != null &&
+        final isPlaying =
+            _activePlayingUrl != null &&
             voice.previewUrl.isNotEmpty &&
             (_activePlayingUrl!.contains(voice.previewUrl) ||
-             _activePlayingUrl!.contains(voice.id));
+                _activePlayingUrl!.contains(voice.id));
 
         return Container(
           margin: const EdgeInsets.only(bottom: 10),
@@ -1153,7 +1176,9 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
-                                voice.gender == 'Female' ? '♀ Female' : '♂ Male',
+                                voice.gender == 'Female'
+                                    ? '♀ Female'
+                                    : '♂ Male',
                                 style: GoogleFonts.outfit(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,
@@ -1174,8 +1199,8 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                                 color: voice.tier.contains('HD')
                                     ? const Color(0xFFFEF3C7)
                                     : voice.tier.contains('Standard')
-                                        ? const Color(0xFFF3F4F6)
-                                        : const Color(0xFFECFDF5),
+                                    ? const Color(0xFFF3F4F6)
+                                    : const Color(0xFFECFDF5),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
@@ -1186,8 +1211,8 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
                                   color: voice.tier.contains('HD')
                                       ? const Color(0xFFB45309)
                                       : voice.tier.contains('Standard')
-                                          ? const Color(0xFF4B5563)
-                                          : const Color(0xFF047857),
+                                      ? const Color(0xFF4B5563)
+                                      : const Color(0xFF047857),
                                 ),
                               ),
                             ),
