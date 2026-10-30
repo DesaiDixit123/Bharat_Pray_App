@@ -1064,15 +1064,17 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet>
         .where((v) => v.isCustom || v.languageCategory == langCategory)
         .toList();
 
-    String selectedVoiceId = '';
-    if (langCategory == 'Gujarati') {
-      selectedVoiceId = _preferences.gujaratiVoiceId;
-    } else if (langCategory == 'Hindi') {
-      selectedVoiceId = _preferences.hindiVoiceId;
-    } else if (langCategory == 'Sanskrit') {
-      selectedVoiceId = _preferences.sanskritVoiceId;
-    } else if (langCategory == 'English') {
-      selectedVoiceId = _preferences.englishVoiceId;
+        String selectedVoiceId = _preferences.selectedVoiceId ?? '';
+    if (selectedVoiceId.isEmpty) {
+      if (langCategory == 'Gujarati') {
+        selectedVoiceId = _preferences.gujaratiVoiceId;
+      } else if (langCategory == 'Hindi') {
+        selectedVoiceId = _preferences.hindiVoiceId;
+      } else if (langCategory == 'Sanskrit') {
+        selectedVoiceId = _preferences.sanskritVoiceId;
+      } else if (langCategory == 'English') {
+        selectedVoiceId = _preferences.englishVoiceId;
+      }
     }
 
     if (voices.isEmpty) {

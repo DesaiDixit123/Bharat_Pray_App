@@ -84,6 +84,9 @@ class TtsVoice {
 }
 
 class TtsPreferences {
+  String? selectedVoiceId;
+  String? selectedVoiceGender;
+  String? selectedVoiceLanguage;
   String gujaratiVoiceId;
   String hindiVoiceId;
   String sanskritVoiceId;
@@ -92,6 +95,9 @@ class TtsPreferences {
   double pitch;
 
   TtsPreferences({
+    this.selectedVoiceId,
+    this.selectedVoiceGender,
+    this.selectedVoiceLanguage,
     this.gujaratiVoiceId = 'gu-IN-Chirp3-HD-Kore',
     this.hindiVoiceId = 'hi-IN-Chirp3-HD-Kore',
     this.sanskritVoiceId = 'hi-IN-Chirp3-HD-Charon',
@@ -102,6 +108,9 @@ class TtsPreferences {
 
   factory TtsPreferences.fromJson(Map<String, dynamic> json) {
     return TtsPreferences(
+      selectedVoiceId: json['selectedVoiceId']?.toString(),
+      selectedVoiceGender: json['selectedVoiceGender']?.toString(),
+      selectedVoiceLanguage: json['selectedVoiceLanguage']?.toString(),
       gujaratiVoiceId: (json['gujaratiVoiceId'] ?? 'gu-IN-Chirp3-HD-Kore').toString(),
       hindiVoiceId: (json['hindiVoiceId'] ?? 'hi-IN-Chirp3-HD-Kore').toString(),
       sanskritVoiceId: (json['sanskritVoiceId'] ?? 'hi-IN-Chirp3-HD-Charon').toString(),
@@ -115,6 +124,9 @@ class TtsPreferences {
 
   Map<String, dynamic> toJson() {
     return {
+      'selectedVoiceId': selectedVoiceId,
+      'selectedVoiceGender': selectedVoiceGender,
+      'selectedVoiceLanguage': selectedVoiceLanguage,
       'gujaratiVoiceId': gujaratiVoiceId,
       'hindiVoiceId': hindiVoiceId,
       'sanskritVoiceId': sanskritVoiceId,
@@ -125,6 +137,9 @@ class TtsPreferences {
   }
 
   TtsPreferences copyWith({
+    String? selectedVoiceId,
+    String? selectedVoiceGender,
+    String? selectedVoiceLanguage,
     String? gujaratiVoiceId,
     String? hindiVoiceId,
     String? sanskritVoiceId,
@@ -133,6 +148,9 @@ class TtsPreferences {
     double? pitch,
   }) {
     return TtsPreferences(
+      selectedVoiceId: selectedVoiceId ?? this.selectedVoiceId,
+      selectedVoiceGender: selectedVoiceGender ?? this.selectedVoiceGender,
+      selectedVoiceLanguage: selectedVoiceLanguage ?? this.selectedVoiceLanguage,
       gujaratiVoiceId: gujaratiVoiceId ?? this.gujaratiVoiceId,
       hindiVoiceId: hindiVoiceId ?? this.hindiVoiceId,
       sanskritVoiceId: sanskritVoiceId ?? this.sanskritVoiceId,

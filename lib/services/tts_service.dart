@@ -50,33 +50,27 @@ class TtsService {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      var gujaratiVoiceId = prefs.getString('tts_voice_gujarati');
-      var hindiVoiceId = prefs.getString('tts_voice_hindi');
-      var sanskritVoiceId = prefs.getString('tts_voice_sanskrit');
-      var englishVoiceId = prefs.getString('tts_voice_english');
+      final selVoiceId = prefs.getString('tts_selected_voice_id');
+      final selVoiceGender = prefs.getString('tts_selected_voice_gender');
+      final selVoiceLang = prefs.getString('tts_selected_voice_language');
 
-      // Migrate any legacy robotic Standard / WaveNet voices to sweet Chirp 3 HD voices
-      if (gujaratiVoiceId == null ||
-          gujaratiVoiceId.contains('Standard') ||
-          gujaratiVoiceId.contains('Wavenet')) {
-        gujaratiVoiceId = 'gu-IN-Chirp3-HD-Kore';
-      }
-      if (hindiVoiceId == null ||
-          hindiVoiceId.contains('Standard') ||
-          hindiVoiceId.contains('Wavenet')) {
-        hindiVoiceId = 'hi-IN-Chirp3-HD-Kore';
-      }
-      if (sanskritVoiceId == null ||
-          sanskritVoiceId.contains('Standard') ||
-          sanskritVoiceId.contains('Wavenet')) {
-        sanskritVoiceId = 'hi-IN-Chirp3-HD-Charon';
-      }
-      englishVoiceId ??= 'en-IN-Neural2-D';
+      var gujaratiVoiceId = prefs.getString('tts_voice_gujarati') ?? selVoiceId;
+      var hindiVoiceId = prefs.getString('tts_voice_hindi') ?? selVoiceId;
+      var sanskritVoiceId = prefs.getString('tts_voice_sanskrit') ?? selVoiceId;
+      var englishVoiceId = prefs.getString('tts_voice_english') ?? selVoiceId;
+
+      if (gujaratiVoiceId == null) gujaratiVoiceId = 'gu-IN-Chirp3-HD-Kore';
+      if (hindiVoiceId == null) hindiVoiceId = 'hi-IN-Chirp3-HD-Kore';
+      if (sanskritVoiceId == null) sanskritVoiceId = 'hi-IN-Chirp3-HD-Charon';
+      if (englishVoiceId == null) englishVoiceId = 'en-IN-Neural2-D';
 
       final speakingRate = prefs.getDouble('tts_speaking_rate') ?? 0.92;
       final pitch = prefs.getDouble('tts_pitch') ?? 0.0;
 
       _currentPreferences = TtsPreferences(
+        selectedVoiceId: selVoiceId,
+        selectedVoiceGender: selVoiceGender,
+        selectedVoiceLanguage: selVoiceLang,
         gujaratiVoiceId: gujaratiVoiceId,
         hindiVoiceId: hindiVoiceId,
         sanskritVoiceId: sanskritVoiceId,
@@ -99,6 +93,15 @@ class TtsService {
     _currentPreferences = preferences;
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (preferences.selectedVoiceId != null) {
+        await prefs.setString('tts_selected_voice_id', preferences.selectedVoiceId!);
+      }
+      if (preferences.selectedVoiceGender != null) {
+        await prefs.setString('tts_selected_voice_gender', preferences.selectedVoiceGender!);
+      }
+      if (preferences.selectedVoiceLanguage != null) {
+        await prefs.setString('tts_selected_voice_language', preferences.selectedVoiceLanguage!);
+      }
       await prefs.setString('tts_voice_gujarati', preferences.gujaratiVoiceId);
       await prefs.setString('tts_voice_hindi', preferences.hindiVoiceId);
       await prefs.setString('tts_voice_sanskrit', preferences.sanskritVoiceId);
@@ -125,9 +128,13 @@ class TtsService {
     }
   }
 
-  /// Retrieve voice ID matching user's preference for the specified language
+  /// Retrieve voice ID matching user's preference.
+  /// If the devotee selected a voice for Granth, that exact voice is returned for all languages!
   String getVoiceForLanguage(String language, {TtsPreferences? prefs}) {
     final p = prefs ?? _currentPreferences ?? TtsPreferences();
+    if (p.selectedVoiceId != null && p.selectedVoiceId!.isNotEmpty) {
+      return p.selectedVoiceId!;
+    }
     final langLower = language.toLowerCase();
     if (langLower.contains('gujarat')) {
       return p.gujaratiVoiceId;
@@ -142,28 +149,15 @@ class TtsService {
   /// Keep one selected Granth voice persona across all spoken language sections.
   void applyGranthVoiceSelection(TtsPreferences preferences, TtsVoice voice) {
     final voiceId = voice.id;
-    final isCustom = voice.isCustom || voiceId.startsWith('custom-');
-    final chirpMarker = 'Chirp3-HD-';
-    final isChirp = voiceId.contains(chirpMarker);
-    final isFemale = voice.gender.toLowerCase() == 'female';
-    final neuralSuffix = isFemale ? 'A' : 'B';
+    preferences.selectedVoiceId = voiceId;
+    preferences.selectedVoiceGender = voice.gender;
+    preferences.selectedVoiceLanguage = voice.languageCategory;
 
-    if (isCustom) {
-      preferences.gujaratiVoiceId = voiceId;
-      preferences.hindiVoiceId = voiceId;
-      preferences.sanskritVoiceId = voiceId;
-    } else if (isChirp) {
-      final persona = voiceId.split(chirpMarker).last;
-      preferences.gujaratiVoiceId = 'gu-IN-$chirpMarker$persona';
-      preferences.hindiVoiceId = 'hi-IN-$chirpMarker$persona';
-      preferences.sanskritVoiceId = 'hi-IN-$chirpMarker$persona';
-    } else {
-      preferences.gujaratiVoiceId = 'gu-IN-Standard-$neuralSuffix';
-      preferences.hindiVoiceId = 'hi-IN-Neural2-$neuralSuffix';
-      preferences.sanskritVoiceId = 'hi-IN-Neural2-$neuralSuffix';
-    }
-
-    preferences.englishVoiceId = 'en-IN-Neural2-${isFemale ? 'A' : 'D'}';
+    // Apply the chosen voice ID universally across all language slots
+    preferences.gujaratiVoiceId = voiceId;
+    preferences.hindiVoiceId = voiceId;
+    preferences.sanskritVoiceId = voiceId;
+    preferences.englishVoiceId = voiceId;
   }
 
   /// Load custom voices saved locally in persistent SharedPreferences

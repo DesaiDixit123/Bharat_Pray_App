@@ -694,6 +694,9 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       // Speak the entire line naturally via Google Cloud TTS (zero dropped words)
       String? cloudAudioUrl;
       try {
+                final prefs = await _ttsService.loadPreferences();
+        final selectedVoiceId = prefs.selectedVoiceId ?? _ttsService.getVoiceForLanguage('Gujarati', prefs: prefs);
+
         final isGujarati = phrase.spokenText.runes.any(
           (r) => r >= 0x0A80 && r <= 0x0AFF,
         );
@@ -706,6 +709,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
         cloudAudioUrl = await _ttsService.synthesizeScriptureAudio(
           text: phrase.spokenText,
           language: langCategory,
+          voiceId: selectedVoiceId,
           speakingRate: _speedMultiplier,
           sectionType: section.section,
         );
@@ -734,9 +738,11 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
           );
         } catch (_) {}
       } else {
-        debugPrint(
-          '[TTS] Cloud audio unavailable; skipping phrase to keep the selected voice consistent.',
-        );
+        try {
+          await _tts.speak(phrase.spokenText);
+        } catch (e) {
+          debugPrint('[TTS] Device TTS fallback error: $e');
+        }
         // Fallback timer: if onStart didn't fire within 350ms, start ticker anyway
         Timer(const Duration(milliseconds: 350), () {
           if (!audioStarted &&
