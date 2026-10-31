@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 /// Represents a feathered radial reveal node on the divine portrait.
@@ -36,6 +38,62 @@ class RevealNode {
 /// covering the entire portrait (including harmonious face reveal) with ZERO black holes.
 class RamPathCalculator {
   static const int targetJapCount = 108;
+
+  /// Builds a natural, asymmetric, vertically elongated incense smoke plume path.
+  /// The step seeds the contour, so every reveal gets its own irregular shape.
+  static Path buildOrganicRevealPath(Offset center, double baseRadius, int step) {
+    final double phi1 = (step * 1.6180339887) % (2 * math.pi);
+    final double phi2 = (step * 2.7182818284) % (2 * math.pi);
+    final double tilt = 0.14 * math.sin(step * 0.85); // Natural sway of rising smoke
+
+    const int numPoints = 16;
+    final List<Offset> points = [];
+
+    for (int i = 0; i < numPoints; i++) {
+      final double theta = i * 2 * math.pi / numPoints;
+      // Organic harmonic wave: creates gentle billows and curling contours
+      final double distortion = 1.0 +
+          (0.25 * math.sin((2 * theta) + phi1)) +
+          (0.15 * math.cos((3 * theta) + phi2)) -
+          (0.22 * math.cos(theta)); // Vertical elongation
+
+      final double r = baseRadius * distortion;
+
+      // Elongate vertically (smoke rising upward from burner)
+      final double px = center.dx + (r * 0.82 * math.sin(theta + tilt));
+      final double py = center.dy - (r * 1.40 * math.cos(theta + tilt));
+      points.add(Offset(px, py));
+    }
+
+    final path = Path();
+    // Smooth closed spline through midpoints
+    final firstMid = Offset(
+      (points[0].dx + points[numPoints - 1].dx) / 2,
+      (points[0].dy + points[numPoints - 1].dy) / 2,
+    );
+    path.moveTo(firstMid.dx, firstMid.dy);
+
+    for (int i = 0; i < numPoints; i++) {
+      final next = (i + 1) % numPoints;
+      final mid = Offset((points[i].dx + points[next].dx) / 2, (points[i].dy + points[next].dy) / 2);
+      path.quadraticBezierTo(points[i].dx, points[i].dy, mid.dx, mid.dy);
+    }
+    path.close();
+
+    return path;
+  }
+
+  /// Paints one soft, smoke-shaped reveal into the current mask layer.
+  static void drawOrganicRevealMask(Canvas canvas, Offset center, double baseRadius, int step) {
+    final double blurFactor = step >= 102 ? 0.35 : 0.40; // Keep the face climax crisper
+    canvas.drawPath(
+      buildOrganicRevealPath(center, baseRadius, step),
+      Paint()
+        ..style = PaintingStyle.fill
+        ..color = Colors.white
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, baseRadius * blurFactor),
+    );
+  }
 
   /// Computes the aspect-ratio fitted destination rect for the portrait (BoxFit.cover).
   static Rect computeDstRect(Size size, {double imageAspect = 682.0 / 1024.0}) {

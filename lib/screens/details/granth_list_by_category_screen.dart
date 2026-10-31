@@ -43,39 +43,8 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
       final savedIds = savedList.map((g) => (g['_id'] ?? g['id'] ?? '').toString()).toSet();
 
       final categoryId = (widget.category['_id'] ?? widget.category['id'] ?? '').toString();
-      final categoryTitle = (widget.category['title'] ?? widget.category['name'] ?? '').toString();
-
-      List<dynamic> list = [];
-
-      if (categoryId.isNotEmpty) {
-        try {
-          final data = await ApiService.getGranthsByCategory(categoryId, limit: 50);
-          list = data['docs'] ?? [];
-        } catch (_) {}
-      }
-
-      // Fallback 1: Search granth library by category title
-      if (list.isEmpty && categoryTitle.isNotEmpty) {
-        try {
-          final libData = await ApiService.getGranthLibraryData(
-            limit: 50,
-            search: categoryTitle,
-          );
-          list = libData['docs'] ?? [];
-        } catch (_) {}
-      }
-
-      // Fallback 2: Fetch all available granths in library
-      if (list.isEmpty) {
-        try {
-          final allData = await ApiService.getGranthLibraryData(limit: 50);
-          list = allData['docs'] ?? [];
-        } catch (_) {}
-      }
-
-      if (list.isEmpty) {
-        list = ApiService.getDefaultGranthsByCategory(categoryId, categoryTitle);
-      }
+      final data = await ApiService.getGranthsByCategory(categoryId, limit: 50);
+      final List<dynamic> list = data['docs'] ?? [];
 
       if (!mounted) return;
       setState(() {
@@ -90,15 +59,11 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
       _refreshChapterCountsInBackground(list);
     } catch (e) {
       if (!mounted) return;
-      final categoryId = (widget.category['_id'] ?? widget.category['id'] ?? '').toString();
-      final categoryTitle = (widget.category['title'] ?? widget.category['name'] ?? '').toString();
-      final list = ApiService.getDefaultGranthsByCategory(categoryId, categoryTitle);
       setState(() {
-        _granths = list;
+        _granths = [];
         _isLoading = false;
-        _error = '';
+        _error = 'Unable to load granths. Please try again.';
       });
-      _refreshChapterCountsInBackground(list);
     }
   }
 
@@ -114,19 +79,13 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
 
         try {
           final chapters = await ApiService.getChaptersByGranth(gId);
-          if (chapters.isNotEmpty) {
-            final name = (g['name'] ?? g['title'] ?? '').toString().toLowerCase();
-            final isGita = name.contains('gita');
-            if (isGita || chapters != ApiService.defaultGitaChapters) {
-              final realCount = chapters.length;
-              if (g['totalChapters'] != realCount) {
-                g['totalChapters'] = realCount;
-                g['chaptersCount'] = realCount;
-                g['chapterCount'] = realCount;
-                updatedList[i] = g;
-                hasChanges = true;
-              }
-            }
+          final realCount = chapters.length;
+          if (g['totalChapters'] != realCount) {
+            g['totalChapters'] = realCount;
+            g['chaptersCount'] = realCount;
+            g['chapterCount'] = realCount;
+            updatedList[i] = g;
+            hasChanges = true;
           }
         } catch (_) {}
       }
@@ -144,7 +103,7 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
     final dynamic totalChapters = granth['totalChapters'] ?? granth['chaptersCount'] ?? granth['chapterCount'];
     if (totalChapters != null) {
       final parsed = int.tryParse(totalChapters.toString());
-      if (parsed != null && parsed > 0) return parsed;
+      if (parsed != null && parsed >= 0) return parsed;
     }
 
     // 2. Check if embedded chapters list exists
@@ -152,32 +111,7 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
       return (granth['chapters'] as List).length;
     }
 
-    // 3. Fallback based on canonical scripture structure
-    final name = (granth['name'] ?? granth['title'] ?? '').toString().toLowerCase().trim();
-    if (name.contains('gita')) return 18;
-    if (name.contains('ramcharitmanas') || name.contains('ramayana')) return 7;
-    if (name.contains('chalisa') || name.contains('aarti') || name.contains('stotra') || name.contains('kavach')) return 1;
-    if (name.contains('durga saptashati') || name.contains('chandi')) return 13;
-    if (name.contains('rigveda') || name.contains('rig veda')) return 10;
-    if (name.contains('samaveda') || name.contains('sama veda')) return 6;
-    if (name.contains('yajurveda') || name.contains('yajur veda')) return 40;
-    if (name.contains('atharvaveda') || name.contains('atharva veda')) return 20;
-    if (name.contains('bhagavat puran') || name.contains('bhagavata')) return 12;
-    if (name.contains('shiv mahapuran') || name.contains('shiva puran')) return 7;
-    if (name.contains('vishnu puran')) return 6;
-    if (name.contains('garuda puran')) return 2;
-    if (name.contains('mahabharat')) return 18;
-    if (name.contains('upanishad')) return 10;
-    if (name.contains('veda')) return 4;
-
-    // 4. Check totalPages if > 0
-    final dynamic totalPages = granth['totalPages'];
-    if (totalPages != null) {
-      final parsedPages = int.tryParse(totalPages.toString());
-      if (parsedPages != null && parsedPages > 0) return parsedPages;
-    }
-
-    return 1;
+    return 0;
   }
 
   Future<void> _toggleGranthSave(Map<String, dynamic> granth) async {
@@ -481,24 +415,8 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
 
   Widget _buildGranthImage(Map<String, dynamic> granth) {
     final rawImg = (granth['coverImage'] ?? granth['image'] ?? '').toString();
-    final name = (granth['name'] ?? granth['title'] ?? '').toString().toLowerCase();
 
-    String finalPath = rawImg;
-    if (finalPath.isEmpty) {
-      if (name.contains('ramcharitmanas') || name.contains('ram')) {
-        finalPath = 'assets/images/bal_kand_cover.jpg';
-      } else if (name.contains('hanuman')) {
-        finalPath = 'assets/images/image_4.png';
-      } else if (name.contains('shiv')) {
-        finalPath = 'assets/images/deity_shiva.png';
-      } else if (name.contains('durga') || name.contains('saptashati')) {
-        finalPath = 'assets/images/image_4_1.png';
-      } else {
-        finalPath = 'assets/images/bhagavad_gita.png';
-      }
-    }
-
-    final resolved = ApiService.resolveImageUrl(finalPath);
+    final resolved = ApiService.resolveImageUrl(rawImg);
     if (resolved.startsWith('http')) {
       return Image.network(
         resolved,
@@ -509,14 +427,17 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
         errorBuilder: (_, _, _) => _granthImageFallback(),
       );
     }
-    return Image.asset(
-      finalPath.startsWith('assets/') ? finalPath : 'assets/images/bal_kand_cover.jpg',
-      fit: BoxFit.cover,
-      width: double.infinity,
-      height: double.infinity,
-      filterQuality: FilterQuality.high,
-      errorBuilder: (_, _, _) => _granthImageFallback(),
-    );
+    if (rawImg.startsWith('assets/')) {
+      return Image.asset(
+        rawImg,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        filterQuality: FilterQuality.high,
+        errorBuilder: (_, _, _) => _granthImageFallback(),
+      );
+    }
+    return _granthImageFallback();
   }
 
   Widget _granthImageFallback() {

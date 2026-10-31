@@ -1420,230 +1420,15 @@ class ApiService {
     });
   }
 
-  // ── Default Fallback Sacred Data for Seamless Offline & Dev Mode ──
-  static const List<Map<String, dynamic>> defaultGranthCategories = [
-    {
-      '_id': '6a71efbdbc66c12723e63ee1',
-      'name': 'Gita & Epics',
-      'title': 'Gita & Epics',
-      'description': 'The supreme philosophical song of Lord Krishna and epic scriptures.',
-      'image': 'assets/images/bhagavad_gita.png',
-      'granthCount': 2,
-    },
-    {
-      '_id': '6a71efbdbc66c12723e63ee2',
-      'name': 'Epics & Itihas',
-      'title': 'Epics & Itihas',
-      'description': 'Timeless epics of Sanatan Dharma including Shri Ramcharitmanas and Mahabharata.',
-      'image': 'assets/images/image_2.png',
-      'granthCount': 1,
-    },
-    {
-      '_id': '6a71efbdbc66c12723e63ee4',
-      'name': 'Puranas',
-      'title': 'Puranas',
-      'description': 'Sacred Mahapuranas detailing cosmic creation and glory of the Divine.',
-      'image': 'assets/images/deity_shiva.png',
-      'granthCount': 3,
-    },
-    {
-      '_id': '6a71efbdbc66c12723e63ee3',
-      'name': 'Stotram & Chalisas',
-      'title': 'Stotram & Chalisas',
-      'description': 'Revered devotional hymns, protective chalisas, and uplifting mantras.',
-      'image': 'assets/images/image_4.png',
-      'granthCount': 2,
-    },
-    {
-      '_id': '6a71efbdbc66c12723e63ee5',
-      'name': 'Vedas & Upanishads',
-      'title': 'Vedas & Upanishads',
-      'description': 'Eternal primordial revelations, Vedic hymns, and profound Upanishadic wisdom.',
-      'image': 'assets/images/image_4_1.png',
-      'granthCount': 2,
-    },
-  ];
-
-  static List<Map<String, dynamic>> getDefaultGranthsByCategory(String categoryId, String search) {
-    const all = [
-      {
-        '_id': '6a71f1387d62ed1d74606161',
-        'name': 'Shrimad Bhagavad Gita',
-        'categoryId': {'_id': '6a71efbdbc66c12723e63ee1', 'name': 'Gita & Epics'},
-        'author': 'Maharishi Ved Vyas',
-        'language': 'Sanskrit & Hindi',
-        'description': 'The 700-verse celestial song delivered by Lord Krishna to Arjuna on the battlefield of Kurukshetra. Contains all 18 Chapters.',
-        'coverImage': 'assets/images/bhagavad_gita.png',
-        'isPopular': true,
-      },
-      {
-        '_id': '6a71f1387d62ed1d74606163',
-        'name': 'Shri Ramcharitmanas',
-        'categoryId': {'_id': '6a71efbdbc66c12723e63ee2', 'name': 'Epics & Itihas'},
-        'author': 'Goswami Tulsidas',
-        'language': 'Awadhi & Hindi',
-        'description': 'The sublime epic depicting the divine life and pastimes of Maryada Purushottam Bhagwan Shri Ram across all 7 Kandas.',
-        'coverImage': 'assets/images/bal_kand_cover.jpg',
-        'isPopular': true,
-      },
-      {
-        '_id': '6a71f1387d62ed1d74606162',
-        'name': 'Shri Hanuman Chalisa',
-        'categoryId': {'_id': '6a71efbdbc66c12723e63ee3', 'name': 'Stotram & Chalisas'},
-        'author': 'Goswami Tulsidas',
-        'language': 'Awadhi & Hindi',
-        'description': 'The sacred 40-verse hymn conferring strength, courage, wisdom, and protection against all perils.',
-        'coverImage': 'assets/images/image_4.png',
-        'isPopular': true,
-      },
-      {
-        '_id': '6a71f1387d62ed1d74606170',
-        'name': 'Shri Durga Saptashati',
-        'categoryId': {'_id': '6a71efbdbc66c12723e63ee3', 'name': 'Stotram & Chalisas'},
-        'author': 'Markandeya Rishi',
-        'language': 'Sanskrit & Hindi',
-        'description': 'The 700 sacred mantras and hymns from Markandeya Purana celebrating the invincible power of Divine Mother Goddess Durga.',
-        'coverImage': 'assets/images/image_4_1.png',
-        'isPopular': true,
-      },
-      {
-        '_id': '6a71f1387d62ed1d74606164',
-        'name': 'Shiv Mahapuran',
-        'categoryId': {'_id': '6a71efbdbc66c12723e63ee4', 'name': 'Puranas'},
-        'author': 'Maharishi Ved Vyas',
-        'language': 'Sanskrit & Hindi',
-        'description': 'The divine glory, cosmic dance, and timeless teachings of Mahadeva Shiva, including the famous Shiva Tandava Stotram.',
-        'coverImage': 'assets/images/deity_shiva.png',
-        'isPopular': true,
-      },
-      {
-        '_id': '6a71f1387d62ed1d74606165',
-        'name': 'Shrimad Bhagavat Puran',
-        'categoryId': {'_id': '6a71efbdbc66c12723e63ee4', 'name': 'Puranas'},
-        'author': 'Maharishi Ved Vyas',
-        'language': 'Sanskrit & Hindi',
-        'description': 'The crown jewel of Puranic literature detailing the divine avatars and pastimes of Lord Krishna.',
-        'coverImage': 'assets/images/deity_krishna.png',
-        'isPopular': true,
-      },
-    ];
-    if (categoryId.isNotEmpty) {
-      final filtered = all.where((g) => (g['categoryId'] as Map)['_id'] == categoryId).toList();
-      if (filtered.isNotEmpty) return filtered;
-    }
-    if (search.trim().isNotEmpty) {
-      final s = search.trim().toLowerCase();
-      final filtered = all.where((g) => (g['name'] as String).toLowerCase().contains(s)).toList();
-      if (filtered.isNotEmpty) return filtered;
-    }
-    return all;
-  }
-
-  static const List<Map<String, dynamic>> defaultGitaChapters = [
-    {
-      '_id': '6ac797599ceba10a4e99ce76',
-      'chapterNumber': 1,
-      'title': 'Chapter 1: Arjuna Vishada Yoga',
-      'name': 'Adhyay 1: Arjuna Vishada Yoga',
-      'sanskritName': 'अध्याय १: अर्जुनविषादयोगः',
-      'description': 'Arjuna’s grief upon seeing beloved family and teachers on the battlefield of Kurukshetra.',
-      'verses': [
-        {
-          'sanskrit': 'धृतराष्ट्र उवाच |\nधर्मक्षेत्रे कुरुक्षेत्रे समवेता युयुत्सवः |\nमामकाः पाण्डवाश्चैव किमकुर्वत सञ्जय ||१-१||',
-          'transliteration': 'dhṛtarāṣṭra uvāca |\ndharmakṣetre kurukṣetre samavetā yuyutsavaḥ |\nmāmakāḥ pāṇḍavāścaiva kimakurvata sañjaya ||1-1||',
-          'english': 'Dhritarashtra said: O Sanjaya, assembled on the sacred plain of Kurukshetra, eager to fight, what did my sons and the sons of Pandu do?',
-          'hindi': 'धृतराष्ट्र ने कहा: हे संजय! धर्मभूमि कुरुक्षेत्र में युद्ध की इच्छा से एकत्र हुए मेरे और पाण्डु के पुत्रों ने क्या किया?'
-        },
-        {
-          'sanskrit': 'सञ्जय उवाच |\nदृष्ट्वा तु पाण्डवानीकं व्यूढं दुर्योधनस्तदा |\nआचार्यमुपसङ्गम्य राजा वचनमब्रवीत् ||१-२||',
-          'transliteration': 'sañjaya uvāca |\ndṛṣṭvā tu pāṇḍavānīkaṁ vyūḍhaṁ duryodhanastadā |\nācāryamupasaṅgamya rājā vacanamabravīt ||1-2||',
-          'english': 'Sanjaya said: Having seen the army of the Pandavas arranged in military formation, King Duryodhana approached his teacher Drona and spoke these words.',
-          'hindi': 'संजय ने कहा: पाण्डवों की सेना को व्यूहरचना में देखकर राजा दुर्योधन ने अपने गुरु द्रोणाचार्य के पास जाकर यह वचन कहा।'
-        },
-        {
-          'sanskrit': 'पश्यैतां पाण्डुपुत्राणामाचार्य महतीं चमूम् |\nव्यूढां द्रुपदपुत्रेण तव शिष्येण धीमता ||१-३||',
-          'transliteration': 'paśyaitāṁ pāṇḍuputrāṇāmācārya mahatīṁ camūm |\nvyūḍhāṁ drupadaputreṇa tava śiṣyeṇa dhīmatā ||1-3||',
-          'english': 'Behold, O Master, this mighty army of the sons of Pandu, arrayed by your talented pupil, the son of Drupada.',
-          'hindi': 'हे आचार्य! आपके बुद्धिमान शिष्य द्रुपदपुत्र द्वारा व्यूहाकार खड़ी की गई पाण्डुपुत्रों की इस विशाल सेना को देखिए।'
-        }
-      ]
-    },
-    {
-      '_id': '6ac797599ceba10a4e99ce77',
-      'chapterNumber': 2,
-      'title': 'Chapter 2: Sankhya Yoga',
-      'name': 'Adhyay 2: Sankhya Yoga',
-      'sanskritName': 'अध्याय २: सांख्ययोगः',
-      'description': 'The supreme wisdom of the immortal soul (Atman) and the timeless science of selfless Karma Yoga.',
-      'verses': [
-        {
-          'sanskrit': 'कर्मण्येवाधिकारस्ते मा फलेषु कदाचन |\nमा कर्मफलहेतुर्भूर्मा ते सङ्गोऽस्त्वकर्मणि ||२-४७||',
-          'transliteration': 'karmaṇyevādhikāraste mā phaleṣu kadācana |\nmā karmaphalaheturbhūrmā te saṅgo\'stvakarmaṇi ||2-47||',
-          'english': 'You have a right only to perform your prescribed duty, but never to the fruits of action. Never consider yourself the cause of results, nor be attached to inaction.',
-          'hindi': 'तुम्हारा अधिकार केवल कर्म करने में है, उसके फलों में कभी नहीं। इसलिए कर्मफल के हेतु मत बनो और तुम्हारी आसक्ति अकर्म में भी न हो।'
-        },
-        {
-          'sanskrit': 'नैनं छिन्दन्ति शस्त्राणि नैनं दहति पावकः |\nन चैनं क्लेदयन्त्यापो न शोषयति मारुतः ||२-२३||',
-          'transliteration': 'nainaṁ chindanti śastrāṇi nainaṁ dahati pāvakaḥ |\nna cainaṁ kledayantyāpo na śoṣayati mārutaḥ ||2-23||',
-          'english': 'Weapons cannot cut the soul, fire cannot burn it, water cannot wet it, nor can the wind wither it away.',
-          'hindi': 'आत्मा को न शस्त्र काट सकते हैं, न आग जला सकती है, न जल इसे गीला कर सकता है और न वायु इसे सुखा सकती है।'
-        }
-      ]
-    },
-    {
-      '_id': '6ac797599ceba10a4e99ce78',
-      'chapterNumber': 3,
-      'title': 'Chapter 3: Karma Yoga',
-      'name': 'Adhyay 3: Karma Yoga',
-      'sanskritName': 'अध्याय ३: कर्मयोगः',
-      'description': 'The divine path of dedicated, selfless action performed without ego or desire for personal rewards.',
-      'verses': [
-        {
-          'sanskrit': 'यद्यदाचरति श्रेष्ठस्तत्तदेवेतरो जनः |\nस यत्प्रमाणं कुरुते लोकस्तदनुवर्तते ||३-२१||',
-          'transliteration': 'yadyadācarati śreṣṭhastattadevetaro janaḥ |\nsa yatpramāṇaṁ kurute lokastadanuvartate ||3-21||',
-          'english': 'Whatever a great leader does, ordinary people follow. Whatever standards they set, the world pursues.',
-          'hindi': 'श्रेष्ठ पुरुष जो-जो आचरण करता है, अन्य लोग भी वैसा ही आचरण करते हैं। वह जो प्रमाण प्रस्तुत करता है, समस्त संसार उसका अनुसरण करता है।'
-        }
-      ]
-    },
-    {
-      '_id': '6ac797599ceba10a4e99ce79',
-      'chapterNumber': 4,
-      'title': 'Chapter 4: Jnana Karma Sanyasa Yoga',
-      'name': 'Adhyay 4: Jnana Karma Sanyasa Yoga',
-      'sanskritName': 'अध्याय ४: ज्ञानकर्मसंन्यासयोगः',
-      'description': 'The transcendental knowledge of the Lord’s divine descent and spiritual wisdom.',
-      'verses': [
-        {
-          'sanskrit': 'यदा यदा हि धर्मस्य ग्लानिर्भवति भारत |\nअभ्युत्थानमधर्मस्य तदात्मानं सृजाम्यहम् ||४-७||',
-          'transliteration': 'yadā yadā hi dharmasya glānirbhavati bhārata |\nabhyutthānamadharmasya tadātmānaṁ sṛjāmyaham ||4-7||',
-          'english': 'Whenever there is a decline in righteousness and an increase in unrighteousness, O Bharata, at that time I manifest Myself on earth.',
-          'hindi': 'हे भारत! जब-जब धर्म की हानि और अधर्म की वृद्धि होती है, तब-तब मैं अपने रूप को रचता हूँ अर्थात साकार रूप में प्रकट होता हूँ।'
-        },
-        {
-          'sanskrit': 'परित्राणाय साधूनां विनाशाय च दुष्कृताम् |\nधर्मसंस्थापनार्थाय सम्भवामि युगे युगे ||४-८||',
-          'transliteration': 'paritrāṇāya sādhūnāṁ vināśāya ca duṣkṛtām |\ndharmasaṁsthāpanārthāya sambhavāmi yuge yuge ||4-8||',
-          'english': 'For the protection of the good, the destruction of the wicked, and the re-establishment of righteousness, I appear age after age.',
-          'hindi': 'साधु पुरुषों के उद्धार के लिए, पापकर्म करने वालों के विनाश के लिए और धर्म की भली-भांति स्थापना के लिए मैं युग-युग में प्रकट होता हूँ।'
-        }
-      ]
-    }
-  ];
-
   // GET /api/granth-category
   static Future<List<dynamic>> getGranthCategories({String? token}) async {
     return _runGranthApi('GET /api/granth-category', () async {
-      try {
-        final response = await _safeGet(
-          Uri.parse('$baseUrl/api/granth-category'),
-          headers: _optionalAuthHeaders(token), // Pass token if available
-        );
-        final data = _processResponse(response)['Data'];
-        if (data is List && data.isNotEmpty) return data;
-      } catch (e) {
-        print('[API] getGranthCategories fallback to default: $e');
-      }
-      return defaultGranthCategories;
+      final response = await _safeGet(
+        Uri.parse('$baseUrl/api/granth-category'),
+        headers: _optionalAuthHeaders(token), // Pass token if available
+      );
+      final data = _processResponse(response)['Data'];
+      return data is List ? data : [];
     });
   }
 
@@ -1655,19 +1440,12 @@ class ApiService {
     int limit = 10,
   }) async {
     return _runGranthApi('GET /api/granth-category/:categoryId/granths', () async {
-      try {
-        final uri = Uri.parse('$baseUrl/api/granth-category/$categoryId/granths').replace(
-          queryParameters: {'page': '$page', 'limit': '$limit'},
-        );
-        final response = await _safeGet(uri, headers: _optionalAuthHeaders(token)); // Pass token
-        final data = _processResponse(response)['Data'];
-        if (data is Map<String, dynamic> && (data['docs'] as List?)?.isNotEmpty == true) {
-          return data;
-        }
-      } catch (e) {
-        print('[API] getGranthsByCategory fallback: $e');
-      }
-      return {'docs': getDefaultGranthsByCategory(categoryId, '')};
+      final uri = Uri.parse('$baseUrl/api/granth-category/$categoryId/granths').replace(
+        queryParameters: {'page': '$page', 'limit': '$limit'},
+      );
+      final response = await _safeGet(uri, headers: _optionalAuthHeaders(token)); // Pass token
+      final data = _processResponse(response)['Data'];
+      return data is Map<String, dynamic> ? data : {'docs': []};
     });
   }
 
@@ -1683,55 +1461,35 @@ class ApiService {
     String sortOrder = '',
   }) async {
     return _runGranthApi('GET /api/granth', () async {
-      try {
-        final params = <String, String>{'page': '$page', 'limit': '$limit'};
-        if (search.trim().isNotEmpty) params['search'] = search.trim();
-        if (categoryId.trim().isNotEmpty) params['categoryId'] = categoryId.trim();
-        if (language.trim().isNotEmpty) params['language'] = language.trim();
-        if (popular.trim().isNotEmpty) params['popular'] = popular.trim();
-        if (sortBy.trim().isNotEmpty) params['sortBy'] = sortBy.trim();
-        if (sortOrder.trim().isNotEmpty) params['sortOrder'] = sortOrder.trim();
+      final params = <String, String>{'page': '$page', 'limit': '$limit'};
+      if (search.trim().isNotEmpty) params['search'] = search.trim();
+      if (categoryId.trim().isNotEmpty) params['categoryId'] = categoryId.trim();
+      if (language.trim().isNotEmpty) params['language'] = language.trim();
+      if (popular.trim().isNotEmpty) params['popular'] = popular.trim();
+      if (sortBy.trim().isNotEmpty) params['sortBy'] = sortBy.trim();
+      if (sortOrder.trim().isNotEmpty) params['sortOrder'] = sortOrder.trim();
 
-        final uri = Uri.parse('$baseUrl/api/granth').replace(queryParameters: params);
-        final response = await _safeGet(uri);
-        final data = _processResponse(response)['Data'];
-        if (data is Map<String, dynamic> && (data['docs'] as List?)?.isNotEmpty == true) {
-          return data;
-        }
-      } catch (e) {
-        print('[API] getGranthLibraryData fallback: $e');
-      }
-      return {'docs': getDefaultGranthsByCategory(categoryId, search)};
+      final uri = Uri.parse('$baseUrl/api/granth').replace(queryParameters: params);
+      final response = await _safeGet(uri);
+      final data = _processResponse(response)['Data'];
+      return data is Map<String, dynamic> ? data : {'docs': []};
     });
   }
 
   // GET /api/granth/:granthId
   static Future<Map<String, dynamic>> getGranthDetails(String granthId) async {
     return _runGranthApi('GET /api/granth/:granthId', () async {
-      try {
-        final response = await _safeGet(Uri.parse('$baseUrl/api/granth/$granthId'));
-        return _processResponse(response)['Data'] ?? {};
-      } catch (e) {
-        final match = getDefaultGranthsByCategory('', '').firstWhere(
-          (g) => g['_id'] == granthId,
-          orElse: () => getDefaultGranthsByCategory('', '').first,
-        );
-        return match;
-      }
+      final response = await _safeGet(Uri.parse('$baseUrl/api/granth/$granthId'));
+      return _processResponse(response)['Data'] ?? {};
     });
   }
 
   // GET /api/granth/:granthId/chapters
   static Future<List<dynamic>> getChaptersByGranth(String granthId) async {
     return _runGranthApi('GET /api/granth/:granthId/chapters', () async {
-      try {
-        final response = await _safeGet(Uri.parse('$baseUrl/api/granth/$granthId/chapters'));
-        final data = _processResponse(response)['Data'];
-        if (data is List && data.isNotEmpty) return data;
-      } catch (e) {
-        print('[API] getChaptersByGranth fallback: $e');
-      }
-      return defaultGitaChapters;
+      final response = await _safeGet(Uri.parse('$baseUrl/api/granth/$granthId/chapters'));
+      final data = _processResponse(response)['Data'];
+      return data is List ? data : [];
     });
   }
 

@@ -21,9 +21,6 @@ class _GranthScreenState extends State<GranthScreen> {
   @override
   void initState() {
     super.initState();
-    // Instant UI load: display cached/default categories immediately so there is ZERO waiting time
-    _categories = _mapCategories(ApiService.defaultGranthCategories);
-    _isLoading = _categories.isEmpty;
     _fetchCategories();
   }
 
@@ -59,16 +56,10 @@ class _GranthScreenState extends State<GranthScreen> {
         countVal = int.tryParse(catMap['count'].toString());
       }
 
-      // If backend didn't supply a count, compute from default granths for this category
-      if (countVal == null) {
-        final defGranths = ApiService.getDefaultGranthsByCategory(catId, title);
-        countVal = defGranths.length;
-      }
-
       res.add({
         '_id': catId,
         'title': title,
-        'count': countVal,
+        'count': countVal ?? 0,
         'image': resolvedImg,
         'description': (catMap['description'] ?? '').toString().isNotEmpty
             ? catMap['description'].toString()
@@ -94,9 +85,7 @@ class _GranthScreenState extends State<GranthScreen> {
       final fetched = _mapCategories(remoteCats);
 
       setState(() {
-        if (fetched.isNotEmpty) {
-          _categories = fetched;
-        }
+        _categories = fetched;
         _isLoading = false;
         _error = _categories.isEmpty ? 'No granth categories found.' : '';
       });
@@ -105,19 +94,10 @@ class _GranthScreenState extends State<GranthScreen> {
       _refreshCountsInBackground(fetched);
     } catch (e) {
       if (!mounted) return;
-      if (_categories.isEmpty) {
-        final fallback = _mapCategories(ApiService.defaultGranthCategories);
-        setState(() {
-          _categories = fallback;
-          _isLoading = false;
-          _error = '';
-        });
-        _refreshCountsInBackground(fallback);
-      } else {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      setState(() {
+        _isLoading = false;
+        _error = _categories.isEmpty ? 'Unable to load granth categories. Please try again.' : '';
+      });
     }
   }
 

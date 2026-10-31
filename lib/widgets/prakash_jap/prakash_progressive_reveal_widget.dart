@@ -109,7 +109,6 @@ class PrakashProgressiveRevealPainter extends CustomPainter {
   final double completionGlow;
 
   static final Paint _imagePaint = Paint()..filterQuality = FilterQuality.high;
-  static final Paint _maskPaint = Paint()..style = PaintingStyle.fill;
   static final Paint _glowEdgePaint = Paint()
     ..style = PaintingStyle.stroke
     ..strokeCap = StrokeCap.round;
@@ -184,18 +183,7 @@ class PrakashProgressiveRevealPainter extends CustomPainter {
     // A. Expanding Prakash Light-Cone from Heaven & Crown Center
     // The central sacred light beam illuminates downward from halo
     final double lightBeamRadius = dstRect.width * (0.22 + (0.65 * math.pow(t, 0.82)));
-    _maskPaint.shader = ui.Gradient.radial(
-      haloCenter,
-      lightBeamRadius,
-      [
-        Colors.white,
-        Colors.white.withValues(alpha: 0.95),
-        Colors.white.withValues(alpha: 0.50),
-        Colors.transparent,
-      ],
-      [0.0, 0.45, 0.85, 1.0],
-    );
-    canvas.drawCircle(haloCenter, lightBeamRadius, _maskPaint);
+    RamPathCalculator.drawOrganicRevealMask(canvas, haloCenter, lightBeamRadius * 0.62, 7);
 
     // B. Multi-Region Revealed Nodes from RamPathCalculator
     // Guarantees every single tap reveals a tangible, distinct portion
@@ -207,18 +195,7 @@ class PrakashProgressiveRevealPainter extends CustomPainter {
       );
       final double radius = node.radiusNorm * 1.30 * dstRect.width * expansion;
 
-      _maskPaint.shader = ui.Gradient.radial(
-        nodeCenter,
-        radius,
-        [
-          Colors.white,
-          Colors.white.withValues(alpha: 0.85),
-          Colors.white.withValues(alpha: 0.35),
-          Colors.transparent,
-        ],
-        [0.0, 0.40, 0.75, 1.0],
-      );
-      canvas.drawCircle(nodeCenter, radius, _maskPaint);
+      RamPathCalculator.drawOrganicRevealMask(canvas, nodeCenter, radius * 0.60, node.step);
     }
 
     // Blend the image over the feathered mask using BlendMode.srcIn
@@ -242,7 +219,7 @@ class PrakashProgressiveRevealPainter extends CustomPainter {
         ..strokeWidth = 2.4 * (1.0 - (0.5 * shimmerProgress))
         ..color = const Color(0xFFFFD54F).withValues(alpha: sAlpha * 0.85);
 
-      canvas.drawCircle(newestCenter, sRadius, _glowEdgePaint);
+      canvas.drawPath(RamPathCalculator.buildOrganicRevealPath(newestCenter, sRadius * 0.75, newestNode!.step), _glowEdgePaint);
     }
   }
 

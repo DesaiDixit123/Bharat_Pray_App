@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/tts_voice_model.dart';
+import '../../services/jap_voice_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/user_verse_recording_service.dart';
 
@@ -10,16 +11,21 @@ class GranthVoiceSelectorSheet extends StatefulWidget {
   final String? initialLanguage;
   final VoidCallback? onVoiceChanged;
 
+  /// When set, the sheet picks the Jap chant voice and previews this mantra.
+  final String? japMantraText;
+
   const GranthVoiceSelectorSheet({
     super.key,
     this.initialLanguage,
     this.onVoiceChanged,
+    this.japMantraText,
   });
 
   static Future<void> show(
     BuildContext context, {
     String? initialLanguage,
     VoidCallback? onVoiceChanged,
+    String? japMantraText,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -28,6 +34,7 @@ class GranthVoiceSelectorSheet extends StatefulWidget {
       builder: (ctx) => GranthVoiceSelectorSheet(
         initialLanguage: initialLanguage,
         onVoiceChanged: onVoiceChanged,
+        japMantraText: japMantraText,
       ),
     );
   }
@@ -50,6 +57,12 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
   StreamSubscription? _previewSub;
   String? _activePlayingUrl;
   bool _prioritizeMyVoice = true;
+
+  final JapVoiceService _japVoiceService = JapVoiceService();
+  String _japVoiceId = JapVoiceService.defaultVoiceId;
+  String? _japPreviewVoiceId;
+
+  bool get _isJapMode => widget.japMantraText != null;
 
   @override
   void initState() {
@@ -79,6 +92,18 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
       _errorMessage = null;
     });
 
+    if (_isJapMode) {
+      final voiceId = await _japVoiceService.loadSelectedVoiceId();
+      if (mounted) {
+        setState(() {
+          _allVoices = JapVoiceService.voices;
+          _japVoiceId = voiceId;
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
     try {
       final prefs = await _ttsService.loadPreferences();
       final voices = await _ttsService.fetchVoices();
@@ -104,9 +129,13 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
 
   Future<void> _saveAndClose() async {
     HapticFeedback.mediumImpact();
-    _ttsService.clearAudioCache();
-    await _ttsService.savePreferences(_preferences);
-    await _recordingService.setPrioritizeMyVoice(_prioritizeMyVoice);
+    if (_isJapMode) {
+      await _japVoiceService.saveSelectedVoiceId(_japVoiceId);
+    } else {
+      _ttsService.clearAudioCache();
+      await _ttsService.savePreferences(_preferences);
+      await _recordingService.setPrioritizeMyVoice(_prioritizeMyVoice);
+    }
     widget.onVoiceChanged?.call();
     if (mounted) {
       Navigator.of(context).pop();
@@ -122,7 +151,9 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'અવાજ સેવ થઈ ગયો છે! ગ્રંથ હવે આ અવાજમાં બોલશે.',
+                  _isJapMode
+                      ? 'Voice saved! Your jap will now use this voice.'
+                      : 'Voice saved! The granth will now speak in this voice.',
                   style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
                 ),
               ),
@@ -136,6 +167,25 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
     }
   }
 
+  Future<void> _previewJapVoice(TtsVoice voice) async {
+    setState(() => _japPreviewVoiceId = voice.id);
+    final url = await _japVoiceService.synthesizeMantra(
+      widget.japMantraText!,
+      voice.id,
+    );
+    if (!mounted) return;
+    if (url == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not load this voice. Please try again.'),
+        ),
+      );
+      return;
+    }
+    _ttsService.playPreview(url);
+  }
+
+  // ignore: unused_element
   Future<void> _showAddCustomVoiceDialog() async {
     await showModalBottomSheet(
       context: context,
@@ -183,7 +233,7 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'તમારો સાચો અવાજ કેવી રીતે સાચવવો?',
+                          'How to save your real voice?',
                           style: GoogleFonts.outfit(
                             fontSize: 17,
                             fontWeight: FontWeight.w700,
@@ -191,7 +241,7 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
                           ),
                         ),
                         Text(
-                          '૧૦૦% તમારો જ ઓરિજિનલ અવાજ સંભળાશે',
+                          'You will hear 100% your own original voice',
                           style: GoogleFonts.outfit(
                             fontSize: 12,
                             color: const Color(0xFFD97706),
@@ -223,23 +273,23 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
                 child: Column(
                   children: [
                     _buildStepRow(
-                      '૧',
-                      'ગ્રંથ વાચન સ્ક્રીન પર કોઈપણ શ્લોક ખોલો.',
+                      '1',
+                      'Open any verse on the granth reading screen.',
                     ),
                     const SizedBox(height: 12),
                     _buildStepRow(
-                      '૨',
-                      'શ્લોકની નીચે આપેલા "🎤 મારો અવાજ રેકોર્ડ કરો" બટન પર ટેપ કરો.',
+                      '2',
+                      'Tap the "🎤 Record My Voice" button below the verse.',
                     ),
                     const SizedBox(height: 12),
                     _buildStepRow(
-                      '૩',
-                      'માઇક પર ટેપ કરી શ્લોક બોલો, અને સાંભળીને "સાચવો" પર ક્લિક કરો.',
+                      '3',
+                      'Tap the mic, speak the verse, listen to it, and click "Save".',
                     ),
                     const SizedBox(height: 12),
                     _buildStepRow(
-                      '૪',
-                      'બસ! હવે જ્યારે પણ તમે ગ્રંથ વાંચશો, ત્યારે ૧૦૦% તમારો જ સાચો અવાજ વાગશે!',
+                      '4',
+                      'Done! Now whenever you read the granth, 100% your own real voice will play!',
                     ),
                   ],
                 ),
@@ -256,7 +306,7 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
                 ),
                 onPressed: () => Navigator.pop(sheetCtx),
                 child: Text(
-                  'સમજાયું (Got It)',
+                  'Got It',
                   style: GoogleFonts.outfit(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
@@ -367,7 +417,7 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Scripture Narration Voice',
+                        _isJapMode ? 'Jap Chant Voice' : 'Scripture Narration Voice',
                         style: GoogleFonts.outfit(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
@@ -375,7 +425,9 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
                         ),
                       ),
                       Text(
-                        'Natural Google Cloud AI devotional recitation',
+                        _isJapMode
+                            ? 'Tap play to hear each voice chant your mantra'
+                            : 'Natural Google Cloud AI devotional recitation',
                         style: GoogleFonts.outfit(
                           fontSize: 12,
                           color: const Color(0xFF8C7355),
@@ -398,7 +450,7 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
           const Divider(height: 1, color: Color(0xFFF3ECE0)),
 
           // Authentic Voice Priority Banner
-          if (!_isLoading)
+          if (!_isLoading && !_isJapMode)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
               child: Container(
@@ -440,7 +492,7 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '🎙️ તમારો સાચો અવાજ (Your Voice)',
+                                '🎙️ Your Real Voice',
                                 style: GoogleFonts.outfit(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700,
@@ -448,7 +500,7 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
                                 ),
                               ),
                               Text(
-                                'રેકોર્ડ કરેલા શ્લોકોમાં તમારો જ સાચો અવાજ બોલશે',
+                                'Recorded verses will play in your own real voice',
                                 style: GoogleFonts.outfit(
                                   fontSize: 11.5,
                                   color: const Color(0xFFB45309),
@@ -468,35 +520,35 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
                         ),
                       ],
                     ),
-                    const Divider(height: 14, color: Color(0xFFFDE68A)),
-                    InkWell(
-                      onTap: _showAddCustomVoiceDialog,
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.info_outline,
-                            size: 14,
-                            color: Color(0xFFB45309),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'કેવી રીતે રેકોર્ડ કરવું? શ્લોક પાસે આપેલા 🎤 બટન પર ટેપ કરો.',
-                              style: GoogleFonts.outfit(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFFB45309),
-                              ),
-                            ),
-                          ),
-                          const Icon(
-                            Icons.chevron_right,
-                            size: 16,
-                            color: Color(0xFFB45309),
-                          ),
-                        ],
-                      ),
-                    ),
+                    // const Divider(height: 14, color: Color(0xFFFDE68A)),
+                    // InkWell(
+                    //   onTap: _showAddCustomVoiceDialog,
+                    //   child: Row(
+                    //     children: [
+                    //       const Icon(
+                    //         Icons.info_outline,
+                    //         size: 14,
+                    //         color: Color(0xFFB45309),
+                    //       ),
+                    //       const SizedBox(width: 6),
+                    //       Expanded(
+                    //         child: Text(
+                    //           'How to record? Tap the 🎤 button near the verse.',
+                    //           style: GoogleFonts.outfit(
+                    //             fontSize: 11,
+                    //             fontWeight: FontWeight.w600,
+                    //             color: const Color(0xFFB45309),
+                    //           ),
+                    //         ),
+                    //       ),
+                    //       const Icon(
+                    //         Icons.chevron_right,
+                    //         size: 16,
+                    //         color: Color(0xFFB45309),
+                    //       ),
+                    //     ],
+                    //   ),
+                    // ),
                   ],
                 ),
               ),
@@ -532,7 +584,7 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
           ),
 
           // Speed & Rate Adjustment
-          if (!_isLoading) ...[
+          if (!_isLoading && !_isJapMode) ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               color: const Color(0xFFFAF6EE),
@@ -638,8 +690,9 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
       }
     }
 
-    final selectedVoiceId =
-        _preferences.selectedVoiceId ?? _preferences.gujaratiVoiceId;
+    final selectedVoiceId = _isJapMode
+        ? _japVoiceId
+        : (_preferences.selectedVoiceId ?? _preferences.gujaratiVoiceId);
 
     if (voices.isEmpty) {
       return Center(
@@ -657,9 +710,11 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
         final voice = voices[idx];
         final isSelected = voice.id == selectedVoiceId;
         final isPlaying = _activePlayingUrl != null &&
-            voice.previewUrl.isNotEmpty &&
-            (_activePlayingUrl!.contains(voice.previewUrl) ||
-                _activePlayingUrl!.contains(voice.id));
+            (_isJapMode
+                ? _japPreviewVoiceId == voice.id
+                : voice.previewUrl.isNotEmpty &&
+                    (_activePlayingUrl!.contains(voice.previewUrl) ||
+                        _activePlayingUrl!.contains(voice.id)));
 
         return Container(
           margin: const EdgeInsets.only(bottom: 10),
@@ -685,7 +740,11 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
             onTap: () {
               HapticFeedback.selectionClick();
               setState(() {
-                _ttsService.applyGranthVoiceSelection(_preferences, voice);
+                if (_isJapMode) {
+                  _japVoiceId = voice.id;
+                } else {
+                  _ttsService.applyGranthVoiceSelection(_preferences, voice);
+                }
               });
             },
             child: Padding(
@@ -781,11 +840,15 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
                       ],
                     ),
                   ),
-                  if (voice.previewUrl.isNotEmpty)
+                  if (_isJapMode || voice.previewUrl.isNotEmpty)
                     IconButton(
                       onPressed: () {
                         HapticFeedback.lightImpact();
-                        _ttsService.playPreview(voice.previewUrl);
+                        if (_isJapMode) {
+                          _previewJapVoice(voice);
+                        } else {
+                          _ttsService.playPreview(voice.previewUrl);
+                        }
                       },
                       icon: Container(
                         padding: const EdgeInsets.all(8),

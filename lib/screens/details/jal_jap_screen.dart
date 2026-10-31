@@ -7,6 +7,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/jap_models.dart';
+import '../../widgets/jap/jap_voice_selection.dart';
 import '../../services/api_service.dart';
 import '../../services/jap_offline_repository.dart';
 import '../../widgets/cinematic_jap/ram_path_calculator.dart';
@@ -35,7 +36,10 @@ class JalJapScreen extends StatefulWidget {
 }
 
 class _JalJapScreenState extends State<JalJapScreen>
-    with TickerProviderStateMixin {
+    with JapVoiceSelection<JalJapScreen>, TickerProviderStateMixin {
+  @override
+  JapConfig get japEntry => widget.entry;
+
   static const int _target = 108;
   late int _count;
   int _completedMalas = 0;
@@ -73,6 +77,7 @@ class _JalJapScreenState extends State<JalJapScreen>
   @override
   void initState() {
     super.initState();
+    prepareJapVoice();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
     // Initial counter & reveal state (loaded independently)
@@ -389,6 +394,10 @@ class _JalJapScreenState extends State<JalJapScreen>
     if (!_isSoundEnabled) return;
     try {
       await _audioPlayer.stop();
+      if (japChantClipPath != null) {
+        await _audioPlayer.play(japChantSource);
+        return;
+      }
       final String? audioUrl = widget.entry.shlokAudioUrl;
       final String rawAudio = (audioUrl != null && audioUrl.isNotEmpty)
           ? audioUrl
@@ -569,6 +578,8 @@ class _JalJapScreenState extends State<JalJapScreen>
                   children: [
                     // Top Bar: [< Back] --- [राम] --- [♡ Favorite]
                     _buildTopBar(),
+
+                    buildJapVoiceButton(),
 
                     const Spacer(),
 

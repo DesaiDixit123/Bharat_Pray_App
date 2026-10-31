@@ -99,7 +99,6 @@ class ProgressiveRamRevealPainter extends CustomPainter {
 
   final Paint _backgroundPaint = Paint()..color = Colors.black;
   final Paint _imagePaint = Paint()..filterQuality = FilterQuality.high;
-  final Paint _maskBlobPaint = Paint()..style = PaintingStyle.fill;
   final Paint _shimmerGlowPaint = Paint()..style = PaintingStyle.fill;
 
   ProgressiveRamRevealPainter({
@@ -183,18 +182,7 @@ class ProgressiveRamRevealPainter extends CustomPainter {
       final radius = node.radiusNorm * dstRect.width * expansion;
 
       // Soft feathered smoke-like gradient falloff with vibrant luminous core (ZERO hard black cutout hole)
-      _maskBlobPaint.shader = ui.Gradient.radial(
-        center,
-        radius,
-        [
-          Colors.white,
-          Colors.white.withValues(alpha: 0.95),
-          Colors.white.withValues(alpha: 0.40),
-          Colors.transparent,
-        ],
-        [0.0, 0.50, 0.80, 1.0],
-      );
-      canvas.drawCircle(center, radius, _maskBlobPaint);
+      RamPathCalculator.drawOrganicRevealMask(canvas, center, radius * 0.76, node.step);
     }
 
     // ── B. Draw Sacred Face Climax Nodes (Japs 103..108) ──────────────────
@@ -208,18 +196,7 @@ class ProgressiveRamRevealPainter extends CustomPainter {
       );
       final radius = node.radiusNorm * dstRect.width * (node.step == 107 ? (1.30 * expansion) : 1.15);
 
-      _maskBlobPaint.shader = ui.Gradient.radial(
-        center,
-        radius,
-        [
-          Colors.white,
-          Colors.white.withValues(alpha: 0.98),
-          Colors.white.withValues(alpha: 0.50),
-          Colors.transparent,
-        ],
-        [0.0, 0.50, 0.80, 1.0],
-      );
-      canvas.drawCircle(center, radius, _maskBlobPaint);
+      RamPathCalculator.drawOrganicRevealMask(canvas, center, radius * 0.70, node.step);
     }
 
     // C. Draw portrait using BlendMode.srcIn: paints portrait pixels ONLY where mask blobs exist
@@ -245,18 +222,14 @@ class ProgressiveRamRevealPainter extends CustomPainter {
       final double nodeExp = newestNode!.step < 102 ? expansion : 1.0;
       final radius = newestNode!.radiusNorm * 0.72 * dstRect.width * nodeExp;
 
-      // Soft divine warm radial glow instead of a harsh circular stroke ring
-      _shimmerGlowPaint.shader = ui.Gradient.radial(
-        center,
-        radius,
-        [
-          const Color(0xFFFFD700).withValues(alpha: shimmerAlpha * 0.45),
-          const Color(0xFFFF9900).withValues(alpha: shimmerAlpha * 0.18),
-          Colors.transparent,
-        ],
-        [0.0, 0.45, 1.0],
+      // Soft divine warm glow that follows the same smoke-shaped contour
+      _shimmerGlowPaint
+        ..color = const Color(0xFFFFD54F).withValues(alpha: shimmerAlpha * 0.35)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, radius * 0.50);
+      canvas.drawPath(
+        RamPathCalculator.buildOrganicRevealPath(center, radius * 1.05, newestNode!.step),
+        _shimmerGlowPaint,
       );
-      canvas.drawCircle(center, radius, _shimmerGlowPaint);
     }
   }
 

@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/jap_models.dart';
+import '../../widgets/jap/jap_voice_selection.dart';
 import '../../models/jap_theme_config.dart';
 import '../../services/api_service.dart';
 import '../../services/jap_offline_repository.dart';
@@ -39,7 +40,10 @@ class CinematicJapScreen extends StatefulWidget {
 }
 
 class _CinematicJapScreenState extends State<CinematicJapScreen>
-    with TickerProviderStateMixin {
+    with JapVoiceSelection<CinematicJapScreen>, TickerProviderStateMixin {
+  @override
+  JapConfig get japEntry => widget.entry;
+
   static const int _target = 108;
   late int _count;
   int _completedMalas = 0;
@@ -81,11 +85,6 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
     return _theme.imageAsset;
   }
 
-  String get _audioAssetPath {
-    final a = _theme.audioAsset;
-    return a.startsWith('assets/') ? a.replaceFirst('assets/', '') : a;
-  }
-
   // Flight State
   bool _isFlightAnimating = false;
   Offset? _malaCenterOffset;
@@ -100,6 +99,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
   @override
   void initState() {
     super.initState();
+    prepareJapVoice();
 
     // 1. Full-screen immersive devotional mode
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -205,9 +205,9 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
       final player = _voicePlayers[_voicePlayerIndex];
       _voicePlayerIndex = (_voicePlayerIndex + 1) % _voicePoolSize;
       player.stop().then((_) {
-        player.play(AssetSource(_audioAssetPath)).catchError((_) {});
+        player.play(japChantSource).catchError((_) {});
       }).catchError((_) {
-        player.play(AssetSource(_audioAssetPath)).catchError((_) {});
+        player.play(japChantSource).catchError((_) {});
       });
     } catch (e) {
       debugPrint('[CinematicJapScreen] Voice error: $e');
@@ -576,6 +576,8 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
                       children: [
                         // 1. Top Bar (< Back, ♡ Favorite)
                         _buildTopBar(),
+
+                        buildJapVoiceButton(),
 
                         // Vast open view keeping the entire middle and upper view clear for Lord Shri Ram's divine reveal
                         const Spacer(),

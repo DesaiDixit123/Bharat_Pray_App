@@ -113,7 +113,6 @@ class PushpProgressiveRevealPainter extends CustomPainter {
   final double completionGlow;
 
   static final Paint _imagePaint = Paint()..filterQuality = FilterQuality.high;
-  static final Paint _maskPaint = Paint()..style = PaintingStyle.fill;
   static final Paint _shimmerPaint = Paint()
     ..style = PaintingStyle.stroke
     ..strokeCap = StrokeCap.round;
@@ -204,18 +203,7 @@ class PushpProgressiveRevealPainter extends CustomPainter {
 
       final double radius = node.radiusNorm * 1.15 * dstRect.width * mergeExpansion;
 
-      _maskPaint.shader = ui.Gradient.radial(
-        nodeCenter,
-        radius,
-        [
-          Colors.white,
-          Colors.white.withValues(alpha: 0.92),
-          Colors.white.withValues(alpha: 0.45),
-          Colors.transparent,
-        ],
-        [0.0, 0.45, 0.80, 1.0],
-      );
-      canvas.drawCircle(nodeCenter, radius, _maskPaint);
+      RamPathCalculator.drawOrganicRevealMask(canvas, nodeCenter, radius * 0.65, node.step);
     }
 
     // Draw the newest node ONLY when blooming has begun upon petal arrival!
@@ -230,18 +218,7 @@ class PushpProgressiveRevealPainter extends CustomPainter {
           mergeExpansion *
           newestNodeBloom;
 
-      _maskPaint.shader = ui.Gradient.radial(
-        newestCenter,
-        radius,
-        [
-          Colors.white,
-          Colors.white.withValues(alpha: 0.92),
-          Colors.white.withValues(alpha: 0.45),
-          Colors.transparent,
-        ],
-        [0.0, 0.45, 0.80, 1.0],
-      );
-      canvas.drawCircle(newestCenter, radius, _maskPaint);
+      RamPathCalculator.drawOrganicRevealMask(canvas, newestCenter, radius * 0.65, newestNode!.step);
     }
 
     // Blend Lord Shri Ram image over the feathered petal mask using BlendMode.srcIn
@@ -266,13 +243,13 @@ class PushpProgressiveRevealPainter extends CustomPainter {
       _shimmerPaint
         ..strokeWidth = 2.4 * (1.0 - (0.5 * easeShimmer))
         ..color = const Color(0xFFFF80AB).withValues(alpha: sAlpha * 0.85);
-      canvas.drawCircle(newestCenter, sRadius, _shimmerPaint);
+      canvas.drawPath(RamPathCalculator.buildOrganicRevealPath(newestCenter, sRadius * 0.65, newestNode!.step), _shimmerPaint);
 
       final Paint goldRing = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.3
         ..color = const Color(0xFFFFD54F).withValues(alpha: sAlpha * 0.90);
-      canvas.drawCircle(newestCenter, sRadius * 0.80, goldRing);
+      canvas.drawPath(RamPathCalculator.buildOrganicRevealPath(newestCenter, sRadius * 0.52, newestNode!.step), goldRing);
     }
   }
 

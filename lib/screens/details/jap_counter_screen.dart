@@ -724,7 +724,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
 
             const SizedBox(height: 12),
 
-            // ── Add Photo Button ─────────────────────
+            // ── Create Custom Jap Button ─────────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: GestureDetector(
@@ -748,7 +748,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Add Photo',
+                        'Create Custom Jap',
                         style: GoogleFonts.outfit(
                           color: Colors.white,
                           fontWeight: FontWeight.w600,

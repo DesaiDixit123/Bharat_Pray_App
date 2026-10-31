@@ -7,6 +7,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/jap_models.dart';
+import '../../widgets/jap/jap_voice_selection.dart';
 import '../../services/api_service.dart';
 import '../../services/jap_offline_repository.dart';
 import '../../widgets/cinematic_jap/ram_path_calculator.dart';
@@ -36,7 +37,10 @@ class PushpVarshaJapScreen extends StatefulWidget {
 }
 
 class _PushpVarshaJapScreenState extends State<PushpVarshaJapScreen>
-    with TickerProviderStateMixin {
+    with JapVoiceSelection<PushpVarshaJapScreen>, TickerProviderStateMixin {
+  @override
+  JapConfig get japEntry => widget.entry;
+
   static const int _target = 108;
   late int _count;
   int _completedMalas = 0;
@@ -84,6 +88,7 @@ class _PushpVarshaJapScreenState extends State<PushpVarshaJapScreen>
   @override
   void initState() {
     super.initState();
+    prepareJapVoice();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
     _count = 0;
@@ -181,9 +186,9 @@ class _PushpVarshaJapScreenState extends State<PushpVarshaJapScreen>
       final player = _voicePlayers[_voicePlayerIndex];
       _voicePlayerIndex = (_voicePlayerIndex + 1) % _voicePoolSize;
       player.stop().then((_) {
-        player.play(AssetSource('audio/ram_chant.mp3')).catchError((_) {});
+        player.play(japChantSource).catchError((_) {});
       }).catchError((_) {
-        player.play(AssetSource('audio/ram_chant.mp3')).catchError((_) {});
+        player.play(japChantSource).catchError((_) {});
       });
     } catch (e) {
       debugPrint('[PushpVarsha] Voice error: $e');
@@ -655,6 +660,8 @@ class _PushpVarshaJapScreenState extends State<PushpVarshaJapScreen>
                   children: [
                     // Top Bar: [< Back] --- [શ્રી રામ જાપ] --- [Effects / Sound]
                     _buildTopBar(),
+
+                    buildJapVoiceButton(),
 
                     const Spacer(),
 

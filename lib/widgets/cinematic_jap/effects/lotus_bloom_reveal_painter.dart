@@ -20,7 +20,6 @@ class LotusBloomRevealPainter extends CustomPainter {
 
   final Paint _backgroundPaint = Paint()..color = Colors.black;
   final Paint _imagePaint = Paint()..filterQuality = FilterQuality.high;
-  final Paint _maskBlobPaint = Paint()..style = PaintingStyle.fill;
   final Paint _shimmerPaint = Paint()
     ..style = PaintingStyle.stroke
     ..strokeWidth = 2.0;
@@ -118,18 +117,7 @@ class LotusBloomRevealPainter extends CustomPainter {
       );
       final radius = node.radiusNorm * 1.18 * dstRect.width * expansion;
 
-      _maskBlobPaint.shader = ui.Gradient.radial(
-        center,
-        radius,
-        [
-          Colors.white,
-          Colors.white.withValues(alpha: 0.90),
-          Colors.white.withValues(alpha: 0.35),
-          Colors.transparent,
-        ],
-        [0.0, 0.50, 0.78, 1.0],
-      );
-      canvas.drawCircle(center, radius, _maskBlobPaint);
+      RamPathCalculator.drawOrganicRevealMask(canvas, center, radius * 0.65, node.step);
     }
 
     // ── B. Draw Sacred Face Climax Nodes (Japs 103..108) ────────────────
@@ -142,18 +130,7 @@ class LotusBloomRevealPainter extends CustomPainter {
       );
       final radius = node.radiusNorm * 1.18 * dstRect.width;
 
-      _maskBlobPaint.shader = ui.Gradient.radial(
-        center,
-        radius,
-        [
-          Colors.white,
-          Colors.white.withValues(alpha: 0.94),
-          Colors.white.withValues(alpha: 0.42),
-          Colors.transparent,
-        ],
-        [0.0, 0.58, 0.82, 1.0],
-      );
-      canvas.drawCircle(center, radius, _maskBlobPaint);
+      RamPathCalculator.drawOrganicRevealMask(canvas, center, radius * 0.65, node.step);
     }
 
     // Composite portrait onto mask
@@ -180,7 +157,7 @@ class LotusBloomRevealPainter extends CustomPainter {
 
       _shimmerPaint.color = const Color(0xFFFF80AB).withValues(alpha: shimmerAlpha);
       _shimmerPaint.maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.5);
-      canvas.drawCircle(center, radius, _shimmerPaint);
+      canvas.drawPath(RamPathCalculator.buildOrganicRevealPath(center, radius * 0.72, newestNode!.step), _shimmerPaint);
     }
   }
 

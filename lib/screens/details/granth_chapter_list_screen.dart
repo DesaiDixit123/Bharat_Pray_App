@@ -49,10 +49,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
       if (granthId.isEmpty) {
         throw Exception('Granth ID is missing.');
       }
-      var data = await ApiService.getChaptersByGranth(granthId);
-      if (data.isEmpty) {
-        data = ApiService.defaultGitaChapters;
-      }
+      final data = await ApiService.getChaptersByGranth(granthId);
       if (!mounted) return;
       setState(() {
         _savedChapterIds.clear();
@@ -64,9 +61,9 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _chapters = ApiService.defaultGitaChapters;
+        _chapters = [];
         _isLoading = false;
-        _error = '';
+        _error = 'Unable to load chapters. Please try again.';
       });
     }
   }
@@ -152,24 +149,8 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
 
   Widget _buildHeaderImage() {
     final rawImg = (widget.granth['coverImage'] ?? widget.granth['image'] ?? '').toString();
-    final granthName = (widget.granth['name'] ?? widget.granth['title'] ?? '').toString().toLowerCase();
 
-    String finalPath = rawImg;
-    if (finalPath.isEmpty) {
-      if (granthName.contains('ramcharitmanas') || granthName.contains('ram')) {
-        finalPath = 'assets/images/bal_kand_cover.jpg';
-      } else if (granthName.contains('hanuman')) {
-        finalPath = 'assets/images/image_4.png';
-      } else if (granthName.contains('shiv')) {
-        finalPath = 'assets/images/deity_shiva.png';
-      } else if (granthName.contains('durga') || granthName.contains('saptashati')) {
-        finalPath = 'assets/images/image_4_1.png';
-      } else {
-        finalPath = 'assets/images/bhagavad_gita.png';
-      }
-    }
-
-    final resolvedUrl = ApiService.resolveImageUrl(finalPath);
+    final resolvedUrl = ApiService.resolveImageUrl(rawImg);
     if (resolvedUrl.startsWith('http')) {
       return Image.network(
         resolvedUrl,
@@ -179,9 +160,9 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
         filterQuality: FilterQuality.high,
         errorBuilder: (_, _, _) => _placeholderImage(),
       );
-    } else if (finalPath.startsWith('assets/')) {
+    } else if (rawImg.startsWith('assets/')) {
       return Image.asset(
-        finalPath,
+        rawImg,
         width: double.infinity,
         height: double.infinity,
         fit: BoxFit.cover,
@@ -189,14 +170,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
         errorBuilder: (_, _, _) => _placeholderImage(),
       );
     }
-    return Image.asset(
-      'assets/images/bhagavad_gita.png',
-      width: double.infinity,
-      height: double.infinity,
-      fit: BoxFit.cover,
-      filterQuality: FilterQuality.high,
-      errorBuilder: (_, _, _) => _placeholderImage(),
-    );
+    return _placeholderImage();
   }
 
   Widget _placeholderImage() {
@@ -238,27 +212,7 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
     final granthTitle = (widget.granth['name'] ?? widget.granth['title'] ?? 'Sacred Granth').toString();
     final granthDesc = (widget.granth['description'] ?? 'Sacred scripture of Sanatan Dharma containing divine wisdom.').toString();
 
-    int fallbackCount = 1;
-    final dynamic totalCh = widget.granth['totalChapters'] ?? widget.granth['chaptersCount'] ?? widget.granth['chapterCount'];
-    if (totalCh != null && int.tryParse(totalCh.toString()) != null && int.parse(totalCh.toString()) > 0) {
-      fallbackCount = int.parse(totalCh.toString());
-    } else {
-      final name = granthTitle.toLowerCase();
-      if (name.contains('gita')) fallbackCount = 18;
-      else if (name.contains('ramcharitmanas') || name.contains('ramayana')) fallbackCount = 7;
-      else if (name.contains('chalisa') || name.contains('aarti') || name.contains('stotra')) fallbackCount = 1;
-      else if (name.contains('durga saptashati')) fallbackCount = 13;
-      else if (name.contains('rigveda') || name.contains('rig veda')) fallbackCount = 10;
-      else if (name.contains('samaveda') || name.contains('sama veda')) fallbackCount = 6;
-      else if (name.contains('yajurveda') || name.contains('yajur veda')) fallbackCount = 40;
-      else if (name.contains('atharvaveda') || name.contains('atharva veda')) fallbackCount = 20;
-      else if (name.contains('bhagavat puran') || name.contains('bhagavata')) fallbackCount = 12;
-      else if (name.contains('shiv mahapuran') || name.contains('shiva puran')) fallbackCount = 7;
-    }
-
-    final realChapterCount = _chapters.isNotEmpty
-        ? _chapters.length
-        : fallbackCount;
+    final realChapterCount = _chapters.length;
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),

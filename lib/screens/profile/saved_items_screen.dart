@@ -192,11 +192,7 @@ class _SavedItemsScreenState extends State<SavedItemsScreen> with SingleTickerPr
                       color: const Color(0xFFFFF1E5),
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: Image.asset(
-                      'assets/images/bhagavad_gita.png',
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => const Icon(Icons.menu_book_rounded, color: Color(0xFFFF8C1A)),
-                    ),
+                    child: const Icon(Icons.menu_book_rounded, color: Color(0xFFFF8C1A)),
                   ),
                   const SizedBox(width: 14),
                   Expanded(

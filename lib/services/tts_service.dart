@@ -194,7 +194,7 @@ class TtsService {
     String? localAudioSample,
     String? token,
   }) async {
-    final cleanName = name.trim().isEmpty ? 'મારો અવાજ' : name.trim();
+    final cleanName = name.trim().isEmpty ? 'My Voice' : name.trim();
     final isGuj = language.toLowerCase().contains('guj');
     final voiceId = 'custom-voice-${DateTime.now().millisecondsSinceEpoch}';
     final defaultBase = gender == 'Male'
@@ -203,13 +203,13 @@ class TtsService {
 
     TtsVoice newVoice = TtsVoice(
       id: voiceId,
-      name: '$cleanName (તમારો અવાજ)',
+      name: '$cleanName (Your Voice)',
       gender: gender,
       locale: isGuj ? 'gu-IN' : 'hi-IN',
       tier: 'Custom Voice',
       languages: [language],
-      title: 'તમારો વ્યક્તિગત કંઠ (Personal Devotional Voice)',
-      description: 'તમારા પોતાના અવાજનું વ્યક્તિગત પઠન મોડલ.',
+      title: 'Your Personal Devotional Voice',
+      description: 'Personal recitation model of your own voice.',
       previewUrl: '',
       defaultRate: speakingRate,
       pitch: pitch,
@@ -476,14 +476,14 @@ class TtsService {
     return const [
       TtsVoice(
         id: 'gu-IN-Chirp3-HD-Kore',
-        name: 'Kore (કોરે - મધુર સ્ત્રી અવાજ)',
+        name: 'Kore (Sweet Female Voice)',
         gender: 'Female',
         locale: 'gu-IN',
         tier: 'Chirp 3 HD',
         languages: ['Gujarati'],
-        title: 'અત્યંત મધુર સ્ત્રી અવાજ (Sweet Female Voice)',
+        title: 'Very Sweet Female Voice',
         description:
-            'શાંત, મીઠો અને સાચો માનવીય સ્ત્રી અવાજ. બિલકુલ રોબોટિક વગરનું પવિત્ર પઠન.',
+            'Calm, sweet and natural human female voice. Sacred recitation with no robotic sound.',
         previewUrl:
             'uploads/granth_audio/previews/preview_gu-IN-Chirp3-HD-Kore.mp3',
         defaultRate: 0.92,
@@ -492,14 +492,14 @@ class TtsService {
       ),
       TtsVoice(
         id: 'gu-IN-Chirp3-HD-Puck',
-        name: 'Puck (પક - બાળક / યુવા અવાજ)',
+        name: 'Puck (Child / Young Voice)',
         gender: 'Male',
         locale: 'gu-IN',
         tier: 'Chirp 3 HD',
         languages: ['Gujarati'],
-        title: 'મધુર બાળક / યુવા અવાજ (Boy Voice)',
+        title: 'Sweet Boy Voice',
         description:
-            'કુદરતી, નિર્દોષ અને મધુર બાળક/યુવાનનો અવાજ. ધાર્મિક કથાઓ માટે અત્યંત મધુર.',
+            'Natural, innocent and sweet voice of a child or young man. Very pleasant for religious stories.',
         previewUrl:
             'uploads/granth_audio/previews/preview_gu-IN-Chirp3-HD-Puck.mp3',
         defaultRate: 0.94,
@@ -508,13 +508,13 @@ class TtsService {
       ),
       TtsVoice(
         id: 'gu-IN-Chirp3-HD-Aoede',
-        name: 'Aoede (અયોઈડી - સુરમય સ્ત્રી કંઠ)',
+        name: 'Aoede (Melodious Female Voice)',
         gender: 'Female',
         locale: 'gu-IN',
         tier: 'Chirp 3 HD',
         languages: ['Gujarati'],
-        title: 'ભક્તિમય મીઠો સ્ત્રી કંઠ (Melodious Female)',
-        description: 'મંદિરમાં ગવાતી સ્તુતિ જેવો મીઠો, સુમધુર સ્ત્રી અવાજ.',
+        title: 'Melodious Devotional Female Voice',
+        description: 'Sweet, melodious female voice, like a hymn sung in a temple.',
         previewUrl:
             'uploads/granth_audio/previews/preview_gu-IN-Chirp3-HD-Aoede.mp3',
         defaultRate: 0.92,
@@ -523,14 +523,14 @@ class TtsService {
       ),
       TtsVoice(
         id: 'gu-IN-Chirp3-HD-Charon',
-        name: 'Charon (ચેરોન - કુદરતી પુરુષ અવાજ)',
+        name: 'Charon (Natural Male Voice)',
         gender: 'Male',
         locale: 'gu-IN',
         tier: 'Chirp 3 HD',
         languages: ['Gujarati'],
-        title: 'માનવીય કથાવાચક પુરુષ અવાજ (Natural Male Narrator)',
+        title: 'Natural Male Narrator',
         description:
-            'વાસ્તવિક શ્વાસ અને ભાવ સાથેનો મંદિર કથાવાચક જેવો પુરુષ અવાજ.',
+            'Male voice like a temple storyteller, with real breath and emotion.',
         previewUrl:
             'uploads/granth_audio/previews/preview_gu-IN-Chirp3-HD-Charon.mp3',
         defaultRate: 0.92,
@@ -569,14 +569,14 @@ class TtsService {
       ),
       TtsVoice(
         id: 'hi-IN-Chirp3-HD-Charon',
-        name: 'Devavani Charon (સંસ્કૃત શ્લોક પઠન - પુરુષ)',
+        name: 'Devavani Charon (Sanskrit Shloka Recitation - Male)',
         gender: 'Male',
         locale: 'hi-IN',
         tier: 'Chirp 3 HD',
         languages: ['Sanskrit'],
-        title: 'કુદરતી સંસ્કૃત શ્લોક પઠન',
+        title: 'Natural Sanskrit Shloka Recitation',
         description:
-            'માનવીય શ્વાસ અને છંદોબદ્ધ વિરામ સાથેનું પવિત્ર સંસ્કૃત શ્લોક પઠન.',
+            'Sacred Sanskrit shloka recitation with human breath and rhythmic pauses.',
         previewUrl:
             'uploads/granth_audio/previews/preview_hi-IN-Chirp3-HD-Charon-sa.mp3',
         defaultRate: 0.88,
@@ -585,14 +585,14 @@ class TtsService {
       ),
       TtsVoice(
         id: 'hi-IN-Chirp3-HD-Kore',
-        name: 'Devavani Kore (મધુર સંસ્કૃત સ્તુતિ ગાન - સ્ત્રી)',
+        name: 'Devavani Kore (Sweet Sanskrit Hymn Singing - Female)',
         gender: 'Female',
         locale: 'hi-IN',
         tier: 'Chirp 3 HD',
         languages: ['Sanskrit'],
-        title: 'મધુર સંસ્કૃત સ્તુતિ ગાન',
+        title: 'Sweet Sanskrit Hymn Singing',
         description:
-            'અત્યંત મધુર અને શાંત ભાવ સાથેનું સંસ્કૃત સ્તોત્ર અને મંત્ર ગાન.',
+            'Sanskrit stotra and mantra singing with a very sweet and calm feel.',
         previewUrl:
             'uploads/granth_audio/previews/preview_hi-IN-Chirp3-HD-Kore-sa.mp3',
         defaultRate: 0.88,

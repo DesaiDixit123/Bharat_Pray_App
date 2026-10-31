@@ -7,6 +7,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/jap_models.dart';
+import '../../widgets/jap/jap_voice_selection.dart';
 import '../../services/api_service.dart';
 import '../../services/jap_offline_repository.dart';
 import '../../widgets/cinematic_jap/ram_path_calculator.dart';
@@ -32,7 +33,10 @@ class PrakashJapScreen extends StatefulWidget {
 }
 
 class _PrakashJapScreenState extends State<PrakashJapScreen>
-    with TickerProviderStateMixin {
+    with JapVoiceSelection<PrakashJapScreen>, TickerProviderStateMixin {
+  @override
+  JapConfig get japEntry => widget.entry;
+
   static const int _target = 108;
   late int _count;
   int _completedMalas = 0;
@@ -69,6 +73,7 @@ class _PrakashJapScreenState extends State<PrakashJapScreen>
   @override
   void initState() {
     super.initState();
+    prepareJapVoice();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
     _count = 0;
@@ -172,9 +177,9 @@ class _PrakashJapScreenState extends State<PrakashJapScreen>
       final player = _voicePlayers[_voicePlayerIndex];
       _voicePlayerIndex = (_voicePlayerIndex + 1) % _voicePoolSize;
       player.stop().then((_) {
-        player.play(AssetSource('audio/ram_chant.mp3')).catchError((_) {});
+        player.play(japChantSource).catchError((_) {});
       }).catchError((_) {
-        player.play(AssetSource('audio/ram_chant.mp3')).catchError((_) {});
+        player.play(japChantSource).catchError((_) {});
       });
     } catch (e) {
       debugPrint('[PrakashJap] Voice error: $e');
@@ -452,6 +457,8 @@ class _PrakashJapScreenState extends State<PrakashJapScreen>
                   children: [
                     // Top Bar: [< Back] --- [શ્રી રામ જાપ] --- [Effects / Sound]
                     _buildTopBar(),
+
+                    buildJapVoiceButton(),
 
                     const Spacer(),
 

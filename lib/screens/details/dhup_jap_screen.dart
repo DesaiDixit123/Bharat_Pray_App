@@ -7,6 +7,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/jap_models.dart';
+import '../../widgets/jap/jap_voice_selection.dart';
 import '../../services/api_service.dart';
 import '../../services/jap_offline_repository.dart';
 import '../../widgets/cinematic_jap/ram_path_calculator.dart';
@@ -37,7 +38,10 @@ class DhupJapScreen extends StatefulWidget {
 }
 
 class _DhupJapScreenState extends State<DhupJapScreen>
-    with TickerProviderStateMixin {
+    with JapVoiceSelection<DhupJapScreen>, TickerProviderStateMixin {
+  @override
+  JapConfig get japEntry => widget.entry;
+
   static const int _target = 108;
   late int _count;
   int _completedMalas = 0;
@@ -74,6 +78,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
   @override
   void initState() {
     super.initState();
+    prepareJapVoice();
 
     // Devotional full-screen immersive mode
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -407,6 +412,10 @@ class _DhupJapScreenState extends State<DhupJapScreen>
     if (!_isSoundEnabled) return;
     try {
       await _audioPlayer.stop();
+      if (japChantClipPath != null) {
+        await _audioPlayer.play(japChantSource);
+        return;
+      }
       final String? audioUrl = widget.entry.shlokAudioUrl;
       final String rawAudio = (audioUrl != null && audioUrl.isNotEmpty)
           ? audioUrl
@@ -591,6 +600,8 @@ class _DhupJapScreenState extends State<DhupJapScreen>
                   children: [
                     // Top Bar: [< Back] --- [राम] --- [♡ Favorite]
                     _buildTopBar(),
+
+                    buildJapVoiceButton(),
 
                     const Spacer(),
 

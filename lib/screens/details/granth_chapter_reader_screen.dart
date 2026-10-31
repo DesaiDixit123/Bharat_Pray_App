@@ -1561,106 +1561,168 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
     }
   }
 
+  Widget _buildTopIconButton({
+    required IconData icon,
+
+    required VoidCallback onTap,
+
+    double iconSize = 20,
+  }) {
+    return Material(
+      color: Colors.transparent,
+
+      child: Ink(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFFB85C), Color(0xFFF08A1D)],
+
+            begin: Alignment.topLeft,
+
+            end: Alignment.bottomRight,
+          ),
+
+          border: Border.all(
+            color: const Color(0xFFFFE3A0).withValues(alpha: 0.7),
+
+            width: 1.2,
+          ),
+
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+
+              blurRadius: 8,
+
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+
+        child: InkWell(
+          customBorder: const CircleBorder(),
+
+          onTap: onTap,
+
+          child: SizedBox(
+            width: 40,
+
+            height: 40,
+
+            child: Icon(icon, color: const Color(0xFF2E1107), size: iconSize),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildOpenGranthButton() {
     return Material(
       color: Colors.transparent,
 
-      child: InkWell(
-        onTap: () {
-          if (!_isPlaying) {
-            _toggleAutoRead();
-          } else {
-            _goToNextPage();
-          }
-        },
+      child: Ink(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(26),
 
-        borderRadius: BorderRadius.circular(28),
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFFB85C), Color(0xFFF08A1D)],
 
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 12),
+            begin: Alignment.topLeft,
 
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
-
-            gradient: const LinearGradient(
-              colors: [
-                Color(0xFF3B1607), // Rich dark mahogany
-
-                Color(0xFF220C04), // Dark walnut leather
-
-                Color(0xFF140502), // Deep leather
-              ],
-
-              begin: Alignment.topLeft,
-
-              end: Alignment.bottomRight,
-            ),
-
-            border: Border.all(
-              color: const Color(0xFFD4AF37).withValues(alpha: 0.85),
-
-              width: 1.2,
-            ),
-
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFFF9E3D).withValues(alpha: 0.28),
-
-                blurRadius: 18,
-
-                spreadRadius: 1,
-
-                offset: const Offset(0, 4),
-              ),
-
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.45),
-
-                blurRadius: 12,
-
-                offset: const Offset(0, 6),
-              ),
-            ],
+            end: Alignment.bottomRight,
           ),
 
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
+          border: Border.all(
+            color: const Color(0xFFFFE3A0).withValues(alpha: 0.7),
 
-            children: [
-              const Icon(
-                Icons.auto_stories_rounded,
+            width: 1.2,
+          ),
 
-                color: Color(0xFFFFD54F),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFF8C1A).withValues(alpha: 0.35),
 
-                size: 20,
-              ),
+              blurRadius: 18,
 
-              const SizedBox(width: 10),
+              offset: const Offset(0, 5),
+            ),
 
-              Text(
-                'ग्रंथ खोलें • Open Granth',
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
 
-                style: GoogleFonts.outfit(
-                  fontSize: 14.5,
+              blurRadius: 10,
 
-                  fontWeight: FontWeight.w700,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
 
-                  color: const Color(0xFFFFE082),
+        child: InkWell(
+          onTap: () {
+            if (!_isPlaying) {
+              _toggleAutoRead();
+            } else {
+              _goToNextPage();
+            }
+          },
 
-                  letterSpacing: 0.4,
+          borderRadius: BorderRadius.circular(26),
+
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 11, 11, 11),
+
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+
+              children: [
+                const Icon(
+                  Icons.auto_stories_rounded,
+
+                  color: Color(0xFF2E1107),
+
+                  size: 20,
                 ),
-              ),
 
-              const SizedBox(width: 8),
+                const SizedBox(width: 10),
 
-              const Icon(
-                Icons.arrow_forward_ios_rounded,
+                Text(
+                  'Open Granth',
 
-                color: Color(0xFFFFD54F),
+                  style: GoogleFonts.outfit(
+                    fontSize: 15.5,
 
-                size: 13,
-              ),
-            ],
+                    fontWeight: FontWeight.w700,
+
+                    color: const Color(0xFF2E1107),
+
+                    letterSpacing: 0.3,
+                  ),
+                ),
+
+                const SizedBox(width: 14),
+
+                Container(
+                  width: 24,
+
+                  height: 24,
+
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF2E1107),
+
+                    shape: BoxShape.circle,
+                  ),
+
+                  child: const Icon(
+                    Icons.arrow_forward_rounded,
+
+                    color: Color(0xFFFFD54F),
+
+                    size: 15,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1701,15 +1763,15 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
 
     final double bookLeft = _isFullScreen ? 0.0 : 4.0;
 
-    final double bookTop = _isFullScreen ? topPadding : (topPadding + 20.0);
+    final double bookTop = _isFullScreen ? topPadding : (topPadding + 54.0);
 
     final double bookH = _isFullScreen
         ? (screenHeight -
               topPadding -
-              (isClosedCover ? (bottomPadding + 56.0) : (bottomPadding + 68.0)))
+              (isClosedCover ? (bottomPadding + 64.0) : (bottomPadding + 82.0)))
         : math.max(
             0.0,
-            screenHeight - (topPadding + 36.0) - (bottomPadding + 70.0),
+            screenHeight - (topPadding + 70.0) - (bottomPadding + 84.0),
           );
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -1856,121 +1918,69 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
 
             // Floating back arrow (top-left) with warm gold on dark sanctuary glass
             Positioned(
-              top: topPadding + 8,
+              top: topPadding + 6,
 
-              left: 10,
+              left: 12,
 
-              child: Material(
-                color: const Color(0xFF1E0A04).withValues(alpha: 0.65),
+              child: _buildTopIconButton(
+                icon: Icons.arrow_back_ios_new_rounded,
 
-                borderRadius: BorderRadius.circular(24),
+                iconSize: 18,
 
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(24),
-
-                  onTap: () => Navigator.pop(context),
-
-                  child: const Padding(
-                    padding: EdgeInsets.all(10),
-
-                    child: Icon(
-                      Icons.arrow_back_ios_new_rounded,
-
-                      color: Color(0xFFFFD700),
-
-                      size: 20,
-                    ),
-                  ),
-                ),
+                onTap: () => Navigator.pop(context),
               ),
             ),
 
             // Floating Fullscreen toggle button (top-right)
             Positioned(
-              top: topPadding + 8,
+              top: topPadding + 6,
 
               right: 12,
 
-              child: Material(
-                color: const Color(0xFF1E0A04).withValues(alpha: 0.65),
+              child: _buildTopIconButton(
+                icon: _isFullScreen
+                    ? Icons.fullscreen_exit_rounded
+                    : Icons.fullscreen_rounded,
 
-                borderRadius: BorderRadius.circular(24),
+                onTap: () {
+                  HapticFeedback.lightImpact();
 
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(24),
-
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-
-                    setState(() {
-                      _isFullScreen = !_isFullScreen;
-                    });
-                  },
-
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-
-                    child: Icon(
-                      _isFullScreen
-                          ? Icons.fullscreen_exit_rounded
-                          : Icons.fullscreen_rounded,
-
-                      color: const Color(0xFFFFD700),
-
-                      size: 20,
-                    ),
-                  ),
-                ),
+                  setState(() {
+                    _isFullScreen = !_isFullScreen;
+                  });
+                },
               ),
             ),
 
             // Floating Voice Settings button (top-right, adjacent to fullscreen)
             Positioned(
-              top: topPadding + 8,
+              top: topPadding + 6,
 
-              right: 56,
+              right: 60,
 
-              child: Material(
-                color: const Color(0xFF1E0A04).withValues(alpha: 0.65),
+              child: _buildTopIconButton(
+                icon: Icons.record_voice_over_rounded,
 
-                borderRadius: BorderRadius.circular(24),
-
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(24),
-
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    GranthVoiceSelectorSheet.show(
-                      context,
-                      initialLanguage: _detectTtsLanguage(),
-                      onVoiceChanged: () async {
-                        _speechLoopSession++;
-                        await _selectOptimalVoice(_ttsLang);
-                        await _applySpeechSettings();
-                        if (_isPlaying) {
-                          await _verseAudioPlayer.stop();
-                          await _tts.stop();
-                          _speakCurrentSection();
-                        } else if (_currentPage >= 1 &&
-                            _currentPage <= _verses.length) {
-                          _toggleAutoRead();
-                        }
-                      },
-                    );
-                  },
-
-                  child: const Padding(
-                    padding: EdgeInsets.all(10),
-
-                    child: Icon(
-                      Icons.record_voice_over_rounded,
-
-                      color: Color(0xFFFFD700),
-
-                      size: 20,
-                    ),
-                  ),
-                ),
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  GranthVoiceSelectorSheet.show(
+                    context,
+                    initialLanguage: _detectTtsLanguage(),
+                    onVoiceChanged: () async {
+                      _speechLoopSession++;
+                      await _selectOptimalVoice(_ttsLang);
+                      await _applySpeechSettings();
+                      if (_isPlaying) {
+                        await _verseAudioPlayer.stop();
+                        await _tts.stop();
+                        _speakCurrentSection();
+                      } else if (_currentPage >= 1 &&
+                          _currentPage <= _verses.length) {
+                        _toggleAutoRead();
+                      }
+                    },
+                  );
+                },
               ),
             ),
 
@@ -2256,242 +2266,368 @@ class _SacredReaderControlBarState extends State<_SacredReaderControlBar>
     final speedLabel =
         '${widget.speed == 1.0 ? '1' : widget.speed.toString()}x';
 
+    final progress = hasVerse && widget.totalVerses > 0
+        ? (verseNum / widget.totalVerses).clamp(0.0, 1.0)
+        : 0.0;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      width: double.infinity,
+
+      constraints: const BoxConstraints(maxWidth: 460),
+
+      padding: const EdgeInsets.fromLTRB(14, 5, 14, 7),
 
       decoration: BoxDecoration(
-        color: const Color(0xFF1E0A03).withValues(alpha: 0.92),
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF2E1107).withValues(alpha: 0.97),
+            const Color(0xFF160601).withValues(alpha: 0.97),
+          ],
 
-        borderRadius: BorderRadius.circular(24),
+          begin: Alignment.topCenter,
+
+          end: Alignment.bottomCenter,
+        ),
+
+        borderRadius: BorderRadius.circular(30),
 
         border: Border.all(
-          color: const Color(0xFFD4AF37).withValues(alpha: 0.55),
-          width: 1.1,
+          color: const Color(0xFFD4AF37).withValues(alpha: 0.4),
         ),
 
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.5),
+            color: Colors.black.withValues(alpha: 0.45),
 
-            blurRadius: 14,
+            blurRadius: 18,
 
-            offset: const Offset(0, 4),
+            offset: const Offset(0, 6),
           ),
 
           if (widget.isPlaying)
             BoxShadow(
-              color: const Color(0xFFFF8C1A).withValues(alpha: 0.25),
+              color: const Color(0xFFFF8C1A).withValues(alpha: 0.22),
 
-              blurRadius: 12,
+              blurRadius: 16,
 
-              spreadRadius: 1.5,
+              spreadRadius: 1,
             ),
         ],
       ),
 
-      child: Row(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
 
-        crossAxisAlignment: CrossAxisAlignment.center,
-
         children: [
-          // Previous Verse Button
-          IconButton(
-            icon: const Icon(
-              Icons.skip_previous_rounded,
-              color: Color(0xFFFFD54F),
-              size: 20,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
 
-            tooltip: 'Previous Page',
+            children: [
+              // Speed Multiplier Pill
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
 
-            onPressed: widget.onPrevPage,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
 
-            padding: EdgeInsets.zero,
+                    child: GestureDetector(
+                      onTap: widget.onSpeedCycle,
 
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-          ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
+                        ),
 
-          const SizedBox(width: 3),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFFB85C), Color(0xFFF08A1D)],
 
-          // Speed Multiplier Pill
-          GestureDetector(
-            onTap: widget.onSpeedCycle,
+                            begin: Alignment.topLeft,
 
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                            end: Alignment.bottomRight,
+                          ),
 
-              decoration: BoxDecoration(
-                color: const Color(0xFF381406),
+                          borderRadius: BorderRadius.circular(16),
 
-                borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(
+                              0xFFFFE3A0,
+                            ).withValues(alpha: 0.7),
+                          ),
+                        ),
 
-                border: Border.all(
-                  color: const Color(0xFFD4AF37).withValues(alpha: 0.4),
-                  width: 0.8,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+
+                          children: [
+                            const Icon(
+                              Icons.speed_rounded,
+                              size: 14,
+                              color: Color(0xFF2E1107),
+                            ),
+
+                            const SizedBox(width: 4),
+
+                            Text(
+                              speedLabel,
+
+                              style: GoogleFonts.outfit(
+                                fontSize: 12.5,
+
+                                fontWeight: FontWeight.w700,
+
+                                color: const Color(0xFF2E1107),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
 
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-
-                children: [
-                  const Icon(
-                    Icons.speed_rounded,
-                    size: 11,
-                    color: Color(0xFFFFD54F),
-                  ),
-
-                  const SizedBox(width: 3),
-
-                  Text(
-                    speedLabel,
-
-                    style: GoogleFonts.outfit(
-                      fontSize: 11,
-
-                      fontWeight: FontWeight.w700,
-
-                      color: const Color(0xFFFFD54F),
-                    ),
-                  ),
-                ],
+              // Previous Verse Button
+              _buildNavButton(
+                icon: Icons.skip_previous_rounded,
+                tooltip: 'Previous Page',
+                onPressed: widget.onPrevPage,
               ),
-            ),
-          ),
 
-          const SizedBox(width: 6),
+              const SizedBox(width: 6),
 
-          // Center Pulsing Play/Pause FAB
-          AnimatedBuilder(
-            animation: _pulseAnim,
+              // Center Pulsing Play/Pause FAB
+              AnimatedBuilder(
+                animation: _pulseAnim,
 
-            builder: (context, child) {
-              final scale = widget.isPlaying ? _pulseAnim.value : 1.0;
+                builder: (context, child) {
+                  final scale = widget.isPlaying ? _pulseAnim.value : 1.0;
 
-              return Transform.scale(
-                scale: scale,
+                  return Transform.scale(
+                    scale: scale,
 
-                child: GestureDetector(
-                  onTap: widget.onTogglePlay,
+                    child: GestureDetector(
+                      onTap: widget.onTogglePlay,
 
-                  child: Container(
-                    width: 40,
+                      child: Container(
+                        width: 46,
 
-                    height: 40,
+                        height: 46,
 
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
 
-                      gradient: const RadialGradient(
-                        colors: [Color(0xFFFF9E3D), Color(0xFFB85C00)],
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFFB85C), Color(0xFFF08A1D)],
 
-                        center: Alignment(-0.2, -0.2),
-                      ),
+                            begin: Alignment.topLeft,
 
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(
-                            0xFFFF8C1A,
-                          ).withValues(alpha: widget.isPlaying ? 0.7 : 0.4),
+                            end: Alignment.bottomRight,
+                          ),
 
-                          blurRadius: widget.isPlaying ? 12 : 6,
+                          border: Border.all(
+                            color: const Color(
+                              0xFFFFE3A0,
+                            ).withValues(alpha: 0.55),
+                            width: 1.2,
+                          ),
 
-                          spreadRadius: widget.isPlaying ? 1.5 : 1,
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(
+                                0xFFFF8C1A,
+                              ).withValues(alpha: widget.isPlaying ? 0.6 : 0.35),
+
+                              blurRadius: widget.isPlaying ? 16 : 10,
+
+                              spreadRadius: widget.isPlaying ? 1.5 : 0.5,
+                            ),
+                          ],
                         ),
+
+                        child: Center(
+                          child: Icon(
+                            widget.isPlaying
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded,
+
+                            color: const Color(0xFF2E1107),
+
+                            size: 28,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+
+              const SizedBox(width: 6),
+
+              // Next Verse Button
+              _buildNavButton(
+                icon: Icons.skip_next_rounded,
+                tooltip: 'Next Page',
+                onPressed: widget.onNextPage,
+              ),
+
+              // Reading Status + Voice Button
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerRight,
+
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+
+                      children: [
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+
+                          crossAxisAlignment: CrossAxisAlignment.end,
+
+                          children: [
+                            if (hasVerse)
+                              Text(
+                                'VERSE',
+
+                                style: GoogleFonts.outfit(
+                                  fontSize: 8.5,
+
+                                  height: 1.1,
+
+                                  letterSpacing: 0.8,
+
+                                  fontWeight: FontWeight.w600,
+
+                                  color: const Color(
+                                    0xFFFFE082,
+                                  ).withValues(alpha: 0.65),
+                                ),
+                              ),
+
+                            Text(
+                              hasVerse
+                                  ? '$verseNum/${widget.totalVerses}'
+                                  : (widget.isPlaying ? 'Reciting' : '॥ ॐ ॥'),
+
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+
+                                height: 1.2,
+
+                                fontWeight: FontWeight.w700,
+
+                                color: const Color(0xFFFFE082),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        if (widget.onVoiceSettings != null) ...[
+                          const SizedBox(width: 8),
+
+                          Container(
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFFB85C), Color(0xFFF08A1D)],
+
+                                begin: Alignment.topLeft,
+
+                                end: Alignment.bottomRight,
+                              ),
+
+                              shape: BoxShape.circle,
+
+                              border: Border.all(
+                                color: const Color(
+                                  0xFFFFE3A0,
+                                ).withValues(alpha: 0.7),
+                              ),
+                            ),
+
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.record_voice_over_rounded,
+                                color: Color(0xFF2E1107),
+                                size: 18,
+                              ),
+
+                              tooltip: 'Choose Voice',
+
+                              onPressed: widget.onVoiceSettings,
+
+                              padding: EdgeInsets.zero,
+
+                              constraints: const BoxConstraints(
+                                minWidth: 36,
+                                minHeight: 36,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
-
-                    child: Center(
-                      child: Icon(
-                        widget.isPlaying
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-
-                        color: Colors.white,
-
-                        size: 24,
-                      ),
-                    ),
                   ),
                 ),
-              );
-            },
+              ),
+            ],
           ),
 
-          const SizedBox(width: 6),
+          const SizedBox(height: 5),
 
-          // Reading Status Pill
-          Container(
-            constraints: const BoxConstraints(minWidth: 68),
+          // Verse Progress
+          TweenAnimationBuilder<double>(
+            tween: Tween<double>(end: progress),
 
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+            duration: const Duration(milliseconds: 300),
 
-            decoration: BoxDecoration(
-              color: const Color(0xFF381406),
+            curve: Curves.easeOut,
 
-              borderRadius: BorderRadius.circular(12),
+            builder: (context, value, _) => ClipRRect(
+              borderRadius: BorderRadius.circular(2),
 
-              border: Border.all(
-                color: const Color(0xFFD4AF37).withValues(alpha: 0.4),
-                width: 0.8,
-              ),
-            ),
+              child: LinearProgressIndicator(
+                value: value,
 
-            child: Center(
-              child: Text(
-                hasVerse
-                    ? (widget.isPlaying
-                          ? 'Verse $verseNum/${widget.totalVerses}'
-                          : 'Verse $verseNum')
-                    : (widget.isPlaying ? 'Reciting' : '॥ ॐ ॥'),
+                minHeight: 3,
 
-                style: GoogleFonts.outfit(
-                  fontSize: 11,
+                backgroundColor: const Color(
+                  0xFFD4AF37,
+                ).withValues(alpha: 0.16),
 
-                  fontWeight: FontWeight.w600,
-
-                  color: const Color(0xFFFFE082),
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  Color(0xFFFFA94D),
                 ),
               ),
             ),
           ),
-
-          const SizedBox(width: 3),
-
-          // Next Verse Button
-          IconButton(
-            icon: const Icon(
-              Icons.skip_next_rounded,
-              color: Color(0xFFFFD54F),
-              size: 20,
-            ),
-
-            tooltip: 'Next Page',
-
-            onPressed: widget.onNextPage,
-
-            padding: EdgeInsets.zero,
-
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-          ),
-
-          if (widget.onVoiceSettings != null) ...[
-            const SizedBox(width: 3),
-            IconButton(
-              icon: const Icon(
-                Icons.record_voice_over_rounded,
-                color: Color(0xFFFFD54F),
-                size: 18,
-              ),
-              tooltip: 'Choose Voice',
-              onPressed: widget.onVoiceSettings,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-            ),
-          ],
         ],
       ),
+    );
+  }
+
+  Widget _buildNavButton({
+    required IconData icon,
+
+    required String tooltip,
+
+    required VoidCallback onPressed,
+  }) {
+    return IconButton(
+      icon: Icon(icon, color: const Color(0xFFFFD54F), size: 28),
+
+      tooltip: tooltip,
+
+      onPressed: onPressed,
+
+      padding: EdgeInsets.zero,
+
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
     );
   }
 }
@@ -3522,21 +3658,6 @@ class _BookViewerState extends State<_BookViewer>
   // ── Front cover board face — deity artwork, quarter-bound shoulder, bevels, and satin sheen ──
 
   Widget _buildFrontBoardFace(double faceW, double h) {
-    // 1. Detect if this is Bal Kand or Ramcharitmanas/Ramayan
-
-    final String chName =
-        (widget.chapter['name'] ??
-                widget.chapter['title'] ??
-                widget.chapter['chapterTitle'] ??
-                '')
-            .toString()
-            .toLowerCase();
-
-    final String grName =
-        (widget.granth['name'] ?? widget.granth['title'] ?? '')
-            .toString()
-            .toLowerCase();
-
     final String rawCover =
         (widget.chapter['coverImage'] ??
                 widget.chapter['image'] ??
@@ -3546,27 +3667,28 @@ class _BookViewerState extends State<_BookViewer>
                 '')
             .toString();
 
-    final bool isBalKand =
-        chName.contains('bal') ||
-        chName.contains('बाल') ||
-        chName.contains('ball') ||
-        chName.contains('baal') ||
-        grName.contains('bal') ||
-        grName.contains('बाल') ||
-        grName.contains('ball') ||
-        grName.contains('baal') ||
-        rawCover.toLowerCase().contains('bal') ||
-        (rawCover.isEmpty &&
-            (grName.contains('ram') || grName.contains('राम'))) ||
-        ((widget.chapter['chapterNumber'] == 1 ||
-                widget.chapter['chapterNumber'] == '1') &&
-            (grName.contains('ram') || grName.contains('राम')));
-
     Widget imageContent;
 
-    if (isBalKand) {
+    final resolvedUrl = ApiService.resolveImageUrl(rawCover);
+
+    if (resolvedUrl.startsWith('http')) {
+      imageContent = Image.network(
+        resolvedUrl,
+
+        fit: BoxFit.cover,
+
+        width: faceW,
+
+        height: h,
+
+        alignment: Alignment.center,
+
+        errorBuilder: (context, error, stackTrace) =>
+            _buildFallbackCoverFace(faceW, h),
+      );
+    } else if (rawCover.startsWith('assets/')) {
       imageContent = Image.asset(
-        'assets/images/bal_kand_cover.jpg',
+        rawCover,
 
         fit: BoxFit.fill,
 
@@ -3580,54 +3702,7 @@ class _BookViewerState extends State<_BookViewer>
             _buildFallbackCoverFace(faceW, h),
       );
     } else {
-      final resolvedUrl = ApiService.resolveImageUrl(rawCover);
-
-      if (resolvedUrl.startsWith('http')) {
-        imageContent = Image.network(
-          resolvedUrl,
-
-          fit: BoxFit.cover,
-
-          width: faceW,
-
-          height: h,
-
-          alignment: Alignment.center,
-
-          errorBuilder: (context, error, stackTrace) =>
-              _buildFallbackCoverFace(faceW, h),
-        );
-      } else if (rawCover.startsWith('assets/')) {
-        imageContent = Image.asset(
-          rawCover,
-
-          fit: BoxFit.fill,
-
-          width: faceW,
-
-          height: h,
-
-          alignment: Alignment.center,
-
-          errorBuilder: (context, error, stackTrace) =>
-              _buildFallbackCoverFace(faceW, h),
-        );
-      } else {
-        imageContent = Image.asset(
-          'assets/images/bal_kand_cover.jpg',
-
-          fit: BoxFit.fill,
-
-          width: faceW,
-
-          height: h,
-
-          alignment: Alignment.center,
-
-          errorBuilder: (context, error, stackTrace) =>
-              _buildFallbackCoverFace(faceW, h),
-        );
-      }
+      imageContent = _buildFallbackCoverFace(faceW, h);
     }
 
     return SizedBox(
@@ -5293,62 +5368,62 @@ class _VersePageState extends State<_VersePage> {
                           const SizedBox(height: 6),
 
                           // Reading indicator pil/l — shows current active recitation section
-                          if (!widget.isPageCompleted &&
-                              widget.activeLocalWordIndex >= 0)
-                            Container(
-                              margin: const EdgeInsets.only(bottom: 6),
-
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 3,
-                              ),
-
-                              decoration: BoxDecoration(
-                                color: const Color(
-                                  0xFFFF8C1A,
-                                ).withValues(alpha: 0.15),
-
-                                border: Border.all(
-                                  color: const Color(
-                                    0xFFFF8C1A,
-                                  ).withValues(alpha: 0.5),
-                                  width: 0.8,
-                                ),
-
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-
-                                children: [
-                                  const Icon(
-                                    Icons.auto_stories_rounded,
-                                    size: 11,
-                                    color: Color(0xFFD55F00),
-                                  ),
-
-                                  const SizedBox(width: 5),
-
-                                  Text(
-                                    widget.activeSection == 'sanskrit'
-                                        ? 'श्लोक पाठ'
-                                        : (widget.activeSection ==
-                                                  'transliteration'
-                                              ? 'उच्चारण पाठ'
-                                              : (widget.activeSection == 'hindi'
-                                                    ? 'भावार्थ पाठ'
-                                                    : 'English Translation')),
-
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 10,
-                                      color: const Color(0xFFD55F00),
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                          // if (!widget.isPageCompleted &&
+                          //     widget.activeLocalWordIndex >= 0)
+                          //   Container(
+                          //     margin: const EdgeInsets.only(bottom: 6),
+                          //
+                          //     padding: const EdgeInsets.symmetric(
+                          //       horizontal: 10,
+                          //       vertical: 3,
+                          //     ),
+                          //
+                          //     decoration: BoxDecoration(
+                          //       color: const Color(
+                          //         0xFFFF8C1A,
+                          //       ).withValues(alpha: 0.15),
+                          //
+                          //       border: Border.all(
+                          //         color: const Color(
+                          //           0xFFFF8C1A,
+                          //         ).withValues(alpha: 0.5),
+                          //         width: 0.8,
+                          //       ),
+                          //
+                          //       borderRadius: BorderRadius.circular(20),
+                          //     ),
+                          //
+                          //     child: Row(
+                          //       mainAxisSize: MainAxisSize.min,
+                          //
+                          //       children: [
+                          //         const Icon(
+                          //           Icons.auto_stories_rounded,
+                          //           size: 11,
+                          //           color: Color(0xFFD55F00),
+                          //         ),
+                          //
+                          //         const SizedBox(width: 5),
+                          //
+                          //         Text(
+                          //           widget.activeSection == 'sanskrit'
+                          //               ? 'श्लोक पाठ'
+                          //               : (widget.activeSection ==
+                          //                         'transliteration'
+                          //                     ? 'उच्चारण पाठ'
+                          //                     : (widget.activeSection == 'hindi'
+                          //                           ? 'भावार्थ पाठ'
+                          //                           : 'English Translation')),
+                          //
+                          //           style: GoogleFonts.outfit(
+                          //             fontSize: 10,
+                          //             color: const Color(0xFFD55F00),
+                          //             fontWeight: FontWeight.w600,
+                          //           ),
+                          //         ),
+                          //       ],
+                          //     ),
+                          //   ),
 
                           Text(
                             'Verse ${widget.verseIndex + 1}',
@@ -5403,49 +5478,49 @@ class _VersePageState extends State<_VersePage> {
                                     ],
                                   ),
                                 ),
-                              GestureDetector(
-                                onTap: widget.onRecordTap,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(
-                                      0xFF1E0A04,
-                                    ).withValues(alpha: 0.07),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                      color: const Color(
-                                        0xFF8B6048,
-                                      ).withValues(alpha: 0.35),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        widget.hasUserRecording
-                                            ? Icons.mic
-                                            : Icons.mic_none,
-                                        size: 14,
-                                        color: const Color(0xFF8B6048),
-                                      ),
-                                      const SizedBox(width: 5),
-                                      Text(
-                                        widget.hasUserRecording
-                                            ? 'ફેરફાર કરો'
-                                            : 'અવાજ રેકોર્ડ',
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 11,
-                                          color: const Color(0xFF8B6048),
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                              // GestureDetector(
+                              //   onTap: widget.onRecordTap,
+                              //   child: Container(
+                              //     padding: const EdgeInsets.symmetric(
+                              //       horizontal: 10,
+                              //       vertical: 4,
+                              //     ),
+                              //     decoration: BoxDecoration(
+                              //       color: const Color(
+                              //         0xFF1E0A04,
+                              //       ).withValues(alpha: 0.07),
+                              //       borderRadius: BorderRadius.circular(20),
+                              //       border: Border.all(
+                              //         color: const Color(
+                              //           0xFF8B6048,
+                              //         ).withValues(alpha: 0.35),
+                              //       ),
+                              //     ),
+                              //     child: Row(
+                              //       mainAxisSize: MainAxisSize.min,
+                              //       children: [
+                              //         Icon(
+                              //           widget.hasUserRecording
+                              //               ? Icons.mic
+                              //               : Icons.mic_none,
+                              //           size: 14,
+                              //           color: const Color(0xFF8B6048),
+                              //         ),
+                              //         const SizedBox(width: 5),
+                              //         Text(
+                              //           widget.hasUserRecording
+                              //               ? 'ફેરફાર કરો'
+                              //               : 'અવાજ રેકોર્ડ',
+                              //           style: GoogleFonts.outfit(
+                              //             fontSize: 11,
+                              //             color: const Color(0xFF8B6048),
+                              //             fontWeight: FontWeight.w500,
+                              //           ),
+                              //         ),
+                              //       ],
+                              //     ),
+                              //   ),
+                              // ),
                             ],
                           ),
 
