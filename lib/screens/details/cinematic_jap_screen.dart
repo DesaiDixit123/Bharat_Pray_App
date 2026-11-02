@@ -44,7 +44,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
   @override
   JapConfig get japEntry => widget.entry;
 
-  static const int _target = 108;
+  late final int _target = widget.entry.isCustom ? math.max(1, widget.entry.targetCount) : 108;
   late int _count;
   int _completedMalas = 0;
 
@@ -78,6 +78,9 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
   );
 
   String get _effectiveImageAsset {
+    if (widget.entry.isCustom && widget.entry.darshanImageUrl.isNotEmpty) {
+      return widget.entry.darshanImageUrl;
+    }
     if (widget.entry.darshanImageUrl.isNotEmpty &&
         widget.entry.darshanImageUrl.startsWith('assets/')) {
       return widget.entry.darshanImageUrl;
@@ -100,6 +103,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
   void initState() {
     super.initState();
     prepareJapVoice();
+    refreshJapDarshanVideo();
 
     // 1. Full-screen immersive devotional mode
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -111,7 +115,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
 
     // Load previously revealed nodes if resuming existing session
     if (_count > 0) {
-      _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count);
+      _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count, target: _target);
       _newestNode = _revealedNodes.isNotEmpty ? _revealedNodes.last : null;
     } else {
       _revealedNodes = [];
@@ -263,13 +267,13 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
 
     // 1. Advance Jap Count immediately on each tap!
     final nextCount = math.min(_target, _count + 1);
-    final newlyNode = RamPathCalculator.getNodeForStep(_count);
+    final newlyNode = RamPathCalculator.getNodeForStep(_count, target: _target);
 
     // 2. Compute exact target coordinate on the aspect-ratio fitted portrait
     final Size screenSize = MediaQuery.of(context).size;
     final dstRect = RamPathCalculator.computeDstRect(screenSize);
-    final normTarget = RamPathCalculator.getTargetNormalizedPoint(_count);
-    final targetPoint = (_selectedEffect == JapRevealEffectType.divineVerticalReveal)
+    final normTarget = RamPathCalculator.getTargetNormalizedPoint(_count, target: _target);
+    final targetPoint = (widget.entry.isCustom || _selectedEffect == JapRevealEffectType.divineVerticalReveal)
         ? Offset(
             dstRect.left + (normTarget.dx * dstRect.width),
             dstRect.top + (normTarget.dy * dstRect.height),
@@ -333,6 +337,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
       _completedMalas++;
       _revealedNodes = RamPathCalculator.revealNodes; // 100% full reveal including face
     });
+    refreshJapDarshanVideo(notifyIfPending: true);
 
     // Stage 1 & 2: Divine golden light bloom & sacred temple bell
     _completionController.forward(from: 0.0);
@@ -495,7 +500,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
               animation: Listenable.merge([_shimmerController, _completionController, _uiFadeController]),
               builder: (context, _) {
                 final bool isFullCompleted = _isCompleted || _count >= _target;
-                if (_selectedEffect == JapRevealEffectType.divineVerticalReveal) {
+                if (widget.entry.isCustom || _selectedEffect == JapRevealEffectType.divineVerticalReveal) {
                   // MANDATORY PRESERVATION: Exact existing approved widget
                   return ProgressiveRamRevealWidget(
                     revealedNodes: _revealedNodes,
@@ -504,6 +509,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
                     isCompleted: isFullCompleted,
                     completionGlowProgress: _completionController.value,
                     imageAsset: _effectiveImageAsset,
+                    revealProgress: widget.entry.isCustom ? _count / _target : null,
                   );
                 } else {
                   // 4 New Selectable Animation Effects
@@ -651,9 +657,11 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
                       ignoring: _uiFadeController.value < 0.85,
                       child: CinematicDarshanView(
                         imageAsset: _effectiveImageAsset,
-                        videoAsset: widget.entry.name.toLowerCase().contains('ram')
+                        videoAsset: !widget.entry.isCustom && widget.entry.name.toLowerCase().contains('ram')
                             ? 'assets/videos/lord_shri_ram_live_darshan.mp4'
                             : null,
+                        videoUrl: japDarshanVideoUrl,
+                        showDeityHighlights: !widget.entry.isCustom,
                         isSoundEnabled: _isSoundEnabled,
                         onExitRequested: () {
                           Navigator.maybePop(context, _totalProgress);
@@ -813,6 +821,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (!widget.entry.isCustom) ...[
               // Dedicated Dhup Chanting Mode Switcher
               GestureDetector(
                 onTap: () async {
@@ -830,7 +839,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
                       _completedMalas = updated ~/ _target;
                       _isCompleted = _count >= _target;
                       if (_count > 0 && !_isCompleted) {
-                        _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count);
+                        _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count, target: _target);
                         _newestNode = _revealedNodes.isNotEmpty ? _revealedNodes.last : null;
                       } else if (_count == 0) {
                         _revealedNodes = [];
@@ -884,7 +893,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
                       _completedMalas = updated ~/ _target;
                       _isCompleted = _count >= _target;
                       if (_count > 0 && !_isCompleted) {
-                        _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count);
+                        _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count, target: _target);
                         _newestNode = _revealedNodes.isNotEmpty ? _revealedNodes.last : null;
                       } else if (_count == 0) {
                         _revealedNodes = [];
@@ -938,7 +947,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
                       _completedMalas = updated ~/ _target;
                       _isCompleted = _count >= _target;
                       if (_count > 0 && !_isCompleted) {
-                        _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count);
+                        _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count, target: _target);
                         _newestNode = _revealedNodes.isNotEmpty ? _revealedNodes.last : null;
                       } else if (_count == 0) {
                         _revealedNodes = [];
@@ -992,7 +1001,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
                       _completedMalas = updated ~/ _target;
                       _isCompleted = _count >= _target;
                       if (_count > 0 && !_isCompleted) {
-                        _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count);
+                        _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count, target: _target);
                         _newestNode = _revealedNodes.isNotEmpty ? _revealedNodes.last : null;
                       } else if (_count == 0) {
                         _revealedNodes = [];
@@ -1064,6 +1073,8 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
                   ),
                 ),
               ),
+
+              ],
 
               // Favorite Heart Button
               Container(

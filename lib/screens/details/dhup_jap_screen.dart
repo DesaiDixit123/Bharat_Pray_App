@@ -42,7 +42,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
   @override
   JapConfig get japEntry => widget.entry;
 
-  static const int _target = 108;
+  late final int _target = widget.entry.isCustom ? math.max(1, widget.entry.targetCount) : 108;
   late int _count;
   int _completedMalas = 0;
   bool _isCompleted = false;
@@ -79,6 +79,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
   void initState() {
     super.initState();
     prepareJapVoice();
+    refreshJapDarshanVideo();
 
     // Devotional full-screen immersive mode
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -89,7 +90,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
     _isCompleted = false;
 
     if (_count > 0) {
-      _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count);
+      _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count, target: _target);
       _newestNode = _revealedNodes.isNotEmpty ? _revealedNodes.last : null;
     } else {
       _revealedNodes = [];
@@ -347,7 +348,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
 
     final Size screenSize = MediaQuery.of(context).size;
     final int stepToReveal = _count; // Current Jap step to reveal
-    final targetNode = RamPathCalculator.getNodeForStep(stepToReveal);
+    final targetNode = RamPathCalculator.getNodeForStep(stepToReveal, target: _target);
 
     // 5. Derive exact target coordinate on aspect-ratio fitted portrait
     final dstRect = RamPathCalculator.computeDstRect(screenSize);
@@ -369,14 +370,14 @@ class _DhupJapScreenState extends State<DhupJapScreen>
       start: startPoint,
       target: targetPoint,
       duration: streamDuration,
-      text: 'राम',
+      text: widget.entry.isCustom ? japMantraText : 'राम',
       onArrived: () {
         if (!mounted) return;
 
         setState(() {
           _count = math.min(_target, stepToReveal + 1);
           _newestNode = targetNode;
-          _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count);
+          _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count, target: _target);
           // If sound is muted, chant finishes immediately upon arrival
           if (!_isSoundEnabled) {
             _isChantingActive = false;
@@ -444,6 +445,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
       _completedMalas++;
       _revealedNodes = RamPathCalculator.revealNodes; // 100% full reveal
     });
+    refreshJapDarshanVideo(notifyIfPending: true);
 
     _completionController.forward(from: 0.0);
 
@@ -558,7 +560,10 @@ class _DhupJapScreenState extends State<DhupJapScreen>
                     shimmerProgress: _shimmerController.value,
                     isCompleted: _isCompleted,
                     completionGlowProgress: _completionController.value,
-                    imageAsset: 'assets/images/lord_shri_ram_darshan.png',
+                    imageAsset: widget.entry.isCustom && widget.entry.darshanImageUrl.isNotEmpty
+                        ? widget.entry.darshanImageUrl
+                        : 'assets/images/lord_shri_ram_darshan.png',
+                    revealProgress: widget.entry.isCustom ? _count / _target : null,
                   );
                 },
               ),
@@ -621,6 +626,10 @@ class _DhupJapScreenState extends State<DhupJapScreen>
             // ── LAYER 6: Final 108 Darshan Climax ─────────────────────────────
             if (_isCompleted)
               DhupDarshanClimaxView(
+                title: widget.entry.isCustom ? '॥ $japMantraText ॥' : '॥ जय श्री राम ॥',
+                target: _target,
+                videoUrl: japDarshanVideoUrl,
+                isSoundEnabled: _isSoundEnabled,
                 onNextMala: _startNextMala,
                 onExit: () {
                   _persistProgress();
@@ -670,7 +679,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
 
           // Glowing Devanagari Title "राम"
           Text(
-            'राम',
+            widget.entry.isCustom ? japMantraText : 'राम',
             style: GoogleFonts.notoSerifDevanagari(
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -685,6 +694,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (!widget.entry.isCustom) ...[
               // Jal Darshan Mode Switcher
               GestureDetector(
                 onTap: () async {
@@ -700,7 +710,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
                       _count = updated % _target;
                       _completedMalas = updated ~/ _target;
                       _isCompleted = _count >= _target;
-                      _revealedNodes = _count > 0 ? RamPathCalculator.getRevealedNodesForCount(_count) : [];
+                      _revealedNodes = _count > 0 ? RamPathCalculator.getRevealedNodesForCount(_count, target: _target) : [];
                     });
                   }
                 },
@@ -747,7 +757,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
                       _count = updated % _target;
                       _completedMalas = updated ~/ _target;
                       _isCompleted = _count >= _target;
-                      _revealedNodes = _count > 0 ? RamPathCalculator.getRevealedNodesForCount(_count) : [];
+                      _revealedNodes = _count > 0 ? RamPathCalculator.getRevealedNodesForCount(_count, target: _target) : [];
                     });
                   }
                 },
@@ -794,7 +804,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
                       _count = updated % _target;
                       _completedMalas = updated ~/ _target;
                       _isCompleted = _count >= _target;
-                      _revealedNodes = _count > 0 ? RamPathCalculator.getRevealedNodesForCount(_count) : [];
+                      _revealedNodes = _count > 0 ? RamPathCalculator.getRevealedNodesForCount(_count, target: _target) : [];
                     });
                   }
                 },
@@ -825,6 +835,8 @@ class _DhupJapScreenState extends State<DhupJapScreen>
                   ),
                 ),
               ),
+
+              ],
 
               // Favorite Heart Button
               Container(

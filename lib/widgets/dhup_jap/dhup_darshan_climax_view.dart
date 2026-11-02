@@ -2,17 +2,27 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../jap/custom_jap_darshan_video.dart';
+
 /// Full-screen divine Darshan experience shown on 108 Jap completion in Dhup Chanting mode.
 /// Features full Lord Shri Ram image, golden radiant aura, falling sacred rose petals,
 /// and peaceful celebratory completion banner.
 class DhupDarshanClimaxView extends StatefulWidget {
   final VoidCallback onNextMala;
   final VoidCallback onExit;
+  final String title;
+  final int target;
+  final String videoUrl;
+  final bool isSoundEnabled;
 
   const DhupDarshanClimaxView({
     super.key,
     required this.onNextMala,
     required this.onExit,
+    this.title = '॥ जय श्री राम ॥',
+    this.target = 108,
+    this.videoUrl = '',
+    this.isSoundEnabled = true,
   });
 
   @override
@@ -59,6 +69,13 @@ class _DhupDarshanClimaxViewState extends State<DhupDarshanClimaxView>
     return Stack(
       fit: StackFit.expand,
       children: [
+        // 0. Generated Live Darshan Video (custom Japs)
+        if (widget.videoUrl.isNotEmpty)
+          CustomJapDarshanVideo(
+            url: widget.videoUrl,
+            isSoundEnabled: widget.isSoundEnabled,
+          ),
+
         // 1. Falling Rose Petals Layer
         AnimatedBuilder(
           animation: _petalController,
@@ -111,7 +128,7 @@ class _DhupDarshanClimaxViewState extends State<DhupDarshanClimaxView>
                       const Icon(Icons.auto_awesome, color: Color(0xFFFFD54F), size: 20),
                       const SizedBox(width: 8),
                       Text(
-                        '॥ जय श्री राम ॥',
+                        widget.title,
                         style: GoogleFonts.notoSerifDevanagari(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -186,7 +203,7 @@ class _DhupDarshanClimaxViewState extends State<DhupDarshanClimaxView>
                                 const Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
                                 const SizedBox(width: 8),
                                 Text(
-                                  'Next 108 Mala',
+                                  'Next ${widget.target} Mala',
                                   style: GoogleFonts.outfit(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,

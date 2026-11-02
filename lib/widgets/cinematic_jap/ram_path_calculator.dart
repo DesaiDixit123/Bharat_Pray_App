@@ -229,21 +229,46 @@ class RamPathCalculator {
   ];
 
   /// Returns the set of nodes revealed up to and including [japCount] (0..108).
-  static List<RevealNode> getRevealedNodesForCount(int japCount) {
+  static List<RevealNode> getRevealedNodesForCount(int japCount, {int target = targetJapCount}) {
     if (japCount <= 0) return const [];
+    if (target > targetJapCount) {
+      final nodeCount = (japCount * targetJapCount / target).ceil();
+      return revealNodes.sublist(0, math.min(nodeCount, targetJapCount));
+    }
+    if (target < targetJapCount) {
+      return List.generate(
+        math.min(japCount, target),
+        (step) => getNodeForStep(step, target: target),
+      );
+    }
     if (japCount >= targetJapCount) return revealNodes;
     return revealNodes.sublist(0, japCount);
   }
 
   /// Returns the newly revealed node on [japStep] (0..107).
-  static RevealNode getNodeForStep(int japStep) {
-    final idx = japStep.clamp(0, targetJapCount - 1);
-    return revealNodes[idx];
+  /// A [target] below 108 spreads its chants evenly over the portrait with larger
+  /// reveals, so the whole image opens by the final chant.
+  static RevealNode getNodeForStep(int japStep, {int target = targetJapCount}) {
+    if (target == targetJapCount) {
+      final idx = japStep.clamp(0, targetJapCount - 1);
+      return revealNodes[idx];
+    }
+    final idx = (japStep * targetJapCount ~/ target).clamp(0, targetJapCount - 1);
+    final node = revealNodes[idx];
+    if (target > targetJapCount) return node;
+    final scale = math.min(3.2, math.sqrt(targetJapCount / target));
+    return RevealNode(
+      step: node.step,
+      u: node.u,
+      v: node.v,
+      radiusNorm: node.radiusNorm * scale,
+      label: node.label,
+    );
   }
 
   /// Returns the normalized target center coordinate (0.0..1.0, 0.0..1.0) for [japStep].
-  static Offset getTargetNormalizedPoint(int japStep) {
-    final node = getNodeForStep(japStep);
+  static Offset getTargetNormalizedPoint(int japStep, {int target = targetJapCount}) {
+    final node = getNodeForStep(japStep, target: target);
     return Offset(node.u, node.v);
   }
 

@@ -349,9 +349,14 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       entry.progress = 0;
     }
 
-    final Widget destination = isCinematic
-        ? CinematicJapScreen(entry: entry)
-        : JapDetailScreen(entry: entry);
+    final Widget destination;
+    if (entry.isCustom && entry.particleShape == 'dhup') {
+      destination = DhupJapScreen(entry: entry);
+    } else if (isCinematic || (entry.isCustom && entry.particleShape == 'ram')) {
+      destination = CinematicJapScreen(entry: entry);
+    } else {
+      destination = JapDetailScreen(entry: entry);
+    }
 
     final updatedProgress = await Navigator.push<int>(
       context,
@@ -498,6 +503,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
         targetCount: result.chantCount,
         progress: 0,
         particleShape: result.particleEffect,
+        isCustom: true,
         effectPack: EffectPack.resolve(
           name: result.name,
           particleShape: result.particleEffect,
@@ -514,6 +520,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
         'shlokAudio': newCustomConfig.shlokAudioUrl,
         'targetCount': newCustomConfig.targetCount,
         'particleShape': result.particleEffect,
+        'isCustom': true,
         'progress': 0,
       });
 

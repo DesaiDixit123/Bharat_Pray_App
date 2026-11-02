@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -17,6 +18,7 @@ class CinematicDarshanView extends StatefulWidget {
   final String? videoUrl;
   final bool isSoundEnabled;
   final VoidCallback? onExitRequested;
+  final bool showDeityHighlights; // Eye and jewel glints placed for the bundled Shri Ram image
 
   const CinematicDarshanView({
     super.key,
@@ -25,6 +27,7 @@ class CinematicDarshanView extends StatefulWidget {
     this.videoUrl,
     this.isSoundEnabled = true,
     this.onExitRequested,
+    this.showDeityHighlights = true,
   });
 
   @override
@@ -129,6 +132,28 @@ class _CinematicDarshanViewState extends State<CinematicDarshanView>
     if (widget.videoAsset != null || widget.videoUrl != null) {
       _initVideoPlayer();
     }
+  }
+
+  @override
+  void didUpdateWidget(covariant CinematicDarshanView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final url = widget.videoUrl;
+    if (url != null && url.isNotEmpty && url != oldWidget.videoUrl && _videoController == null) {
+      _initVideoPlayer();
+    }
+  }
+
+  Widget _buildDarshanImage() {
+    final source = widget.imageAsset;
+    Widget onError(BuildContext context, Object error, StackTrace? stack) =>
+        const ColoredBox(color: Colors.black);
+    if (source.startsWith('http://') || source.startsWith('https://')) {
+      return Image.network(source, fit: BoxFit.cover, alignment: Alignment.center, errorBuilder: onError);
+    }
+    if (source.startsWith('assets/')) {
+      return Image.asset(source, fit: BoxFit.cover, alignment: Alignment.center, errorBuilder: onError);
+    }
+    return Image.file(File(source), fit: BoxFit.cover, alignment: Alignment.center, errorBuilder: onError);
   }
 
   Future<void> _initVideoPlayer() async {
@@ -299,12 +324,7 @@ class _CinematicDarshanViewState extends State<CinematicDarshanView>
                   child: Transform(
                     transform: Matrix4.diagonal3Values(scaleX, scaleY, 1.0),
                     alignment: const Alignment(0.0, 0.15), // Centered on sacred chest
-                    child: Image.asset(
-                      widget.imageAsset,
-                      fit: BoxFit.cover,
-                      alignment: Alignment.center,
-                      errorBuilder: (_, _, _) => const ColoredBox(color: Colors.black),
-                    ),
+                    child: _buildDarshanImage(),
                   ),
                 );
               },
@@ -312,7 +332,7 @@ class _CinematicDarshanViewState extends State<CinematicDarshanView>
           ),
 
           // ── LAYER 4: Divine Eye Illumination & Highlights (Fallback when video loading) ──
-          if (!_isVideoInitialized)
+          if (!_isVideoInitialized && widget.showDeityHighlights)
             Positioned.fill(
               child: AnimatedBuilder(
                 animation: Listenable.merge([

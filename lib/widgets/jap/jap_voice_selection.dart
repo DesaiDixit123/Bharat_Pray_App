@@ -2,9 +2,11 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/jap_models.dart';
 import '../../models/jap_theme_config.dart';
+import '../../services/api_service.dart';
 import '../../services/jap_voice_service.dart';
 import '../granth/granth_voice_selector_sheet.dart';
 
@@ -21,6 +23,38 @@ mixin JapVoiceSelection<T extends StatefulWidget> on State<T> {
     name: japEntry.name,
     shlokText: japEntry.shlokText,
   );
+
+  String get japMantraText => _japTheme.mantraText;
+
+  late String japDarshanVideoUrl = japEntry.darshanVideoUrl;
+
+  /// Looks up this custom Jap's generated live darshan video, if it is ready yet.
+  Future<void> refreshJapDarshanVideo({bool notifyIfPending = false}) async {
+    if (!japEntry.isCustom) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
+      if (token.isNotEmpty) {
+        final japs = await ApiService.getMyCustomJaps(token);
+        final match = japs.whereType<Map>().where(
+              (jap) => (jap['_id'] ?? jap['id']).toString() == japEntry.id,
+            );
+        if (match.isNotEmpty) {
+          final url = ApiService.resolveImageUrl(match.first['darshanVideo']?.toString());
+          if (url.isNotEmpty && mounted) setState(() => japDarshanVideoUrl = url);
+        }
+      }
+    } catch (e) {
+      debugPrint('[JapVoiceSelection] Darshan video lookup error: $e');
+    }
+    if (notifyIfPending && mounted && japDarshanVideoUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Your live darshan video is still being prepared. It will play here once it is ready.'),
+        ),
+      );
+    }
+  }
 
   /// The selected voice's clip, or this mantra's bundled clip until it is ready.
   Source get japChantSource {

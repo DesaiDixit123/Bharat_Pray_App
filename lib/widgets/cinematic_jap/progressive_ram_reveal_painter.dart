@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'ram_path_calculator.dart';
+import 'reveal_image_loader.dart';
 
 /// Preloads and manages the high-resolution Lord Shri Ram portrait with
 /// a seamless, soft-feathered organic reveal mask (ZERO rectangular blocks).
@@ -13,6 +13,7 @@ class ProgressiveRamRevealWidget extends StatefulWidget {
   final bool isCompleted;
   final double completionGlowProgress; // 0.0 to 1.0
   final String imageAsset;
+  final double? revealProgress; // 0.0 to 1.0, for chant counts other than 108
 
   const ProgressiveRamRevealWidget({
     super.key,
@@ -22,6 +23,7 @@ class ProgressiveRamRevealWidget extends StatefulWidget {
     required this.isCompleted,
     required this.completionGlowProgress,
     this.imageAsset = 'assets/images/lord_shri_ram_darshan.png',
+    this.revealProgress,
   });
 
   @override
@@ -48,8 +50,8 @@ class _ProgressiveRamRevealWidgetState extends State<ProgressiveRamRevealWidget>
 
   Future<void> _loadImage() async {
     try {
-      final ByteData data = await rootBundle.load(widget.imageAsset);
-      final ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+      final bytes = await loadRevealImageBytes(widget.imageAsset);
+      final ui.Codec codec = await ui.instantiateImageCodec(bytes);
       final ui.FrameInfo frameInfo = await codec.getNextFrame();
       if (mounted) {
         setState(() {
@@ -80,6 +82,7 @@ class _ProgressiveRamRevealWidgetState extends State<ProgressiveRamRevealWidget>
           shimmerProgress: widget.shimmerProgress,
           isCompleted: widget.isCompleted,
           completionGlowProgress: widget.completionGlowProgress,
+          revealProgress: widget.revealProgress,
         ),
         size: Size.infinite,
       ),
@@ -96,6 +99,7 @@ class ProgressiveRamRevealPainter extends CustomPainter {
   final double shimmerProgress;
   final bool isCompleted;
   final double completionGlowProgress;
+  final double? revealProgress;
 
   final Paint _backgroundPaint = Paint()..color = Colors.black;
   final Paint _imagePaint = Paint()..filterQuality = FilterQuality.high;
@@ -108,6 +112,7 @@ class ProgressiveRamRevealPainter extends CustomPainter {
     required this.shimmerProgress,
     required this.isCompleted,
     required this.completionGlowProgress,
+    this.revealProgress,
   });
 
   @override
@@ -168,7 +173,7 @@ class ProgressiveRamRevealPainter extends CustomPainter {
     // Count 56: Exactly ~50% of the portrait gracefully revealed, face stays pure & protected!
     // Count 85..107: Smoothly merges neighboring ornaments as count approaches completion
     // Count 108: Full 100% complete darshan!
-    final double totalRatio = (revealedNodes.length / 108.0).clamp(0.0, 1.0);
+    final double totalRatio = (revealProgress ?? revealedNodes.length / 108.0).clamp(0.0, 1.0);
     final double expansion = 1.0 + (2.00 * math.pow(totalRatio, 2.2));
 
     // ── A. Draw Non-Face Nodes with Organic Feathered Radial Gradients ──
@@ -240,6 +245,7 @@ class ProgressiveRamRevealPainter extends CustomPainter {
         oldDelegate.shimmerProgress != shimmerProgress ||
         oldDelegate.isCompleted != isCompleted ||
         oldDelegate.completionGlowProgress != completionGlowProgress ||
+        oldDelegate.revealProgress != revealProgress ||
         oldDelegate.image != image;
   }
 }

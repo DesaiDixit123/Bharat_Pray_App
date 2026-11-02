@@ -8,6 +8,7 @@ import 'dart:io';
 
 import '../../services/api_service.dart';
 import '../../services/yatra_personal_chat_service.dart';
+import '../../widgets/jap/custom_jap_preview_sheet.dart';
 import 'notification_screen.dart';
 import 'messages_screen.dart';
 
@@ -45,24 +46,6 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
 
   // God categories (loaded dynamically from backend API)
   List<Map<String, String>> _categories = [];
-
-  // Devotional Animation options (Classic Video + New Premium Devotional Animations)
-  final List<Map<String, String>> _particleEffects = [
-    // Classic Video Animations (Preserved)
-    {'value': 'dhup',           'label': 'Dhoop Smoke Video'},
-    {'value': 'ram',            'label': 'Ram Ram Video'},
-    {'value': 'lotus',          'label': 'Lotus Video'},
-    {'value': 'peakok',         'label': 'Peacock Feather Video'},
-    {'value': 'arati',          'label': 'Temple Aarti Video'},
-
-    // New Premium Devotional Animations
-    {'value': 'radha_name',     'label': '✨ Radha Name Reveal'},
-    {'value': 'ram_spread',     'label': '✨ Ram Ram Divine Spread'},
-    {'value': 'incense_smoke',  'label': '✨ Incense Smoke Reveal'},
-    {'value': 'mantra_light',   'label': '✨ Mantra-to-Light'},
-    {'value': 'divine_energy',  'label': '✨ Divine Energy Formation'},
-    {'value': 'sacred_mandala', 'label': '✨ Sacred Mandala Formation'},
-  ];
 
   @override
   void initState() {
@@ -435,6 +418,102 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
     );
   }
 
+  // ─── Jap effect sheet with previews ───────────────────────────────────────
+  String? get _selectedJapEffectLabel {
+    final match = CustomJapEffect.all.where((e) => e.value == _selectedParticleEffect);
+    return match.isNotEmpty ? match.first.label : null;
+  }
+
+  void _showJapEffectSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return Container(
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF0E6),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: const Color(0xFFEFE6DB)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 16),
+              Text(
+                'Select Jap',
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: const Color(0xFF2E2A36),
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (final effect in CustomJapEffect.all)
+                InkWell(
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    setState(() => _selectedParticleEffect = effect.value);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                effect.label,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: _selectedParticleEffect == effect.value
+                                      ? const Color(0xFFFF7700)
+                                      : const Color(0xFF2E2A36),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                effect.description,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  color: const Color(0xFF2E2A36).withValues(alpha: 0.55),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        OutlinedButton.icon(
+                          onPressed: () => CustomJapPreviewSheet.show(
+                            context,
+                            effect: effect,
+                            imagePath: _godImage?.path,
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFFF7700),
+                            side: const BorderSide(color: Color(0xFFFF9933)),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                          ),
+                          icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                          label: Text(
+                            'Preview',
+                            style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   // ─── Save / Submit ────────────────────────────────────────────────────────
   void _onSave() {
     final name = _nameController.text.trim();
@@ -455,7 +534,12 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
       return;
     }
     if (_selectedParticleEffect == null || _selectedParticleEffect!.isEmpty) {
-      _showError('Please select Animation');
+      _showError('Please select Jap');
+      return;
+    }
+    final chantCount = int.tryParse(_chantCountController.text.trim());
+    if (chantCount == null || chantCount < 1) {
+      _showError('Please enter a valid Chant Count');
       return;
     }
 
@@ -467,7 +551,7 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
         name: name,
         audioFileName: _audioFileName ?? '',
         audioFilePath: _audioFilePath ?? '',
-        chantCount: int.tryParse(_chantCountController.text.trim()) ?? 108,
+        chantCount: chantCount,
         category: _selectedCategory!,
         particleEffect: _selectedParticleEffect!,
       ),
@@ -540,10 +624,10 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
                       const SizedBox(height: 16),
 
                       // 4. Audio File — full width box
-                      _sectionLabel('Audio File (Optional)'),
-                      const SizedBox(height: 8),
-                      _buildAudioBox(),
-                      const SizedBox(height: 16),
+                      // _sectionLabel('Audio File (Optional)'),
+                      // const SizedBox(height: 8),
+                      // _buildAudioBox(),
+                      // const SizedBox(height: 16),
 
                       // 4. Chant Count
                       _sectionLabel('Chant Count'),
@@ -582,25 +666,14 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // 6. Animation dropdown
-                      _sectionLabel('Select Animation *'),
+                      // 6. Jap effect dropdown
+                      _sectionLabel('Select Jap *'),
                       const SizedBox(height: 8),
                       _buildDropdownTile(
-                        hint: 'Select Animation',
-                        value: _selectedParticleEffect != null
-                            ? _particleEffects.firstWhere(
-                                (e) => e['value'] == _selectedParticleEffect,
-                                orElse: () => {'label': ''},
-                              )['label']
-                            : null,
+                        hint: 'Select Jap',
+                        value: _selectedJapEffectLabel,
                         icon: Icons.movie_filter_rounded,
-                        onTap: () => _showDropdown(
-                          title: 'Select Animation',
-                          options: _particleEffects,
-                          selectedValue: _selectedParticleEffect,
-                          onSelected: (val, _) =>
-                              setState(() => _selectedParticleEffect = val),
-                        ),
+                        onTap: _showJapEffectSheet,
                       ),
 
                       const SizedBox(height: 32),
@@ -678,7 +751,7 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
           // Title
           Expanded(
             child: Text(
-              'Create Jap',
+              'Create Custom Jap',
               style: GoogleFonts.outfit(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -912,6 +985,7 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
   }
 
   // ─── Audio box (full width, like image card) ───────────────────────────
+  // ignore: unused_element
   Widget _buildAudioBox() {
     return GestureDetector(
       onTap: _pickAudioFile,

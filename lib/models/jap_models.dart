@@ -243,11 +243,11 @@ class JapConfig {
   final String id; final String name; final String? godCategoryId; final String? templeId;
   final String thumbnailUrl; final String darshanImageUrl; final String shlokText;
   final String? shlokAudioUrl; final int targetCount; int progress; final EffectPack effectPack;
-  final String? particleShape;
+  final String? particleShape; final bool isCustom; final String darshanVideoUrl;
   JapConfig({required this.id, required this.name, this.godCategoryId, this.templeId,
     required this.thumbnailUrl, required this.darshanImageUrl, required this.shlokText,
     this.shlokAudioUrl, this.targetCount = 108, this.progress = 0, required this.effectPack,
-    this.particleShape});
+    this.particleShape, this.isCustom = false, this.darshanVideoUrl = ''});
   static String defaultDeityImage(String name) {
     final n = name.toLowerCase();
     if (n.contains('shiv') || n.contains('mahadev') || n.contains('shankar') || n.contains('bhole')) {
@@ -298,6 +298,8 @@ class JapConfig {
       progress: (json['progress'] is num) ? (json['progress'] as num).toInt() : 0,
       effectPack: effectPack,
       particleShape: pShape,
+      isCustom: json['isCustom'] == true || (json['_id'] ?? json['id'] ?? '').toString().startsWith('custom_'),
+      darshanVideoUrl: _sanitizeUrl(json['darshanVideo'] ?? ''),
     );
   }
 }

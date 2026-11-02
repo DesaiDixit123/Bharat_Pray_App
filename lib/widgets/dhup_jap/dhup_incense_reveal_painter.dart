@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../cinematic_jap/ram_path_calculator.dart';
+import '../cinematic_jap/reveal_image_loader.dart';
 
 /// Master Implementation — Dhup Incense Reveal Widget
 /// Provides a bespoke, organic sacred incense smoke unveiling of Lord Shri Ram:
@@ -18,6 +18,7 @@ class DhupIncenseRevealWidget extends StatefulWidget {
   final bool isCompleted;
   final double completionGlowProgress; // 0.0 to 1.0
   final String imageAsset;
+  final double? revealProgress; // 0.0 to 1.0, for chant counts other than 108
 
   const DhupIncenseRevealWidget({
     super.key,
@@ -27,6 +28,7 @@ class DhupIncenseRevealWidget extends StatefulWidget {
     required this.isCompleted,
     required this.completionGlowProgress,
     this.imageAsset = 'assets/images/lord_shri_ram_darshan.png',
+    this.revealProgress,
   });
 
   @override
@@ -53,8 +55,8 @@ class _DhupIncenseRevealWidgetState extends State<DhupIncenseRevealWidget> {
 
   Future<void> _loadImage() async {
     try {
-      final ByteData data = await rootBundle.load(widget.imageAsset);
-      final ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+      final bytes = await loadRevealImageBytes(widget.imageAsset);
+      final ui.Codec codec = await ui.instantiateImageCodec(bytes);
       final ui.FrameInfo frameInfo = await codec.getNextFrame();
       if (mounted) {
         setState(() {
@@ -85,6 +87,7 @@ class _DhupIncenseRevealWidgetState extends State<DhupIncenseRevealWidget> {
           shimmerProgress: widget.shimmerProgress,
           isCompleted: widget.isCompleted,
           completionGlowProgress: widget.completionGlowProgress,
+          revealProgress: widget.revealProgress,
         ),
         size: Size.infinite,
       ),
@@ -102,6 +105,7 @@ class DhupIncenseRevealPainter extends CustomPainter {
   final double shimmerProgress;
   final bool isCompleted;
   final double completionGlowProgress;
+  final double? revealProgress;
 
   final Paint _backgroundPaint = Paint()..color = Colors.black;
   final Paint _imagePaint = Paint()..filterQuality = FilterQuality.high;
@@ -115,6 +119,7 @@ class DhupIncenseRevealPainter extends CustomPainter {
     required this.shimmerProgress,
     required this.isCompleted,
     required this.completionGlowProgress,
+    this.revealProgress,
   });
 
   @override
@@ -171,7 +176,7 @@ class DhupIncenseRevealPainter extends CustomPainter {
     canvas.saveLayer(screenRect, Paint());
 
     // Balanced progressive expansion:
-    final double totalRatio = (revealedNodes.length / 108.0).clamp(0.0, 1.0);
+    final double totalRatio = (revealProgress ?? revealedNodes.length / 108.0).clamp(0.0, 1.0);
     final double expansion = 1.0 + (2.00 * math.pow(totalRatio, 2.2));
 
     // ── A. Draw Non-Face Smoke Plumes ────────────────────────────────────
@@ -251,6 +256,7 @@ class DhupIncenseRevealPainter extends CustomPainter {
         oldDelegate.shimmerProgress != shimmerProgress ||
         oldDelegate.isCompleted != isCompleted ||
         oldDelegate.completionGlowProgress != completionGlowProgress ||
+        oldDelegate.revealProgress != revealProgress ||
         oldDelegate.image != image;
   }
 }
