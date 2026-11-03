@@ -21,6 +21,7 @@ import '../models/prayer.dart';
 import '../services/api_service.dart';
 import '../services/yatra_group_socket_service.dart';
 import '../services/socket_service.dart';
+import '../widgets/bhajan/bhajan_mini_player_widget.dart';
 import 'details/notification_screen.dart';
 import 'details/messages_screen.dart';
 import '../models/notification_model.dart';
@@ -949,6 +950,13 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Container(
                 color: const Color(0xFFFFE8D6),
               ),
+            ),
+            // Floating Bhajan Mini-Player (persistently visible across Home, Darshan, Jap, Yatra, Profile)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 114 + MediaQuery.of(context).padding.bottom,
+              child: const BhajanMiniPlayerWidget(bottomMargin: 0),
             ),
             // 7. Custom Floating Arched Bottom Navigation Bar
             Positioned(

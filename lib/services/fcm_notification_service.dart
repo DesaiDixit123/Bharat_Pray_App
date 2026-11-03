@@ -1,16 +1,36 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:ui';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
+import 'bhajan_audio_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
   debugPrint('🔔 [FCM Background Message] Title: ${message.notification?.title}, Data: ${message.data}');
+}
+
+@pragma('vm:entry-point')
+void notificationTapBackground(NotificationResponse response) {
+  debugPrint('🔔 [Background Notification Action]: ${response.actionId}');
+  final sendPort = IsolateNameServer.lookupPortByName('bhajan_audio_action_port');
+  if (sendPort != null) {
+    sendPort.send(response.actionId);
+  } else {
+    if (response.actionId == 'action_play_pause') {
+      BhajanAudioService.instance.togglePlayPause();
+    } else if (response.actionId == 'action_next') {
+      BhajanAudioService.instance.next();
+    } else if (response.actionId == 'action_prev') {
+      BhajanAudioService.instance.previous();
+    }
+  }
 }
 
 class FcmNotificationService {
@@ -71,11 +91,36 @@ class FcmNotificationService {
       await _localNotifications.initialize(
         initSettings,
         onDidReceiveNotificationResponse: (NotificationResponse response) {
+          if (response.actionId == 'action_play_pause') {
+            BhajanAudioService.instance.togglePlayPause();
+            return;
+          } else if (response.actionId == 'action_next') {
+            BhajanAudioService.instance.next();
+            return;
+          } else if (response.actionId == 'action_prev') {
+            BhajanAudioService.instance.previous();
+            return;
+          }
+          if (response.payload == 'bhajan_now_playing') {
+            BhajanAudioService.instance.openNowPlayingFromNotification();
+            return;
+          }
           if (response.payload != null && response.payload!.isNotEmpty) {
             _handleNotificationClick(response.payload!);
           }
         },
+        onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
       );
+
+      // Check if launched by tapping notification
+      final launchDetails = await _localNotifications.getNotificationAppLaunchDetails();
+      if (launchDetails != null && launchDetails.didNotificationLaunchApp) {
+        if (launchDetails.notificationResponse?.payload == 'bhajan_now_playing') {
+          Future.delayed(const Duration(milliseconds: 600), () {
+            BhajanAudioService.instance.openNowPlayingFromNotification();
+          });
+        }
+      }
 
       // 5. Retrieve device token
       await getDeviceToken();

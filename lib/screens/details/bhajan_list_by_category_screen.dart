@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/bhajan_track_item.dart';
 import '../../services/api_service.dart';
+import '../../services/bhajan_audio_service.dart';
+import '../../widgets/bhajan/bhajan_mini_player_widget.dart';
 import 'bhajan_now_playing_screen.dart';
 
 class BhajanListByCategoryScreen extends StatefulWidget {
@@ -33,6 +36,7 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
   bool _isLoading = true;
   String _error = '';
   List<BhajanTrackItem> _tracks = const [];
+  final Set<String> _likedTrackIds = {};
 
   @override
   void initState() {
@@ -94,6 +98,11 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
       if (!mounted) return;
       setState(() {
         _tracks = visible;
+        for (final t in visible) {
+          if (t.isLiked) {
+            _likedTrackIds.add(t.id);
+          }
+        }
         _isLoading = false;
       });
     } catch (e) {
@@ -291,7 +300,7 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
                 ),
               ),
             ),
-            if (_tracks.isNotEmpty) _buildMiniPlayer(_tracks.first, _tracks),
+            const BhajanMiniPlayerWidget(),
           ],
         ),
       ),
@@ -469,12 +478,7 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
   }
 
   void _openNowPlaying(BhajanTrackItem track, List<BhajanTrackItem> queue) {
-    if (track.id.isNotEmpty) {
-      ApiService.recordBhajanPlay(track.id, token: _token).catchError((e) {
-        print('[BHAJAN PLAY RECORD ERROR] $e');
-        return <String, dynamic>{};
-      });
-    }
+    BhajanAudioService.instance.playTrack(track, queue: queue, token: _token);
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -483,7 +487,71 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
     );
   }
 
+  Future<void> _toggleLike(BhajanTrackItem track) async {
+    final isLiked = _likedTrackIds.contains(track.id);
+    setState(() {
+      if (isLiked) {
+        _likedTrackIds.remove(track.id);
+      } else {
+        _likedTrackIds.add(track.id);
+      }
+    });
+
+    try {
+      if (_token.isNotEmpty) {
+        if (isLiked) {
+          await ApiService.unlikeBhajan(_token, track.id);
+        } else {
+          await ApiService.likeBhajan(_token, track.id);
+        }
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isLiked ? 'Removed from Liked Bhajans' : 'Added to Liked Bhajans ❤️',
+              style: GoogleFonts.outfit(),
+            ),
+            duration: const Duration(seconds: 1),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[BhajanList] toggleLike error: $e');
+    }
+  }
+
+  void _onTrackMenuSelected(String action, BhajanTrackItem track) async {
+    switch (action) {
+      case 'download':
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Downloading "${track.title}" for offline playback...', style: GoogleFonts.outfit()),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        break;
+      case 'share':
+        final shareText = '🙏 Listen to divine bhajan "${track.title}" by ${track.singer} on Bharat Pray app!\nhttps://bharatpray.com/bhajan/${track.id}';
+        await Share.share(shareText, subject: track.title);
+        break;
+      case 'playlist':
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Added "${track.title}" to Sacred Playlist 🙏', style: GoogleFonts.outfit()),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        break;
+    }
+  }
+
   Widget _buildTrackCard(BhajanTrackItem track, List<BhajanTrackItem> queue) {
+    final isLiked = _likedTrackIds.contains(track.id);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -524,41 +592,86 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
               color: const Color(0xFF2E2A36).withValues(alpha: 0.55),
             ),
           ),
-          trailing: SizedBox(
-            width: 64, 
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                InkWell(
-                  onTap: () => _openNowPlaying(track, queue),
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    width: 30,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xFFFFA144)),
-                    ),
-                    child: const Icon(
-                      Icons.play_arrow_rounded,
-                      size: 18,
-                      color: Color(0xFFFF8A1E),
-                    ),
-                  ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Like (Heart) Button in place of play icon
+              IconButton(
+                icon: Icon(
+                  isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                  color: isLiked ? const Color(0xFFE53935) : const Color(0xFF8C7B6E),
+                  size: 22,
                 ),
-                const SizedBox(width: 4),
-                SizedBox( 
-                  width: 30,
-                  height: 30,
-                  child: IconButton(
-                    padding: EdgeInsets.zero, 
-                    icon: const Icon(Icons.more_vert_rounded, color: Color(0xFF2E2A36)),
-                    onPressed: () {},
-                    iconSize: 24,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                tooltip: 'Like Bhajan',
+                onPressed: () => _toggleLike(track),
+              ),
+              const SizedBox(width: 2),
+              // 3-dots popup menu (Download, Share, Add to Playlist)
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert_rounded, color: Color(0xFF4A3A2C), size: 22),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                color: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 4,
+                onSelected: (action) => _onTrackMenuSelected(action, track),
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'download',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.download_rounded, size: 20, color: Color(0xFFFF7700)),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Download',
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF2E2A36),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                )
-              ],
-            ),
+                  PopupMenuItem(
+                    value: 'share',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.share_rounded, size: 20, color: Color(0xFFFF7700)),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Share',
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF2E2A36),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'playlist',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.playlist_add_rounded, size: 20, color: Color(0xFFFF7700)),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Add to Playlist',
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF2E2A36),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
           onTap: () => _openNowPlaying(track, queue),
         ),
@@ -566,65 +679,7 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
     );
   }
 
-  Widget _buildMiniPlayer(BhajanTrackItem track, List<BhajanTrackItem> queue) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF0E0),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFF3E4D6)),
-      ),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: _buildNetworkOrFallbackImage(track.imagePath, width: 42, height: 42),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  track.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.outfit(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF2E2A36),
-                  ),
-                ),
-                Text(
-                  track.singer,
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    color: const Color(0xFF2E2A36).withValues(alpha: 0.55),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          InkWell(
-            onTap: () => _openNowPlaying(track, queue),
-            borderRadius: BorderRadius.circular(24),
-            child: Container(
-              height: 36,
-              width: 36,
-              decoration: const BoxDecoration(
-                color: Color(0xFFFF7B0F),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.play_arrow_rounded, color: Colors.white),
-            ),
-          ),
-          const SizedBox(width: 8),
-          const Icon(Icons.playlist_add_check_rounded, color: Color(0xFFBD8A57), size: 21),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildNetworkOrFallbackImage(String image, {double? width, double? height}) {
     if (image.startsWith('data:image')) {

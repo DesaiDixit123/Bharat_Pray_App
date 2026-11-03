@@ -12,6 +12,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../models/bhajan_track_item.dart';
 import '../../services/api_service.dart';
+import '../../services/bhajan_audio_service.dart';
 
 class BhajanNowPlayingScreen extends StatefulWidget {
   const BhajanNowPlayingScreen({
@@ -28,7 +29,6 @@ class BhajanNowPlayingScreen extends StatefulWidget {
 }
 
 class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with SingleTickerProviderStateMixin {
-  late final AudioPlayer _audioPlayer;
   late final AnimationController _rotationController;
 
   PlayerState _playerState = PlayerState.stopped;
@@ -42,7 +42,6 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
   Duration _position = Duration.zero;
   _NowPlayingView _activeView = _NowPlayingView.player;
   bool _showUpNext = false;
-  bool _hasRecordedPlay = false;
 
   Duration? _parseDuration(String? value) {
     if (value == null || !value.contains(':')) {
@@ -93,6 +92,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
   }
 
   void _openTrack(BhajanTrackItem track) {
+    BhajanAudioService.instance.playTrack(track, queue: widget.queue, token: _token);
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
@@ -134,112 +134,81 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
     _isDownloaded = widget.currentTrack.isDownloaded;
     _isFavourite = widget.currentTrack.isFavourite;
 
-    _audioPlayer = AudioPlayer();
     _rotationController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 15),
     );
 
-    _audioPlayer.onPlayerStateChanged.listen((state) {
-      if (!mounted) return;
-      setState(() => _playerState = state);
-      if (state == PlayerState.playing) {
-        _rotationController.repeat();
-      } else {
-        _rotationController.stop();
-      }
-    });
+    final audio = BhajanAudioService.instance;
+    _playerState = audio.playerStateNotifier.value;
+    _position = audio.positionNotifier.value;
+    _duration = audio.durationNotifier.value;
 
-    _audioPlayer.onPlayerComplete.listen((_) {
-      if (_autoplay && _nextTrack != null) {
-        _openTrack(_nextTrack!);
-      }
-    });
+    if (_playerState == PlayerState.playing) {
+      _rotationController.repeat();
+    }
 
-    _audioPlayer.onDurationChanged.listen((d) {
-      if (mounted) setState(() => _duration = d);
-    });
+    audio.playerStateNotifier.addListener(_onPlayerStateChanged);
+    audio.positionNotifier.addListener(_onPositionChanged);
+    audio.durationNotifier.addListener(_onDurationChanged);
 
-    _audioPlayer.onPositionChanged.listen((p) {
-      if (mounted) setState(() => _position = p);
-    });
+    _loadTokenAndPlay();
+  }
 
-    _loadTokenAndSaveHistory();
+  void _onPlayerStateChanged() {
+    if (!mounted) return;
+    final state = BhajanAudioService.instance.playerStateNotifier.value;
+    setState(() => _playerState = state);
+    if (state == PlayerState.playing) {
+      _rotationController.repeat();
+    } else {
+      _rotationController.stop();
+    }
+  }
+
+  void _onPositionChanged() {
+    if (!mounted) return;
+    setState(() => _position = BhajanAudioService.instance.positionNotifier.value);
+  }
+
+  void _onDurationChanged() {
+    if (!mounted) return;
+    setState(() => _duration = BhajanAudioService.instance.durationNotifier.value);
   }
 
   @override
   void dispose() {
-    _audioPlayer.dispose();
+    final audio = BhajanAudioService.instance;
+    audio.playerStateNotifier.removeListener(_onPlayerStateChanged);
+    audio.positionNotifier.removeListener(_onPositionChanged);
+    audio.durationNotifier.removeListener(_onDurationChanged);
     _rotationController.dispose();
     super.dispose();
   }
 
-  Future<void> _recordPlayOnce() async {
-    if (_hasRecordedPlay || widget.currentTrack.id.isEmpty) return;
-    _hasRecordedPlay = true;
-    try {
-      await ApiService.recordBhajanPlay(widget.currentTrack.id, token: _token);
-    } catch (e) {
-      print('[RECORD PLAY ERROR] $e');
-    }
-  }
-
-  Future<void> _initAudio() async {
-    if (widget.currentTrack.id.isEmpty) return;
-    try {
-      final streamUrl = await ApiService.fetchBhajanStreamUrl(_token, widget.currentTrack.id);
-
-      if (streamUrl.startsWith('blob:')) {
-        throw Exception('Invalid stream URL format received from server (blob). This is a backend configuration issue.');
-      }
-
-      await _audioPlayer.setSource(UrlSource(streamUrl));
-      if (_autoplay) {
-        await _audioPlayer.resume();
-        _recordPlayOnce();
-      }
-    } catch (e) {
-      _showMessage('Failed to load audio. ${e.toString().replaceFirst('Exception: ', '')}');
-    }
-  }
-
-  Future<void> _loadTokenAndSaveHistory() async {
+  Future<void> _loadTokenAndPlay() async {
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
 
-    // Record play count immediately
-    _recordPlayOnce();
-
-    await _initAudio();
+    final audio = BhajanAudioService.instance;
+    if (audio.currentTrack?.id != widget.currentTrack.id) {
+      try {
+        await audio.playTrack(widget.currentTrack, queue: widget.queue, token: _token);
+      } catch (e) {
+        _showMessage('Failed to load audio: $e');
+      }
+    }
 
     if (_token.isNotEmpty && widget.currentTrack.id.isNotEmpty) {
       _loadBhajanDetails();
       try {
         await ApiService.saveBhajanHistory(_token, widget.currentTrack.id, _position.inSeconds);
-      } catch (_) {
-        // Keep silent on passive history sync failures.
-      }
+      } catch (_) {}
     }
   }
 
   Future<void> _togglePlayback() async {
-    if (_playerState == PlayerState.playing) {
-      await _audioPlayer.pause();
-    } else {
-      if (_position >= _duration && _duration > Duration.zero) {
-        await _audioPlayer.seek(Duration.zero);
-        _hasRecordedPlay = false;
-      } 
-      // The source is set in _initAudio. If it's null, _initAudio failed and showed a message.
-      // We just need to resume. If resume fails, it's an unrecoverable player state issue.
-      if (_audioPlayer.source != null) {
-        await _audioPlayer.resume();
-        _recordPlayOnce();
-      } else {
-        // If source is null, it means _initAudio failed. Let's try again.
-        await _initAudio();
-      }
-    }
+    await BhajanAudioService.instance.togglePlayPause();
   }
 
   Future<void> _loadBhajanDetails() async {
@@ -654,7 +623,7 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
                 max: 1,
                 onChanged: (value) async {
                   final newPosition = Duration(seconds: (value * _duration.inSeconds).round());
-                  await _audioPlayer.seek(newPosition);
+                  await BhajanAudioService.instance.seek(newPosition);
                   setState(() => _position = newPosition);
                 },
               ),
