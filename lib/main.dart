@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'core/localization/language_manager.dart';
+import 'l10n/app_localizations.dart';
 import 'screens/splash_screen.dart';
 import 'services/fcm_notification_service.dart';
 
@@ -20,6 +23,9 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
   
+  // Initialize Persistent Language Management
+  await LanguageManager.instance.initialize();
+
   // Initialize Firebase and Sacred Push Notification Service
   try {
     await Firebase.initializeApp();
@@ -51,25 +57,38 @@ class BharatPrayApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: rootNavigatorKey,
-      title: 'Bharat Pray',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        useMaterial3: true,
-        splashFactory: InkRipple.splashFactory,
-        primaryColor: const Color(0xFFFF7700),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFFF7700),
-          brightness: Brightness.dark,
-          primary: const Color(0xFFFF7700),
-          secondary: const Color(0xFFFF5500),
-          surface: const Color(0xFF0F081D),
-        ),
-        scaffoldBackgroundColor: const Color(0xFF0F081D),
-      ),
-      home: const SplashScreen(),
+    return ListenableBuilder(
+      listenable: LanguageManager.instance,
+      builder: (context, _) {
+        return MaterialApp(
+          navigatorKey: rootNavigatorKey,
+          title: 'Bharat Pray',
+          debugShowCheckedModeBanner: false,
+          locale: LanguageManager.instance.currentLocale,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          theme: ThemeData(
+            brightness: Brightness.dark,
+            useMaterial3: true,
+            splashFactory: InkRipple.splashFactory,
+            primaryColor: const Color(0xFFFF7700),
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: const Color(0xFFFF7700),
+              brightness: Brightness.dark,
+              primary: const Color(0xFFFF7700),
+              secondary: const Color(0xFFFF5500),
+              surface: const Color(0xFF0F081D),
+            ),
+            scaffoldBackgroundColor: const Color(0xFF0F081D),
+          ),
+          home: const SplashScreen(),
+        );
+      },
     );
   }
 }

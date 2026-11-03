@@ -1,3 +1,4 @@
+import '../core/localization/localized_api_helper.dart';
 import 'package:flutter/foundation.dart';
 
 /// Yatra Temple Model for Group Creation & Routes
@@ -30,12 +31,12 @@ class YatraTemple {
     final json = Map<String, dynamic>.from(rawJson);
     return YatraTemple(
       id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
-      name: json['name']?.toString() ?? json['title']?.toString() ?? 'Temple',
-      city: json['city']?.toString() ?? json['location']?['city']?.toString() ?? '',
-      state: json['state']?.toString() ?? json['location']?['state']?.toString() ?? '',
+      name: LocalizedApiHelper.parse(json['name'] ?? json['title'], defaultValue: 'Temple'),
+      city: LocalizedApiHelper.parse(json['city'] ?? json['location']?['city']),
+      state: LocalizedApiHelper.parse(json['state'] ?? json['location']?['state']),
       latitude: _parseDouble(json['latitude'] ?? json['lat']),
       longitude: _parseDouble(json['longitude'] ?? json['lng']),
-      address: json['address']?.toString() ?? '',
+      address: LocalizedApiHelper.parse(json['address']),
       image: json['image']?.toString() ?? json['thumbnail']?.toString() ?? '',
     );
   }

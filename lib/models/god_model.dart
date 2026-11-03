@@ -1,3 +1,4 @@
+import '../core/localization/localized_api_helper.dart';
 import '../services/api_service.dart';
 
 class GodModel {
@@ -26,11 +27,11 @@ class GodModel {
   factory GodModel.fromJson(Map<String, dynamic> json) {
     return GodModel(
       id: json['_id']?.toString() ?? '',
-      name: json['name']?.toString() ?? '',
+      name: LocalizedApiHelper.parse(json['name']),
       slug: json['slug']?.toString() ?? '',
       image: ApiService.resolveImageUrl(json['image']?.toString()),
       mantra: json['mantra']?.toString() ?? '',
-      description: json['description']?.toString() ?? '',
+      description: LocalizedApiHelper.parse(json['description']),
       status: json['status'] == true || json['status'] == 'true',
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString())

@@ -1,3 +1,4 @@
+import '../core/localization/localized_api_helper.dart';
 import 'package:flutter/material.dart';
 
 class AppNotification {
@@ -37,8 +38,8 @@ class AppNotification {
 
     return AppNotification(
       id: json['id']?.toString() ?? json['_id']?.toString() ?? '',
-      title: json['title']?.toString() ?? '',
-      message: json['message']?.toString() ?? '',
+      title: LocalizedApiHelper.parse(json['title']),
+      message: LocalizedApiHelper.parse(json['message']),
       category: (json['category']?.toString() ?? 'general').toLowerCase(),
       type: json['type']?.toString() ?? 'general',
       target: json['target']?.toString() ?? 'all',

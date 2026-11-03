@@ -1,3 +1,4 @@
+import '../core/localization/localized_api_helper.dart';
 import 'package:flutter/foundation.dart';
 import '../services/api_service.dart';
 
@@ -146,9 +147,9 @@ class YatraModel {
     return YatraModel(
       id: json['_id']?.toString() ?? json['id']?.toString() ?? 'yatra_${DateTime.now().millisecondsSinceEpoch}',
       journeyId: json['journeyId']?.toString(),
-      title: json['title']?.toString() ?? json['name']?.toString() ?? 'Devotional Yatra',
+      title: LocalizedApiHelper.parse(json['title'] ?? json['name'], defaultValue: 'Devotional Yatra'),
       slug: json['slug']?.toString() ?? '',
-      description: json['description']?.toString() ?? '',
+      description: LocalizedApiHelper.parse(json['description']),
       distance: distanceStr,
       steps: stepsStr,
       duration: durationStr,
@@ -159,7 +160,7 @@ class YatraModel {
       tag: json['category']?.toString() ?? "Popular Yatra",
       progress: _parseDouble(json['progress']),
       templeId: (json['startTemple'] is Map) ? json['startTemple']['_id']?.toString() : json['startTemple']?.toString(),
-      templeName: (json['startTemple'] is Map) ? json['startTemple']['name']?.toString() : json['templeName']?.toString(),
+      templeName: LocalizedApiHelper.parse((json['startTemple'] is Map) ? json['startTemple']['name'] : json['templeName']),
       estimatedStepsNum: _parseInt(rawSteps),
       estimatedDaysNum: _parseInt(rawDuration, defaultVal: 1),
       followersCountNum: _parseInt(rawGroup),

@@ -1,3 +1,4 @@
+import '../core/localization/localized_api_helper.dart';
 class GranthCategory {
   final String id;
   final String name;
@@ -18,8 +19,8 @@ class GranthCategory {
   factory GranthCategory.fromJson(Map<String, dynamic> json) {
     return GranthCategory(
       id: json['_id'] ?? '',
-      name: json['name'] ?? 'Unknown Category',
-      description: json['description'] ?? 'No description available.',
+      name: LocalizedApiHelper.parse(json['name'], defaultValue: 'Unknown Category'),
+      description: LocalizedApiHelper.parse(json['description'], defaultValue: 'No description available.'),
       image: json['image'] ?? 'assets/images/other_granths_card.png',
       granthCount: json['granthCount'] ?? 0,
       status: json['status'] ?? false,
