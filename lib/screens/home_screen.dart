@@ -20,6 +20,7 @@ import 'prayer_detail_screen.dart';
 import '../models/prayer.dart';
 import '../services/api_service.dart';
 import '../services/yatra_group_socket_service.dart';
+import '../services/socket_service.dart';
 import 'details/notification_screen.dart';
 import 'details/messages_screen.dart';
 import '../models/notification_model.dart';
@@ -63,6 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _pageController = PageController(initialPage: 0);
     _loadProfileName();
+    GlobalSocketService.instance.connect();
   }
 
   Future<void> _loadProfileName() async {
@@ -111,11 +113,11 @@ class _HomeScreenState extends State<HomeScreen> {
       debugPrint('🔑 Retrieved Auth Token from storage: $token');
       if (token.isNotEmpty) {
         final results = await Future.wait([
-          ApiService.getDarshanHome(token).catchError((e) {
+          ApiService.getDarshanHome(token).timeout(const Duration(seconds: 5)).catchError((e) {
             debugPrint('Error getDarshanHome: $e');
             return <String, dynamic>{};
           }),
-          ApiService.getDarshansList(token: token, limit: 10).catchError((e) {
+          ApiService.getDarshansList(token: token, limit: 10).timeout(const Duration(seconds: 5)).catchError((e) {
             debugPrint('Error getDarshansList: $e');
             return <String, dynamic>{};
           }),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'screens/splash_screen.dart';
+import 'services/fcm_notification_service.dart';
 
 import 'dart:io';
 
@@ -16,6 +18,14 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
   
+  // Initialize Firebase and Sacred Push Notification Service
+  try {
+    await Firebase.initializeApp();
+    await FcmNotificationService.instance.initialize();
+  } catch (e) {
+    debugPrint('⚠️ Firebase Initialization Notice: $e');
+  }
+
   // Lock orientation to portrait
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,

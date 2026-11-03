@@ -2,18 +2,20 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../models/yatra_model.dart';
 import '../models/journey_models.dart';
 import 'fast2sms_service.dart';
+import 'fcm_notification_service.dart';
 
 class ApiService {
   // Set to true to use the live production server, false for local testing
   static const bool isLive = false;
 
   // Local backend configuration:
-  // Active Wi-Fi IP = 192.168.29.178, Port = 3020
-  static const String _localIp = '192.168.29.178';
+  // Active Wi-Fi IP = 192.168.29.227, Port = 3020
+  static const String _localIp = '192.168.29.227';
   static const int _localPort = 3020;
 
   static String get baseUrl {
@@ -114,7 +116,7 @@ class ApiService {
 
   static final List<String> _fallbackHosts = isLive
       ? const ['api.bharatpray.com']
-      : const ['192.168.29.73', '127.0.0.1', '10.0.2.2', 'api.bharatpray.com'];
+      : const ['192.168.29.227', '127.0.0.1', '10.0.2.2', 'api.bharatpray.com'];
 
   static Future<http.Response> _safeGet(Uri uri, {Map<String, String>? headers}) async {
     try {
@@ -306,15 +308,16 @@ class ApiService {
   }
 
   // POST /user/send-otp
-  static Future<Map<String, dynamic>> sendOtp(String contact) async {
+  static Future<Map<String, dynamic>> sendOtp(String contact, {String? fcmToken}) async {
+    final token = fcmToken ?? await FcmNotificationService.instance.getDeviceToken() ?? '';
     final response = await _safePost(
       Uri.parse('$baseUrl/user/send-otp'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
         'contact': contact,
         'device_type': Platform.isAndroid ? 'android' : 'ios',
-        'device_id': 'default_device_id',
-        'fcm_token': 'default_fcm_token',
+        'device_id': 'mobile_device',
+        'fcm_token': token,
       }),
     );
     final res = _processResponse(response);
@@ -326,17 +329,22 @@ class ApiService {
   }
 
   // POST /user/verify-otp
-  static Future<Map<String, dynamic>> verifyOtp(String contact, String otp) async {
+  static Future<Map<String, dynamic>> verifyOtp(String contact, String otp, {String? fcmToken, String? name}) async {
+    final token = fcmToken ?? await FcmNotificationService.instance.getDeviceToken() ?? '';
+    final payload = {
+      'contact': contact,
+      'otp': otp,
+      'device_type': Platform.isAndroid ? 'android' : 'ios',
+      'device_id': 'mobile_device',
+      'fcm_token': token,
+    };
+    if (name != null && name.trim().isNotEmpty) {
+      payload['name'] = name.trim();
+    }
     final response = await _safePost(
       Uri.parse('$baseUrl/user/verify-otp'),
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'contact': contact,
-        'otp': otp,
-        'device_type': Platform.isAndroid ? 'android' : 'ios',
-        'device_id': 'default_device_id',
-        'fcm_token': 'default_fcm_token',
-      }),
+      body: json.encode(payload),
     );
     return _processResponse(response);
   }
@@ -347,7 +355,9 @@ class ApiService {
     required String email,
     required String name,
     required String profilePic,
+    String? fcmToken,
   }) async {
+    final token = fcmToken ?? await FcmNotificationService.instance.getDeviceToken() ?? '';
     final response = await _safePost(
       Uri.parse('$baseUrl/user/google-auth'),
       headers: {'Content-Type': 'application/json'},
@@ -357,8 +367,8 @@ class ApiService {
         'name': name,
         'profile_pic': profilePic,
         'device_type': Platform.isAndroid ? 'android' : 'ios',
-        'device_id': 'default_device_id',
-        'fcm_token': 'default_fcm_token',
+        'device_id': 'mobile_device',
+        'fcm_token': token,
       }),
     );
     return _processResponse(response);
@@ -369,15 +379,17 @@ class ApiService {
     required String name,
     required String contact,
     File? profilePicFile,
+    String? fcmToken,
   }) async {
     final uri = Uri.parse('$baseUrl/user/register');
     final request = http.MultipartRequest('POST', uri);
+    final token = fcmToken ?? await FcmNotificationService.instance.getDeviceToken() ?? '';
 
     request.fields['name'] = name;
     request.fields['contact'] = contact;
     request.fields['device_type'] = Platform.isAndroid ? 'android' : 'ios';
-    request.fields['device_id'] = 'default_device_id';
-    request.fields['fcm_token'] = 'default_fcm_token';
+    request.fields['device_id'] = 'mobile_device';
+    request.fields['fcm_token'] = token;
 
     if (profilePicFile != null) {
       final stream = http.ByteStream(profilePicFile.openRead());
@@ -399,6 +411,25 @@ class ApiService {
       await Fast2SmsService.sendOtp(mobileNumber: contact, otp: devOtp);
     }
     return res;
+  }
+
+  // POST /user/update-fcm-token
+  static Future<Map<String, dynamic>> updateFcmToken(String fcmToken, {String? token}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final effectiveToken = token ?? prefs.getString('auth_token') ?? prefs.getString('token');
+    if (effectiveToken == null || effectiveToken.isEmpty) {
+      return {'IsSuccess': false, 'Message': 'No auth token found'};
+    }
+    final response = await _safePost(
+      Uri.parse('$baseUrl/user/update-fcm-token'),
+      headers: _jsonHeaders(token: effectiveToken),
+      body: json.encode({
+        'fcm_token': fcmToken,
+        'device_type': Platform.isAndroid ? 'android' : 'ios',
+        'device_id': 'mobile_device',
+      }),
+    );
+    return _processResponse(response);
   }
 
   // GET /user/profile
@@ -718,7 +749,7 @@ class ApiService {
     }
 
     final uri = Uri.parse('$baseUrl/user/darshan/list').replace(queryParameters: queryParams);
-    final response = await http.get(
+    final response = await _safeGet(
       uri,
       headers: {
         'Content-Type': 'application/json',
@@ -730,7 +761,7 @@ class ApiService {
 
   // GET /user/darshan/details/:id
   static Future<Map<String, dynamic>> getDarshanDetails(String token, String id) async {
-    final response = await http.get(
+    final response = await _safeGet(
       Uri.parse('$baseUrl/user/darshan/details/$id'),
       headers: {
         'Content-Type': 'application/json',
