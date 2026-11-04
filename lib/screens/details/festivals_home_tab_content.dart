@@ -11,6 +11,8 @@ import 'live_darshan_dashboard_screen.dart';
 import 'mandal_leaderboard_tab_content.dart';
 import 'mandal_profile_screen.dart';
 import '../../services/utsav_service.dart';
+import '../../core/localization/localized_api_helper.dart';
+import '../../core/localization/localization_constants.dart';
 
 
 const String _kBackArrowSvg =
@@ -300,8 +302,8 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
   List<Map<String, dynamic>> get _bannerItems {
     final list = [..._activeFestivals, ..._upcomingFestivals];
     return list.map((f) => {
-      'title': (f['name'] ?? 'Festival').toString(),
-      'subtitle': (f['slogan'] ?? f['description'] ?? 'Connect. Devotion. Win.').toString(),
+      'title': LocalizedApiHelper.parse(f['name'], defaultValue: 'Festival'),
+      'subtitle': LocalizedApiHelper.parse(f['slogan'] ?? f['description'], defaultValue: 'Connect. Devotion. Win.'),
       'tag': '${f['status'] ?? 'Active'} Utsav',
       'imageUrl': (f['banner'] ?? f['imageUrl'] ?? 'assets/images/devotional/navratri_garba_festival.jpg').toString(),
       'rawFestival': f,
@@ -520,7 +522,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
   // ── Festival List Card — same style as bhajan _buildTrackCard ────────────────
 
   Widget _buildFestivalCard(Map<String, dynamic> festival) {
-    final name = (festival['name'] ?? '').toString();
+    final name = LocalizedApiHelper.parse(festival['name'], defaultValue: 'Festival');
     final startDate = (festival['formattedDate'] ?? festival['startDate'] ?? '').toString();
     final endDate = (festival['formattedDate'] != null ? '' : (festival['endDate'] ?? '')).toString();
     final imageUrl = (festival['banner'] ?? festival['imageUrl'] ?? 'assets/images/new_year_card.png').toString();
@@ -673,7 +675,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
   }
 
   Widget _buildTopMandalCard(Map<String, dynamic> mandal) {
-    final name = (mandal['name'] ?? 'Mandal').toString();
+    final name = LocalizedApiHelper.parse(mandal['name'], defaultValue: 'Mandal');
     final location = (mandal['city'] ?? mandal['location'] ?? '').toString();
     final votesVal = mandal['votes'];
     final votes = votesVal is num ? '$votesVal Devotees' : (mandal['votes'] ?? '').toString();

@@ -6,16 +6,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/api_service.dart';
 import '../../widgets/bhajan/bhajan_mini_player_widget.dart';
+import '../../core/localization/localized_api_helper.dart';
+import '../../core/localization/localization_constants.dart';
 import 'bhajan_list_by_category_screen.dart';
 
-class BhajanScreen extends StatefulWidget {
-  const BhajanScreen({super.key});
+class BhajanCategoryScreen extends StatefulWidget {
+  const BhajanCategoryScreen({super.key});
 
   @override
-  State<BhajanScreen> createState() => _BhajanScreenState();
+  State<BhajanCategoryScreen> createState() => _BhajanCategoryScreenState();
 }
 
-class _BhajanScreenState extends State<BhajanScreen> {
+class _BhajanCategoryScreenState extends State<BhajanCategoryScreen> {
   bool _isLoading = true;
   String _error = '';
   List<_BhajanCategoryItem> _categories = const [];
@@ -179,7 +181,7 @@ class _BhajanScreenState extends State<BhajanScreen> {
             child: _BhajanBackButton(onTap: () => Navigator.pop(context)),
           ),
           Text(
-            'Bhajan',
+            SpiritualTerms.get('categories'),
             style: GoogleFonts.outfit(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -482,7 +484,7 @@ class _BhajanCategoryItem {
     final map = json is Map<String, dynamic> ? json : <String, dynamic>{};
     return _BhajanCategoryItem(
       id: (map['_id'] ?? map['id'] ?? '').toString(),
-      title: (map['name'] ?? map['title'] ?? map['categoryName'] ?? '').toString(),
+      title: LocalizedApiHelper.parse(map['name'] ?? map['title'] ?? map['categoryName']),
       count: _readCount(map),
       imageUrl: (map['image'] ?? map['imageUrl'] ?? map['icon'] ?? map['coverImage'] ?? '').toString(),
     );

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../core/localization/language_manager.dart';
 import '../models/user_model.dart';
 import '../models/yatra_model.dart';
 import '../models/journey_models.dart';
@@ -116,12 +117,27 @@ class ApiService {
 
   static final List<String> _fallbackHosts = isLive
       ? const ['api.bharatpray.com']
-      : const ['192.168.29.227', '127.0.0.1', '10.0.2.2', 'api.bharatpray.com'];
+      : const ['192.168.29.227', '192.168.29.209', '127.0.0.1', '10.0.2.2', 'api.bharatpray.com'];
+
+  static Map<String, String> _withDefaultHeaders([Map<String, String>? headers]) {
+    final langCode = LanguageManager.instance.currentLanguageCode;
+    final map = <String, String>{
+      'Accept-Language': langCode,
+    };
+    if (headers != null) {
+      map.addAll(headers);
+      if (!headers.containsKey('Accept-Language')) {
+        map['Accept-Language'] = langCode;
+      }
+    }
+    return map;
+  }
 
   static Future<http.Response> _safeGet(Uri uri, {Map<String, String>? headers}) async {
+    final effectiveHeaders = _withDefaultHeaders(headers);
     try {
-      _logApiCall('GET', uri, headers: headers);
-      final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 4));
+      _logApiCall('GET', uri, headers: effectiveHeaders);
+      final response = await http.get(uri, headers: effectiveHeaders).timeout(const Duration(seconds: 4));
       _logApiResponse('GET', uri, response);
       if (response.statusCode >= 500) {
         throw HttpException('Server returned error ${response.statusCode}');
@@ -137,8 +153,8 @@ class ApiService {
             host: host,
             port: isHttps ? null : _localPort,
           );
-          _logApiCall('GET (Fallback $host)', fallbackUri, headers: headers);
-          final res = await http.get(fallbackUri, headers: headers).timeout(const Duration(seconds: 4));
+          _logApiCall('GET (Fallback $host)', fallbackUri, headers: effectiveHeaders);
+          final res = await http.get(fallbackUri, headers: effectiveHeaders).timeout(const Duration(seconds: 4));
           _logApiResponse('GET (Fallback $host)', fallbackUri, res);
           if (res.statusCode < 500) {
             return res;
@@ -151,9 +167,10 @@ class ApiService {
   }
 
   static Future<http.Response> _safePost(Uri uri, {Map<String, String>? headers, Object? body}) async {
+    final effectiveHeaders = _withDefaultHeaders(headers);
     try {
-      _logApiCall('POST', uri, headers: headers);
-      final response = await http.post(uri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+      _logApiCall('POST', uri, headers: effectiveHeaders);
+      final response = await http.post(uri, headers: effectiveHeaders, body: body).timeout(const Duration(seconds: 4));
       _logApiResponse('POST', uri, response);
       if (response.statusCode >= 500) {
         throw HttpException('Server returned error ${response.statusCode}');
@@ -169,8 +186,8 @@ class ApiService {
             host: host,
             port: isHttps ? null : _localPort,
           );
-          _logApiCall('POST (Fallback $host)', fallbackUri, headers: headers);
-          final res = await http.post(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+          _logApiCall('POST (Fallback $host)', fallbackUri, headers: effectiveHeaders);
+          final res = await http.post(fallbackUri, headers: effectiveHeaders, body: body).timeout(const Duration(seconds: 4));
           _logApiResponse('POST (Fallback $host)', fallbackUri, res);
           if (res.statusCode < 500) {
             return res;
@@ -183,9 +200,10 @@ class ApiService {
   }
 
   static Future<http.Response> _safePut(Uri uri, {Map<String, String>? headers, Object? body}) async {
+    final effectiveHeaders = _withDefaultHeaders(headers);
     try {
-      _logApiCall('PUT', uri, headers: headers);
-      final response = await http.put(uri, headers: headers, body: body).timeout(const Duration(seconds: 10));
+      _logApiCall('PUT', uri, headers: effectiveHeaders);
+      final response = await http.put(uri, headers: effectiveHeaders, body: body).timeout(const Duration(seconds: 10));
       _logApiResponse('PUT', uri, response);
       if (response.statusCode >= 500) {
         throw HttpException('Server returned error ${response.statusCode}');
@@ -201,8 +219,8 @@ class ApiService {
             host: host,
             port: isHttps ? null : _localPort,
           );
-          _logApiCall('PUT (Fallback $host)', fallbackUri, headers: headers);
-          final res = await http.put(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+          _logApiCall('PUT (Fallback $host)', fallbackUri, headers: effectiveHeaders);
+          final res = await http.put(fallbackUri, headers: effectiveHeaders, body: body).timeout(const Duration(seconds: 4));
           _logApiResponse('PUT (Fallback $host)', fallbackUri, res);
           if (res.statusCode < 500) {
             return res;
@@ -215,9 +233,10 @@ class ApiService {
   }
 
   static Future<http.Response> _safePatch(Uri uri, {Map<String, String>? headers, Object? body}) async {
+    final effectiveHeaders = _withDefaultHeaders(headers);
     try {
-      _logApiCall('PATCH', uri, headers: headers);
-      final response = await http.patch(uri, headers: headers, body: body).timeout(const Duration(seconds: 15));
+      _logApiCall('PATCH', uri, headers: effectiveHeaders);
+      final response = await http.patch(uri, headers: effectiveHeaders, body: body).timeout(const Duration(seconds: 15));
       _logApiResponse('PATCH', uri, response);
       if (response.statusCode >= 500) {
         throw HttpException('Server returned error ${response.statusCode}');
@@ -233,7 +252,7 @@ class ApiService {
             host: host,
             port: isHttps ? null : _localPort,
           );
-          final res = await http.patch(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+          final res = await http.patch(fallbackUri, headers: effectiveHeaders, body: body).timeout(const Duration(seconds: 4));
           if (res.statusCode < 500) {
             return res;
           }
@@ -245,9 +264,10 @@ class ApiService {
   }
 
   static Future<http.Response> _safeDelete(Uri uri, {Map<String, String>? headers, Object? body}) async {
+    final effectiveHeaders = _withDefaultHeaders(headers);
     try {
-      _logApiCall('DELETE', uri, headers: headers);
-      final response = await http.delete(uri, headers: headers, body: body).timeout(const Duration(seconds: 15));
+      _logApiCall('DELETE', uri, headers: effectiveHeaders);
+      final response = await http.delete(uri, headers: effectiveHeaders, body: body).timeout(const Duration(seconds: 15));
       _logApiResponse('DELETE', uri, response);
       if (response.statusCode >= 500) {
         throw HttpException('Server returned error ${response.statusCode}');
@@ -263,7 +283,7 @@ class ApiService {
             host: host,
             port: isHttps ? null : _localPort,
           );
-          final res = await http.delete(fallbackUri, headers: headers, body: body).timeout(const Duration(seconds: 4));
+          final res = await http.delete(fallbackUri, headers: effectiveHeaders, body: body).timeout(const Duration(seconds: 4));
           if (res.statusCode < 500) {
             return res;
           }
@@ -277,12 +297,16 @@ class ApiService {
   static Map<String, String> _jsonHeaders({String? token}) {
     return {
       'Content-Type': 'application/json',
+      'Accept-Language': LanguageManager.instance.currentLanguageCode,
       if (token != null && token.trim().isNotEmpty) 'Authorization': 'Bearer $token',
     };
   }
 
   static Map<String, String> _authHeaders(String token) {
-    return {'Authorization': 'Bearer $token'};
+    return {
+      'Authorization': 'Bearer $token',
+      'Accept-Language': LanguageManager.instance.currentLanguageCode,
+    };
   }
 
   static Map<String, String> getAuthHeaders(String token) {

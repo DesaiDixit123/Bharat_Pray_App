@@ -168,11 +168,24 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       await prefs.setString('profile_pic', userData['profile_pic'] ?? '');
 
       if (mounted) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-          (_) => false,
-        );
+        if (!LanguageManager.instance.hasUserSelectedLanguage) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const LanguageSelectionScreen(
+                isFullScreen: true,
+                isDismissible: false,
+              ),
+            ),
+            (_) => false,
+          );
+        } else {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+            (_) => false,
+          );
+        }
       }
     } catch (e) {
       if (mounted) {

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -9,6 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/bhajan_track_item.dart';
 import '../../services/api_service.dart';
 import '../../services/bhajan_audio_service.dart';
+import '../../services/bhajan_library_service.dart';
+import '../../core/localization/localized_api_helper.dart';
 import '../../widgets/bhajan/bhajan_mini_player_widget.dart';
 import 'bhajan_now_playing_screen.dart';
 
@@ -29,24 +32,35 @@ class BhajanListByCategoryScreen extends StatefulWidget {
 }
 
 class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen> {
-  static const List<String> _tabs = ['All Bhajan', 'Recent', 'Liked', 'Downloaded'];
-
-  String _selectedTab = _tabs.first;
   String _token = '';
   bool _isLoading = true;
   String _error = '';
   List<BhajanTrackItem> _tracks = const [];
   final Set<String> _likedTrackIds = {};
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.trim().toLowerCase();
+      });
+    });
     _loadInitialData();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadInitialData() async {
     final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('auth_token') ?? '';
+    _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
+    await BhajanLibraryService.instance.init(token: _token);
     await _loadTracks();
   }
 
@@ -58,32 +72,8 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
     });
 
     try {
-      List<dynamic> rawList;
-      switch (_selectedTab) {
-        case 'Recent':
-          if (_token.isEmpty) {
-            throw Exception('Please login to view recent tracks.');
-          }
-          rawList = await ApiService.getBhajanHistory(_token);
-          break;
-        case 'Liked':
-          if (_token.isEmpty) {
-            throw Exception('Please login to view liked tracks.');
-          }
-          rawList = await ApiService.getFavouriteBhajans(_token);
-          break;
-        case 'Downloaded':
-          if (_token.isEmpty) {
-            throw Exception('Please login to view downloads.');
-          }
-          rawList = await ApiService.getDownloadedBhajans(_token);
-          break;
-        case 'All Bhajan':
-        default:
-          final data = await ApiService.getBhajansByCategory(_token, widget.categoryId, limit: 100);
-          rawList = _extractList(data);
-          break;
-      }
+      final data = await ApiService.getBhajansByCategory(_token, widget.categoryId, limit: 100);
+      final rawList = _extractList(data);
 
       final parsed = rawList
           .map((item) => _toTrack(item))
@@ -91,15 +81,13 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
           .cast<BhajanTrackItem>()
           .toList();
 
-      final visible = _selectedTab == 'All Bhajan'
-          ? parsed
-          : parsed.where((track) => _belongsToCategory(track, widget.categoryId)).toList();
+      BhajanLibraryService.instance.syncLikedFromTracks(parsed);
 
       if (!mounted) return;
       setState(() {
-        _tracks = visible;
-        for (final t in visible) {
-          if (t.isLiked) {
+        _tracks = parsed;
+        for (final t in parsed) {
+          if (t.isLiked || BhajanLibraryService.instance.isLiked(t.id)) {
             _likedTrackIds.add(t.id);
           }
         }
@@ -192,12 +180,12 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
 
     return BhajanTrackItem(
       id: id,
-      title: (bhajanMap['title'] ?? bhajanMap['name'] ?? 'Untitled Bhajan').toString(),
-      singer: (bhajanMap['artist'] ?? bhajanMap['singer'] ?? 'Traditional').toString(),
+      title: LocalizedApiHelper.parse(bhajanMap['title'] ?? bhajanMap['name'], defaultValue: 'Untitled Bhajan'),
+      singer: LocalizedApiHelper.parse(bhajanMap['artist'] ?? bhajanMap['singer'], defaultValue: 'Traditional'),
       imagePath: ApiService.resolveImageUrl(image), // This is the cover image
       audioUrl: null, // The actual stream URL will be fetched in BhajanNowPlayingScreen
       duration: duration,
-      lyrics: (bhajanMap['lyrics'] ?? '').toString(),
+      lyrics: LocalizedApiHelper.parse(bhajanMap['lyrics']),
       categoryId: categoryId,
       isLiked: isLiked,
       isDownloaded: isDownloaded,
@@ -245,6 +233,13 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
 
   @override
   Widget build(BuildContext context) {
+    final filteredTracks = _searchQuery.isEmpty
+        ? _tracks
+        : _tracks.where((t) {
+            return t.title.toLowerCase().contains(_searchQuery) ||
+                t.singer.toLowerCase().contains(_searchQuery);
+          }).toList();
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -257,79 +252,200 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
         backgroundColor: const Color(0xFFFFE8D6),
         body: SafeArea(
           top: true,
-          child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-              child: _buildHeader(),
-            ),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _loadTracks,
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
-                  children: [
-                    _buildBanner(),
-                    const SizedBox(height: 14),
-                    _buildFilterTabs(),
-                    const SizedBox(height: 14),
-                    if (_isLoading)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 60),
-                        child: Center(child: CircularProgressIndicator(color: Color(0xFFFF7700))),
-                      )
-                    else if (_error.isNotEmpty)
-                      _buildError()
-                    else if (_tracks.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 50),
-                        child: Center(
-                          child: Text(
-                            'No bhajans available in this section.',
-                            style: GoogleFonts.outfit(
-                              fontSize: 15,
-                            color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
-                            ),
-                          ),
-                        ),
-                      )
-                    else
-                      ..._tracks.map((track) => _buildTrackCard(track, _tracks)),
-                  ],
-                ),
-              ),
-            ),
-            const BhajanMiniPlayerWidget(),
-          ],
+          child: AnimatedBuilder(
+            animation: BhajanLibraryService.instance,
+            builder: (context, _) {
+              return Column(
+                children: [
+                  // Clean Theme Header (No top banner image, no tabs)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+                    child: _buildHeader(),
+                  ),
+
+                  // Search Bar inside Category
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                    child: _buildSearchBar(),
+                  ),
+
+                  // Direct Bhajan List
+                  Expanded(
+                    child: RefreshIndicator(
+                      color: const Color(0xFFFF7700),
+                      backgroundColor: Colors.white,
+                      onRefresh: _loadTracks,
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                        padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                        children: [
+                          if (_isLoading)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 80),
+                              child: Center(
+                                child: CircularProgressIndicator(color: Color(0xFFFF7700)),
+                              ),
+                            )
+                          else if (_error.isNotEmpty)
+                            _buildError()
+                          else if (filteredTracks.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 60),
+                              child: Center(
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      width: 56,
+                                      height: 56,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: const Color(0xFFC8A882)),
+                                      ),
+                                      child: const Icon(
+                                        Icons.music_note_rounded,
+                                        color: Color(0xFFC8A882),
+                                        size: 26,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      LocalizedApiHelper.parse('No bhajans available in this section.'),
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 15,
+                                        color: const Color(0xFF8C7B6E),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          else
+                            ...filteredTracks.map((track) => _buildTrackCard(track, _tracks)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const BhajanMiniPlayerWidget(),
+                ],
+              );
+            },
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildHeader() {
-    return SizedBox(
-      height: 48,
-      width: double.infinity,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Left back arrow button
-          Positioned(
-            left: 0,
-            child: _BhajanBackButton(onTap: () => Navigator.pop(context)),
-          ),
-          // Screen Title
-          Text(
-            widget.categoryTitle,
-            style: GoogleFonts.outfit(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF2E2A36),
+    return Row(
+      children: [
+        GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFFC8A882), width: 1.0),
+            ),
+            child: const Center(
+              child: Icon(Icons.arrow_back_rounded, color: Color(0xFFC8A882), size: 20),
             ),
           ),
-        ],
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                LocalizedApiHelper.parse(widget.categoryTitle),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.outfit(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF2E2A36),
+                ),
+              ),
+              Text(
+                '${_tracks.length} ${LocalizedApiHelper.parse("Bhajans")}',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  color: const Color(0xFF8C7B6E),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (_tracks.isNotEmpty)
+          GestureDetector(
+            onTap: () => _openNowPlaying(_tracks.first, _tracks),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF7700),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 18),
+                  const SizedBox(width: 4),
+                  Text(
+                    LocalizedApiHelper.parse('Play All'),
+                    style: GoogleFonts.outfit(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Container(
+      height: 46,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF0DFCE), width: 1.0),
+      ),
+      child: TextField(
+        controller: _searchController,
+        style: GoogleFonts.outfit(
+          fontSize: 14.5,
+          color: const Color(0xFF2E2A36),
+        ),
+        decoration: InputDecoration(
+          hintText: LocalizedApiHelper.parse('Search bhajans, deities, singers...'),
+          hintStyle: GoogleFonts.outfit(
+            fontSize: 13.5,
+            color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
+          ),
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+            color: Color(0xFFB56E28),
+            size: 20,
+          ),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? GestureDetector(
+                  onTap: () {
+                    _searchController.clear();
+                    FocusScope.of(context).unfocus();
+                  },
+                  child: const Icon(Icons.close_rounded, color: Color(0xFF999999), size: 18),
+                )
+              : null,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        ),
       ),
     );
   }
@@ -358,126 +474,8 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
     );
   }
 
-  Widget _buildBanner() {
-    return Container(
-      height: 168,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFFF7700).withValues(alpha: 0.12),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            _buildNetworkOrFallbackImage(widget.categoryImagePath),
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xC31A1209), Color(0x8A5B2F0A)],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 230,
-                    child: Text(
-                      widget.categoryTitle,
-                      style: GoogleFonts.outfit(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  SizedBox(
-                    width: 240,
-                    child: Text(
-                      _bannerSubtitle,
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        height: 1.35,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white.withValues(alpha: 0.95),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilterTabs() {
-    return SizedBox(
-      height: 40,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: _tabs.length,
-        separatorBuilder: (_, index) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final tab = _tabs[index];
-          final selected = tab == _selectedTab;
-
-          return InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () async {
-              if (_selectedTab == tab) {
-                return;
-              }
-              setState(() => _selectedTab = tab);
-              await _loadTracks();
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              decoration: BoxDecoration(
-                color: selected ? const Color(0xFFFF7700) : const Color(0xFFFFEAD8),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: selected
-                    ? [
-                        BoxShadow(
-                          color: const Color(0xFFFF7700).withValues(alpha: 0.25),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Center(
-                child: Text(
-                  tab,
-                  style: GoogleFonts.outfit(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: selected ? Colors.white : const Color(0xFF8E5A2A),
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
   void _openNowPlaying(BhajanTrackItem track, List<BhajanTrackItem> queue) {
+    BhajanLibraryService.instance.recordRecentPlay(track);
     BhajanAudioService.instance.playTrack(track, queue: queue, token: _token);
     Navigator.push(
       context,
@@ -488,69 +486,51 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
   }
 
   Future<void> _toggleLike(BhajanTrackItem track) async {
-    final isLiked = _likedTrackIds.contains(track.id);
+    final nowLiked = await BhajanLibraryService.instance.toggleLike(track, token: _token);
+    if (!mounted) return;
     setState(() {
-      if (isLiked) {
-        _likedTrackIds.remove(track.id);
-      } else {
+      if (nowLiked) {
         _likedTrackIds.add(track.id);
+      } else {
+        _likedTrackIds.remove(track.id);
       }
     });
-
-    try {
-      if (_token.isNotEmpty) {
-        if (isLiked) {
-          await ApiService.unlikeBhajan(_token, track.id);
-        } else {
-          await ApiService.likeBhajan(_token, track.id);
-        }
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isLiked ? 'Removed from Liked Bhajans' : 'Added to Liked Bhajans ❤️',
-              style: GoogleFonts.outfit(),
-            ),
-            duration: const Duration(seconds: 1),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('[BhajanList] toggleLike error: $e');
-    }
+    BhajanLibraryService.showLightSnackBar(
+      context,
+      nowLiked ? 'Added to Liked Bhajans ❤️' : 'Removed from Liked Bhajans',
+      icon: nowLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+    );
   }
 
   void _onTrackMenuSelected(String action, BhajanTrackItem track) async {
     switch (action) {
       case 'download':
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Downloading "${track.title}" for offline playback...', style: GoogleFonts.outfit()),
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        final lib = BhajanLibraryService.instance;
+        if (lib.isDownloaded(track.id) || lib.isDownloading(track.id)) return;
+        final completed = await lib.downloadTrack(track, token: _token);
+        if (!mounted) return;
+        setState(() {});
+        if (completed) {
+          BhajanLibraryService.showLightSnackBar(
+            context,
+            '✅ "${track.title}" ${LocalizedApiHelper.parse("Saved to Offline Downloads")}',
+            icon: Icons.download_done_rounded,
+          );
+        }
         break;
       case 'share':
         final shareText = '🙏 Listen to divine bhajan "${track.title}" by ${track.singer} on Bharat Pray app!\nhttps://bharatpray.com/bhajan/${track.id}';
         await Share.share(shareText, subject: track.title);
         break;
       case 'playlist':
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Added "${track.title}" to Sacred Playlist 🙏', style: GoogleFonts.outfit()),
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        await BhajanLibraryService.showAddToPlaylistSheet(context, track);
+        if (mounted) setState(() {});
         break;
     }
   }
 
   Widget _buildTrackCard(BhajanTrackItem track, List<BhajanTrackItem> queue) {
-    final isLiked = _likedTrackIds.contains(track.id);
+    final isLiked = BhajanLibraryService.instance.isLiked(track.id) || _likedTrackIds.contains(track.id);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -585,12 +565,51 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
               color: const Color(0xFF2E2A36),
             ),
           ),
-          subtitle: Text(
-            track.singer,
-            style: GoogleFonts.outfit(
-              fontSize: 13,
-              color: const Color(0xFF2E2A36).withValues(alpha: 0.55),
-            ),
+          subtitle: AnimatedBuilder(
+            animation: BhajanLibraryService.instance,
+            builder: (context, _) {
+              final lib = BhajanLibraryService.instance;
+              final isDownloading = lib.isDownloading(track.id);
+              final pct = lib.getDownloadPercentage(track.id);
+              return Row(
+                children: [
+                  if (isDownloading) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          value: (pct / 100.0).clamp(0.02, 1.0),
+                          strokeWidth: 1.8,
+                          backgroundColor: const Color(0xFFEBD7C2),
+                          color: const Color(0xFFFF7700),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '$pct% ',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFFFF7700),
+                      ),
+                    ),
+                  ],
+                  Expanded(
+                    child: Text(
+                      '${track.singer}${track.duration != null ? " • ${track.duration}" : ""}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        color: const Color(0xFF2E2A36).withValues(alpha: 0.55),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
@@ -614,62 +633,87 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 color: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                elevation: 4,
+                surfaceTintColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: const BorderSide(color: Color(0xFFF0DFCE)),
+                ),
+                elevation: 6,
                 onSelected: (action) => _onTrackMenuSelected(action, track),
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'download',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.download_rounded, size: 20, color: Color(0xFFFF7700)),
-                        const SizedBox(width: 10),
+                itemBuilder: (context) {
+                  final lib = BhajanLibraryService.instance;
+                  final isDownloaded = lib.isDownloaded(track.id);
+                  final isDownloading = lib.isDownloading(track.id);
+                  final pct = lib.getDownloadPercentage(track.id);
+                  return [
+                    PopupMenuItem(
+                      value: 'download',
+                      enabled: !isDownloaded && !isDownloading,
+                      child: Row(
+                        children: [
+                          Icon(
+                            isDownloaded
+                                ? Icons.download_done_rounded
+                                : Icons.download_rounded,
+                            size: 20,
+                            color: isDownloaded
+                                ? const Color(0xFF4CAF50)
+                                : const Color(0xFFFF7700),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            isDownloading
+                                ? 'Downloading $pct%...'
+                                : (isDownloaded
+                                    ? LocalizedApiHelper.parse('Downloaded', context: context)
+                                    : LocalizedApiHelper.parse('Download', context: context)),
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: isDownloaded
+                                  ? const Color(0xFF4CAF50)
+                                  : const Color(0xFF2E2A36),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'share',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.share_rounded, size: 20, color: Color(0xFFFF7700)),
+                          const SizedBox(width: 10),
+                          Text(
+                            LocalizedApiHelper.parse('Share', context: context),
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF2E2A36),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'playlist',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.playlist_add_rounded, size: 20, color: Color(0xFFFF7700)),
+                          const SizedBox(width: 10),
                         Text(
-                          'Download',
+                          LocalizedApiHelper.parse('Add to Playlist', context: context),
                           style: GoogleFonts.outfit(
                             fontSize: 14,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w600,
                             color: const Color(0xFF2E2A36),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  PopupMenuItem(
-                    value: 'share',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.share_rounded, size: 20, color: Color(0xFFFF7700)),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Share',
-                          style: GoogleFonts.outfit(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF2E2A36),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'playlist',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.playlist_add_rounded, size: 20, color: Color(0xFFFF7700)),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Add to Playlist',
-                          style: GoogleFonts.outfit(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF2E2A36),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                ];
+              },
               ),
             ],
           ),
@@ -696,6 +740,20 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
       } catch (_) {
         return _fallbackImage(width: width, height: height);
       }
+    }
+    if (image.isNotEmpty && !image.startsWith('http') && !image.startsWith('assets/') && !image.startsWith('data:image')) {
+      try {
+        final f = File(image);
+        if (f.existsSync()) {
+          return Image.file(
+            f,
+            width: width,
+            height: height,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => _fallbackImage(width: width, height: height),
+          );
+        }
+      } catch (_) {}
     }
     if (image.startsWith('http://') || image.startsWith('https://')) {
       return Image.network(

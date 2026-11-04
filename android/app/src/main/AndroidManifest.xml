@@ -57,6 +57,15 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <receiver
+            android:name=".MediaActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.bharatpray.ACTION_PLAY_PAUSE" />
+                <action android:name="com.bharatpray.ACTION_NEXT" />
+                <action android:name="com.bharatpray.ACTION_PREV" />
+            </intent-filter>
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

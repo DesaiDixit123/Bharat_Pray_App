@@ -276,10 +276,62 @@ class _LoginScreenState extends State<LoginScreen> {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // ── Spiritual Language Selector Pill ──────────────────
+                            Center(
+                              child: GestureDetector(
+                                onTap: () => LanguageSelectionScreen.open(
+                                  context,
+                                  onLanguageApplied: () => setState(() {}),
+                                ),
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 16),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFF7700).withValues(alpha: 0.18),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: const Color(0xFFFF7700).withValues(alpha: 0.5),
+                                      width: 1.2,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFFFF7700).withValues(alpha: 0.15),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.language_rounded, color: Color(0xFFFF7700), size: 16),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        '🌐 ${LanguageManager.instance.currentLanguageModel.nativeName}',
+                                        style: GoogleFonts.outfit(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white70, size: 18),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+
                             // Title
                             Center(
                               child: Text(
-                                'Login',
+                                LanguageManager.instance.currentLanguageCode == 'gu'
+                                    ? 'લોગિન'
+                                    : (LanguageManager.instance.currentLanguageCode == 'hi'
+                                        ? 'लॉगिन'
+                                        : (LanguageManager.instance.currentLanguageCode == 'mr'
+                                            ? 'लॉगिन'
+                                            : 'Login')),
                                 style: GoogleFonts.outfit(
                                   fontSize: 24,
                                   fontWeight: FontWeight.bold,

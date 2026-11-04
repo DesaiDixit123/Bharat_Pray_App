@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../services/api_service.dart';
 import '../../services/saved_items_service.dart';
 import '../../widgets/top_toast_notification.dart';
+import '../../core/localization/localized_api_helper.dart';
 import 'granth_chapter_list_screen.dart';
 
 class GranthListByCategoryScreen extends StatefulWidget {
@@ -166,7 +167,10 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
             onPressed: () => Navigator.pop(context),
           ),
           title: Text(
-            (widget.category['title'] ?? widget.category['name'] ?? 'Granth').toString(),
+            LocalizedApiHelper.parse(
+              widget.category['title'] ?? widget.category['name'],
+              defaultValue: 'Granth',
+            ),
             style: GoogleFonts.outfit(
               color: const Color(0xFF2E2A36),
               fontWeight: FontWeight.bold,
@@ -510,7 +514,10 @@ class _GranthListByCategoryScreenState extends State<GranthListByCategoryScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      (granth['name'] ?? granth['title'] ?? 'Sacred Granth').toString(),
+                      LocalizedApiHelper.parse(
+                        granth['name'] ?? granth['title'],
+                        defaultValue: 'Sacred Granth',
+                      ),
                       style: GoogleFonts.outfit(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,

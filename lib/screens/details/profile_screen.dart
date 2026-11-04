@@ -1,4 +1,5 @@
 import '../../core/localization/language_manager.dart';
+import '../../core/localization/localized_api_helper.dart';
 import '../../features/language_selection/presentation/language_selection_screen.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -655,7 +656,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onPressed: () => Navigator.pop(context),
               ),
         title: Text(
-          'My Profile',
+          LocalizedApiHelper.parse('My Profile'),
           style: GoogleFonts.outfit(
             color: const Color(0xFF2E2A36),
             fontWeight: FontWeight.bold,
@@ -752,7 +753,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   _buildStatItem(
                     _formatCount(_totalJapCount),
-                    "Total Jap",
+                    LocalizedApiHelper.parse("Total Jap"),
                     "📿",
                     onTap: () async {
                       await Navigator.push(
@@ -764,7 +765,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   _buildStatItem(
                     "$_favouriteBhajanCount",
-                    "Bhajans",
+                    LocalizedApiHelper.parse("Bhajans"),
                     "🎵",
                     onTap: () async {
                       await Navigator.push(
@@ -775,8 +776,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     },
                   ),
                   _buildStatItem(
-                    "$_streakDays ${_streakDays == 1 ? 'Day' : 'Days'}",
-                    "Streak",
+                    "$_streakDays ${LocalizedApiHelper.parse(_streakDays == 1 ? 'Day' : 'Days')}",
+                    LocalizedApiHelper.parse("Streak"),
                     "🔥",
                     onTap: () {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -801,8 +802,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     },
                   ),
                   _buildStatItem(
-                    "$_completedYatrasCount ${_completedYatrasCount == 1 ? 'Tour' : 'Tours'}",
-                    "Yatras",
+                    "$_completedYatrasCount ${LocalizedApiHelper.parse(_completedYatrasCount == 1 ? 'Tour' : 'Tours')}",
+                    LocalizedApiHelper.parse("Yatras"),
                     "⛰️",
                     onTap: () async {
                       await Navigator.push(
@@ -893,7 +894,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       Row(
                                         children: [
                                           Text(
-                                            "Mandal Profile",
+                                            LocalizedApiHelper.parse("Mandal Profile"),
                                             style: GoogleFonts.outfit(
                                               color: const Color(0xFF2E2A36),
                                               fontWeight: FontWeight.bold,
@@ -920,7 +921,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                 ),
                                                 const SizedBox(width: 3),
                                                 Text(
-                                                  status,
+                                                  LocalizedApiHelper.parse(status),
                                                   style: GoogleFonts.outfit(
                                                     color: isApproved ? const Color(0xFF2E7D32) : const Color(0xFFE65100),
                                                     fontSize: 10,
@@ -956,7 +957,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 children: [
                                   _buildMandalChip(
                                     Icons.add_photo_alternate_rounded,
-                                    "Add Posts",
+                                    LocalizedApiHelper.parse("Add Posts"),
                                     onTap: () async {
                                       final check = await UtsavService.checkFestivalStartedForMandal(mandalName: mandalName);
                                       if (check['isStarted'] != true) {
@@ -981,7 +982,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ),
                                   _buildMandalChip(
                                     Icons.video_library_rounded,
-                                    "Add Reels",
+                                    LocalizedApiHelper.parse("Add Reels"),
                                     onTap: () async {
                                       final check = await UtsavService.checkFestivalStartedForMandal(mandalName: mandalName);
                                       if (check['isStarted'] != true) {
@@ -1006,7 +1007,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ),
                                   _buildMandalChip(
                                     Icons.sensors_rounded,
-                                    "Go Live",
+                                    LocalizedApiHelper.parse("Go Live"),
                                     onTap: () async {
                                       final check = await UtsavService.checkFestivalStartedForMandal(mandalName: mandalName);
                                       if (check['isStarted'] != true) {
@@ -1036,7 +1037,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 24),
 
               // 1. Account Settings
-              _buildSectionHeader("Account Settings"),
+              _buildSectionHeader(LocalizedApiHelper.parse("Account Settings")),
               const SizedBox(height: 10),
               Container(
                 decoration: _cardBoxDecoration(),
@@ -1044,8 +1045,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     _buildNavTile(
                       icon: Icons.person_outline_rounded,
-                      title: "Edit Profile",
-                      subtitle: "Update name, photo & spiritual bio",
+                      title: LocalizedApiHelper.parse("Edit Profile"),
+                      subtitle: LocalizedApiHelper.parse("Update name, photo & spiritual bio"),
                       onTap: () async {
                         final updated = await Navigator.push<bool>(
                           context,
@@ -1056,21 +1057,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const Divider(color: Color(0xFFEFE6DB), height: 1),
                     _buildNavTile(
-                      icon: Icons.favorite_rounded,
-                      title: "Favourite Bhajans",
-                      subtitle: "View liked & saved devotional bhajans",
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const FavouriteBhajansScreen()),
-                        );
-                      },
-                    ),
-                    const Divider(color: Color(0xFFEFE6DB), height: 1),
-                    _buildNavTile(
                       icon: Icons.bookmark_outline_rounded,
-                      title: "Saved Library & Items",
-                      subtitle: "View bookmarked Granths & Chapters",
+                      title: LocalizedApiHelper.parse("Saved Library & Items"),
+                      subtitle: LocalizedApiHelper.parse("View bookmarked Granths & Chapters"),
                       onTap: () {
                         Navigator.push(
                           context,
@@ -1081,8 +1070,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const Divider(color: Color(0xFFEFE6DB), height: 1),
                     _buildNavTile(
                       icon: Icons.lock_outline_rounded,
-                      title: "Change Password",
-                      subtitle: "Security & login credentials",
+                      title: LocalizedApiHelper.parse("Change Password"),
+                      subtitle: LocalizedApiHelper.parse("Security & login credentials"),
                       onTap: () {
                         Navigator.push(
                           context,
@@ -1097,59 +1086,82 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 24),
 
               // 2. App Preferences
-              _buildSectionHeader("App Preferences"),
+              _buildSectionHeader(LocalizedApiHelper.parse("App Preferences")),
               const SizedBox(height: 10),
               Container(
                 decoration: _cardBoxDecoration(),
                 child: Column(
                   children: [
                     _buildSwitchTile(
-                      title: "Push Notifications",
-                      subtitle: "Alerts for daily darshan & live aartis",
+                      title: LocalizedApiHelper.parse("Push Notifications"),
+                      subtitle: LocalizedApiHelper.parse("Alerts for daily darshan & live aartis"),
                       value: _notificationsEnabled,
                       onChanged: (val) => setState(() => _notificationsEnabled = val),
                     ),
                     const Divider(color: Color(0xFFEFE6DB), height: 1),
                     _buildSwitchTile(
-                      title: "Daily Jap Reminder",
-                      subtitle: "Reminds you to complete 108 counts",
+                      title: LocalizedApiHelper.parse("Daily Jap Reminder"),
+                      subtitle: LocalizedApiHelper.parse("Reminds you to complete 108 counts"),
                       value: _dailyReminder,
                       onChanged: (val) => setState(() => _dailyReminder = val),
                     ),
                     const Divider(color: Color(0xFFEFE6DB), height: 1),
                     _buildSwitchTile(
-                      title: "Beads Sound Effects",
-                      subtitle: "Plays haptic click sound on Jap tap",
+                      title: LocalizedApiHelper.parse("Beads Sound Effects"),
+                      subtitle: LocalizedApiHelper.parse("Plays haptic click sound on Jap tap"),
                       value: _soundEffects,
                       onChanged: (val) => setState(() => _soundEffects = val),
                     ),
                     const Divider(color: Color(0xFFEFE6DB), height: 1),
                     ListTile(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                      onTap: () {
+                        LanguageSelectionScreen.open(
+                          context,
+                          onLanguageApplied: () {
+                            setState(() {
+                              _selectedLanguage = LanguageManager.instance.currentLanguageModel.name;
+                            });
+                          },
+                        );
+                      },
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF7700).withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.language_rounded, color: Color(0xFFFF7700), size: 20),
+                      ),
                       title: Text(
-                        "Spiritual Language",
+                        LocalizedApiHelper.parse("Spiritual Language"),
                         style: GoogleFonts.outfit(color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold, fontSize: 14),
                       ),
                       subtitle: Text(
-                        "Currently set to $_selectedLanguage",
-                        style: GoogleFonts.outfit(color: const Color(0xFF2E2A36).withValues(alpha: 0.5), fontSize: 12),
+                        "${LanguageManager.instance.currentLanguageModel.nativeName} (${LanguageManager.instance.currentLanguageModel.name})",
+                        style: GoogleFonts.outfit(color: const Color(0xFF2E2A36).withValues(alpha: 0.6), fontSize: 12),
                       ),
-                      trailing: DropdownButton<String>(
-                        value: _selectedLanguage,
-                        dropdownColor: Colors.white,
-                        underline: const SizedBox(),
-                        style: GoogleFonts.outfit(color: const Color(0xFFFF7700), fontWeight: FontWeight.bold, fontSize: 14),
-                        items: ["English", "Hindi", "Gujarati"].map((String val) {
-                          return DropdownMenuItem<String>(
-                            value: val,
-                            child: Text(val),
-                          );
-                        }).toList(),
-                        onChanged: (val) {
-                          if (val != null) {
-                            setState(() => _selectedLanguage = val);
-                          }
-                        },
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF7700).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              LanguageManager.instance.currentLanguageModel.nativeName,
+                              style: GoogleFonts.outfit(
+                                color: const Color(0xFFFF7700),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(Icons.chevron_right_rounded, color: Color(0xFF8C7B6E), size: 20),
+                        ],
                       ),
                     ),
                   ],
@@ -1159,7 +1171,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 24),
 
               // 3. Legal & Support
-              _buildSectionHeader("Legal & Help"),
+              _buildSectionHeader(LocalizedApiHelper.parse("Legal & Help")),
               const SizedBox(height: 10),
               Container(
                 decoration: _cardBoxDecoration(),
@@ -1167,8 +1179,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     _buildNavTile(
                       icon: Icons.description_outlined,
-                      title: "Terms & Conditions",
-                      subtitle: "App rules & spiritual guidelines",
+                      title: LocalizedApiHelper.parse("Terms & Conditions"),
+                      subtitle: LocalizedApiHelper.parse("App rules & spiritual guidelines"),
                       onTap: () {
                         Navigator.push(
                           context,
@@ -1179,8 +1191,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const Divider(color: Color(0xFFEFE6DB), height: 1),
                     _buildNavTile(
                       icon: Icons.shield_outlined,
-                      title: "Privacy Policy",
-                      subtitle: "Data protection & privacy details",
+                      title: LocalizedApiHelper.parse("Privacy Policy"),
+                      subtitle: LocalizedApiHelper.parse("Data protection & privacy details"),
                       onTap: () {
                         Navigator.push(
                           context,
@@ -1191,8 +1203,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const Divider(color: Color(0xFFEFE6DB), height: 1),
                     _buildNavTile(
                       icon: Icons.help_outline_rounded,
-                      title: "Help & Support",
-                      subtitle: "FAQs, contact support & app info",
+                      title: LocalizedApiHelper.parse("Help & Support"),
+                      subtitle: LocalizedApiHelper.parse("FAQs, contact support & app info"),
                       onTap: () {
                         Navigator.push(
                           context,
@@ -1222,7 +1234,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   icon: const Icon(Icons.logout_rounded, size: 20),
                   label: Text(
-                    "Log Out from Account",
+                    LocalizedApiHelper.parse("Log Out from Account"),
                     style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                   onPressed: _showLogoutConfirmDialog,

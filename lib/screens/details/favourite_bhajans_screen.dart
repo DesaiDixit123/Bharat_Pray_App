@@ -51,44 +51,10 @@ class _FavouriteBhajansScreenState extends State<FavouriteBhajansScreen> {
 
       for (final item in rawList) {
         if (item is Map<String, dynamic>) {
-          final bhajanMap = (item['bhajanId'] is Map<String, dynamic>)
-              ? (item['bhajanId'] as Map<String, dynamic>)
-              : item;
-
-          final id = (bhajanMap['_id'] ?? item['_id'] ?? '').toString();
-          if (id.isEmpty) continue;
-
-          final title = (bhajanMap['title'] ?? bhajanMap['name'] ?? 'Untitled Bhajan').toString();
-          final singer = (bhajanMap['artist'] ?? bhajanMap['singer'] ?? 'Traditional').toString();
-          final rawImg = (bhajanMap['coverImage'] ?? bhajanMap['image'] ?? '').toString();
-          final imagePath = ApiService.resolveImageUrl(rawImg);
-
-          final durationRaw = bhajanMap['duration'];
-          String? formattedDuration;
-          if (durationRaw != null) {
-            if (durationRaw is String && durationRaw.contains(':')) {
-              formattedDuration = durationRaw;
-            } else {
-              final sec = durationRaw is int ? durationRaw : int.tryParse(durationRaw.toString()) ?? 0;
-              if (sec > 0) {
-                formattedDuration = '${(sec ~/ 60).toString().padLeft(2, '0')}:${(sec % 60).toString().padLeft(2, '0')}';
-              }
-            }
+          final track = BhajanTrackItem.fromJson(item);
+          if (track.id.isNotEmpty) {
+            parsed.add(track);
           }
-
-          parsed.add(BhajanTrackItem(
-            id: id,
-            title: title,
-            singer: singer,
-            imagePath: imagePath,
-            audioUrl: null,
-            duration: formattedDuration,
-            lyrics: (bhajanMap['lyrics'] ?? '').toString(),
-            categoryId: (bhajanMap['categoryId'] is Map ? bhajanMap['categoryId']['_id'] : bhajanMap['categoryId'])?.toString() ?? '',
-            isLiked: true,
-            isDownloaded: false,
-            isFavourite: true,
-          ));
         }
       }
 

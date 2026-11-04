@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/utsav_service.dart';
+import '../../core/localization/localized_api_helper.dart';
 import 'mandal_profile_screen.dart';
 
 class MandalLeaderboardTabContent extends StatefulWidget {
@@ -52,7 +53,7 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
         setState(() {
           _userMandalName = myReg?['mandalName'];
           if (data['festival'] != null && data['festival']['name'] != null) {
-            _festivalName = data['festival']['name'].toString();
+            _festivalName = LocalizedApiHelper.parse(data['festival']['name']);
           } else {
             _festivalName = "";
           }

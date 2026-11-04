@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/yatra_model.dart';
 import '../../models/journey_models.dart';
 import '../../services/api_service.dart';
+import '../../core/localization/localization_constants.dart';
 import '../yatra_group/create_yatra_group_screen.dart';
 import '../yatra_group/group_invitation_dialog.dart';
 import '../yatra_group/my_yatra_groups_screen.dart';
@@ -564,7 +565,7 @@ class _YatraScreenState extends State<YatraScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Popular Yatra',
+                  SpiritualTerms.get('sacred_yatras'),
                   style: GoogleFonts.outfit(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,

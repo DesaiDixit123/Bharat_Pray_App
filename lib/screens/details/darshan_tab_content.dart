@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/api_service.dart';
+import '../../core/localization/localized_api_helper.dart';
 import 'deity_temples_screen.dart';
 import 'live_darshan_screen.dart';
 
@@ -234,8 +235,8 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
 
   Widget _buildGridDeityCard(BuildContext context, dynamic deity) {
     final String imagePath = _resolveImageUrl(deity['image']);
-    final String deityName = deity['name'] ?? 'Deity';
-    final String templeName = (deity['temple'] != null) ? (deity['temple']['name'] ?? '') : '';
+    final String deityName = LocalizedApiHelper.parse(deity['name'], defaultValue: 'Deity');
+    final String templeName = (deity['temple'] != null) ? LocalizedApiHelper.parse(deity['temple']['name']) : '';
     // Backend /user/darshan/list now only returns darshans with is_live_status: true.
     // getDetails expects darshan_id = darshans._id (NOT livedarshans._id).
     final String liveDarshanId = (deity['darshan_id'] ?? deity['_id'])?.toString() ?? '';
@@ -500,7 +501,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                 itemBuilder: (context, index) {
                   final cat = _categories[index];
                   final catId = cat['_id'].toString();
-                  final catName = cat['name'].toString();
+                  final catName = LocalizedApiHelper.parse(cat['name']);
                   final isActive = _selectedCategoryId == catId;
                   return Padding(
                     padding: const EdgeInsets.only(right: 8.0),

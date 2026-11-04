@@ -1,4 +1,6 @@
 import '../core/localization/app_localization.dart';
+import '../core/localization/language_manager.dart';
+import '../core/localization/localized_api_helper.dart';
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -10,7 +12,7 @@ import 'details/live_darshan_screen.dart';
 import 'details/jap_counter_screen.dart';
 import 'details/yatra_screen.dart';
 import 'details/profile_screen.dart';
-import 'details/bhajan_category_screen.dart';
+import 'details/bhajan_dashboard_screen.dart';
 import 'details/granth_screen.dart';
 import 'details/deity_detail_screen.dart';
 import 'details/festival_detail_screen.dart';
@@ -408,12 +410,57 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
+    final code = LanguageManager.instance.currentLanguageCode;
     if (hour < 12) {
+      if (code == 'gu') return 'શુભ પ્રભાત';
+      if (code == 'hi') return 'शुभ प्रभात';
+      if (code == 'mr') return 'शुभ सकाळ';
       return 'Good Morning';
     } else if (hour < 17) {
+      if (code == 'gu') return 'શુભ બપોર';
+      if (code == 'hi') return 'शुभ दोपहर';
+      if (code == 'mr') return 'शुभ दुपार';
       return 'Good Afternoon';
     } else {
+      if (code == 'gu') return 'શુભ સંધ્યા';
+      if (code == 'hi') return 'शुभ संध्या';
+      if (code == 'mr') return 'शुभ संध्याकाळ';
       return 'Good Evening';
+    }
+  }
+
+  String _getDivineSalutation() {
+    final code = LanguageManager.instance.currentLanguageCode;
+    if (code == 'gu') return 'જય શ્રી રામ';
+    if (code == 'hi') return 'जय श्री राम';
+    if (code == 'mr') return 'जय श्री राम';
+    return 'Jai Shree Ram';
+  }
+
+  String _getNavLabel(int index) {
+    switch (LanguageManager.instance.currentLanguageCode) {
+      case 'gu':
+        return ['હોમ', 'દર્શન', 'જાપ', 'યાત્રા', 'પ્રોફાઇલ'][index];
+      case 'hi':
+        return ['होम', 'दर्शन', 'जाप', 'यात्रा', 'प्रोफ़ाइल'][index];
+      case 'mr':
+        return ['होम', 'दर्शन', 'जाप', 'यात्रा', 'प्रोफाइल'][index];
+      default:
+        return ['Home', 'Darshan', 'Jap', 'Yatra', 'Profile'][index];
+    }
+  }
+
+  String _getCategoryLabel(String key) {
+    final code = LanguageManager.instance.currentLanguageCode;
+    switch (key) {
+      case 'bhajan':
+        return code == 'gu' ? 'ભજન' : (code == 'hi' ? 'भजन' : (code == 'mr' ? 'भजन' : 'Bhajan'));
+      case 'granth':
+        return code == 'gu' ? 'ગ્રંથ' : (code == 'hi' ? 'ग्रंथ' : (code == 'mr' ? 'ग्रंथ' : 'Granth'));
+      case 'utsav':
+        return code == 'gu' ? 'ઉત્સવ' : (code == 'hi' ? 'उत्सव' : (code == 'mr' ? 'उत्सव' : 'Utsav Vibes'));
+      default:
+        return key;
     }
   }
 
@@ -482,7 +529,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Row(
                         children: [
                           Text(
-                            'Jai Shree Ram',
+                            _getDivineSalutation(),
                             style: GoogleFonts.outfit(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -587,6 +634,7 @@ class _HomeScreenState extends State<HomeScreen> {
             // 2. Search gods, temples bar (full width)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+<<<<<<< Updated upstream
               child: Container(
                 height: 48,
                 decoration: BoxDecoration(
@@ -597,6 +645,44 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: Colors.black.withValues(alpha: 0.03),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
+=======
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.03),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                        border: Border.all(
+                          color: const Color(0xFFEFE6DB),
+                          width: 1.0,
+                        ),
+                      ),
+                      child: TextField(
+                        style: GoogleFonts.outfit(color: const Color(0xFF2E2A36)),
+                        decoration: InputDecoration(
+                          hintText: LocalizedApiHelper.parse('Search gods, temples, bhajans...'),
+                          hintStyle: GoogleFonts.outfit( // Corrected from withValues to withOpacity
+                            color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
+                            fontSize: 14,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.search_rounded,
+                            color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 13),
+                        ),
+                      ),
+>>>>>>> Stashed changes
                     ),
                   ],
                   border: Border.all(
@@ -639,10 +725,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   Expanded(
                     child: _buildSvgCategoryCard(
                       svgAsset: 'assets/images/cat_bhajan.svg',
-                      label: 'Bhajan',
+                      label: _getCategoryLabel('bhajan'),
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const BhajanScreen()),
+                        MaterialPageRoute(builder: (context) => const BhajanDashboardScreen()),
                       ),
                     ),
                   ),
@@ -650,7 +736,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Expanded(
                     child: _buildSvgCategoryCard(
                       svgAsset: 'assets/images/cat_granth.svg',
-                      label: 'Granth',
+                      label: _getCategoryLabel('granth'),
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(builder: (context) => const GranthScreen()),
@@ -661,7 +747,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Expanded(
                     child: _buildSvgCategoryCard(
                       svgAsset: 'assets/images/cat_utsav.svg',
-                      label: 'Utsav Vibes',
+                      label: _getCategoryLabel('utsav'),
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(builder: (context) => const FestivalsHomeTabContent()),
@@ -1353,8 +1439,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Helper: Swipable Hero Card for PageView
   Widget _buildHeroCard(Map<String, dynamic> banner) {
-    final String title = banner['title']?.toString() ?? 'Live Darshan';
-    final String desc = banner['desc']?.toString() ?? 'Seek divine blessings.';
+    final String title = LocalizedApiHelper.parse(
+      banner['title'] ?? 'Somnath Temple Darshan',
+      defaultValue: 'Somnath Temple Darshan',
+    );
+    final String desc = LocalizedApiHelper.parse(
+      banner['desc'] ?? 'The first among the twelve sacred Aadi Jyotirlinga shrines of Lord Shiva.',
+      defaultValue: 'The first among the twelve sacred Aadi Jyotirlinga shrines of Lord Shiva.',
+    );
     final String darshanId = (banner['id'] ?? banner['darshan_id'] ?? '').toString();
     final String views = banner['views']?.toString() ?? _formatViewerCount(banner['raw_views'], darshanId: darshanId);
     final String image = banner['image']?.toString() ?? '';
@@ -1431,7 +1523,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                'Live',
+                                LocalizedApiHelper.parse('Live'),
                                 style: GoogleFonts.outfit(
                                   color: Colors.white,
                                   fontSize: 13,
@@ -1471,7 +1563,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                   const SizedBox(width: 7),
                                   Text(
-                                    'Offline',
+                                    LocalizedApiHelper.parse('Offline'),
                                     style: GoogleFonts.outfit(
                                       color: Colors.white,
                                       fontSize: 13,
@@ -1578,7 +1670,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           onPressed: () => _openLiveDarshan(banner),
                           child: Text(
-                            'Start Darshan',
+                            LocalizedApiHelper.parse('Start Darshan'),
                             style: GoogleFonts.outfit(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
@@ -2036,7 +2128,7 @@ class _HomeScreenState extends State<HomeScreen> {
             height: 48,
             child: _buildNavItem(
               iconAsset: 'assets/images/nav_home.svg',
-              label: 'Home',
+              label: _getNavLabel(0),
               isActive: _currentTab == 0,
               onTap: () => setState(() => _currentTab = 0),
             ),
@@ -2050,7 +2142,7 @@ class _HomeScreenState extends State<HomeScreen> {
             height: 48,
             child: _buildNavItem(
               iconAsset: 'assets/images/nav_darshan.svg',
-              label: 'Darshan',
+              label: _getNavLabel(1),
               isActive: _currentTab == 1,
               onTap: () => setState(() => _currentTab = 1),
             ),
@@ -2099,7 +2191,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 1), // Tightly aligned spacer
                     Text(
-                      'Jap',
+                      _getNavLabel(2),
                       style: GoogleFonts.outfit(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -2121,7 +2213,7 @@ class _HomeScreenState extends State<HomeScreen> {
             height: 48,
             child: _buildNavItem(
               iconAsset: 'assets/images/nav_yatra.svg',
-              label: 'Yatra',
+              label: _getNavLabel(3),
               isActive: _currentTab == 3,
               onTap: () => setState(() => _currentTab = 3),
             ),
@@ -2135,7 +2227,7 @@ class _HomeScreenState extends State<HomeScreen> {
             height: 48,
             child: _buildNavItem(
               iconAsset: 'assets/images/nav_profile.svg',
-              label: 'Profile',
+              label: _getNavLabel(4),
               isActive: _currentTab == 4,
               onTap: () => setState(() => _currentTab = 4),
             ),

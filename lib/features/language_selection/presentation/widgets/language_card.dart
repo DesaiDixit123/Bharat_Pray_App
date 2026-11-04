@@ -120,27 +120,29 @@ class LanguageCard extends StatelessWidget {
                                   : const Color(0xFF9E8DB8),
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          Container(
-                            width: 3,
-                            height: 3,
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? const Color(0xFFFFB366)
-                                  : const Color(0xFF7A6A92),
-                              shape: BoxShape.circle,
+                          if (language.scriptHint.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              width: 3,
+                              height: 3,
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? const Color(0xFFFFB366)
+                                    : const Color(0xFF7A6A92),
+                                shape: BoxShape.circle,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            language.scriptHint,
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              color: isSelected
-                                  ? const Color(0xFFFFD9B3)
-                                  : const Color(0xFF7A6A92),
+                            const SizedBox(width: 6),
+                            Text(
+                              language.scriptHint,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: isSelected
+                                    ? const Color(0xFFFFD9B3)
+                                    : const Color(0xFF7A6A92),
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ],

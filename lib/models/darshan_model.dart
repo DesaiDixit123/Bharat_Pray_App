@@ -1,3 +1,5 @@
+import '../core/localization/localized_api_helper.dart';
+
 enum DarshanType { image, video, live }
 
 enum DarshanFallbackType { image, video, none }
@@ -70,7 +72,7 @@ class DarshanConfig {
           json['godCategoryId']?.toString() ??
           '',
       templeId: json['temple_id']?.toString() ?? json['templeId']?.toString(),
-      name: json['name']?.toString() ?? json['title']?.toString() ?? '',
+      name: LocalizedApiHelper.parse(json['name'] ?? json['title']),
       type: parseType(json['type']?.toString()),
       imageUrl: json['image']?.toString() ?? json['imageUrl']?.toString() ?? '',
       thumbnailUrl:
@@ -93,8 +95,8 @@ class DarshanConfig {
           json['fallbackVideoUrl']?.toString() ??
           '',
       shortDesc:
-          json['short_desc']?.toString() ?? json['shortDesc']?.toString() ?? '',
-      description: json['description']?.toString() ?? '',
+          LocalizedApiHelper.parse(json['short_desc'] ?? json['shortDesc']),
+      description: LocalizedApiHelper.parse(json['description']),
       status:
           json['status'] == true ||
           json['status'] == 1 ||

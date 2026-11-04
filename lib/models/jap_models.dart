@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../core/localization/localized_api_helper.dart';
 
 enum ParticleShapeType { petal, leaf, feather, spark, ash, flame, custom }
 enum DivineSymbolType { trishul, shankh, flute, bowArrow, lotus, chakra, om, none }
@@ -270,7 +271,7 @@ class JapConfig {
 
   static String _sanitizeUrl(String? url) => ApiService.resolveImageUrl(url);
   factory JapConfig.fromJson(Map<String, dynamic> json) {
-    final name = json['name'] ?? '';
+    final name = LocalizedApiHelper.parse(json['name']);
     final defaultImg = defaultDeityImage(name);
     final pShape = json['particleShape']?.toString() ?? json['particleEffect']?.toString();
     EffectPack effectPack;
@@ -292,7 +293,7 @@ class JapConfig {
       templeId: json['temple'] is Map ? json['temple']['_id']?.toString() : json['temple']?.toString(),
       thumbnailUrl: thumb,
       darshanImageUrl: darshan,
-      shlokText: json['shlokText'] ?? '',
+      shlokText: LocalizedApiHelper.parse(json['shlokText']),
       shlokAudioUrl: _sanitizeUrl(json['shlokAudio'] ?? ''),
       targetCount: (json['targetCount'] is num) ? (json['targetCount'] as num).toInt() : 108,
       progress: (json['progress'] is num) ? (json['progress'] as num).toInt() : 0,

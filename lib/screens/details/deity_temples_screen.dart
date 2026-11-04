@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/api_service.dart';
 import '../../services/yatra_personal_chat_service.dart';
+import '../../core/localization/localized_api_helper.dart';
 import 'live_darshan_screen.dart';
 import 'messages_screen.dart';
 import '../../widgets/user_avatar.dart';
@@ -648,8 +649,8 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
 
   Widget _buildTempleCard(BuildContext context, dynamic deity) {
     final imagePath = _resolveImageUrl(deity['image']);
-    final String deityName = deity['name'] ?? widget.deityName;
-    final String templeName = (deity['temple'] != null) ? (deity['temple']['name'] ?? '') : '';
+    final String deityName = LocalizedApiHelper.parse(deity['name'], defaultValue: widget.deityName);
+    final String templeName = (deity['temple'] != null) ? LocalizedApiHelper.parse(deity['temple']['name']) : '';
 
     return Container(
       decoration: BoxDecoration(

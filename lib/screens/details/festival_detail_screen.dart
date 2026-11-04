@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../services/utsav_service.dart';
+import '../../core/localization/localized_api_helper.dart';
+import '../../core/localization/localization_constants.dart';
 import 'mandal_registration_screen.dart';
 import 'mandal_status_tab_content.dart';
 import 'mandal_profile_screen.dart';
@@ -127,10 +129,10 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
 
   String _getMandalDesc() {
     if (_festivalData != null && _festivalData!['description'] != null) {
-      return _festivalData!['description'].toString();
+      return LocalizedApiHelper.parse(_festivalData!['description']);
     }
     if (_festivalData != null && _festivalData!['slogan'] != null) {
-      return _festivalData!['slogan'].toString();
+      return LocalizedApiHelper.parse(_festivalData!['slogan']);
     }
     return '';
   }
@@ -267,7 +269,7 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
   }
 
   Widget _buildMandalCoverCard() {
-    final displayName = widget.festivalName;
+    final displayName = LocalizedApiHelper.parse(_festivalData?['name'] ?? widget.festivalName);
     return Container(
       height: 200,
       width: double.infinity,

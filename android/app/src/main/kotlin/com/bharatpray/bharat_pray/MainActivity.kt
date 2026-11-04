@@ -17,12 +17,62 @@ class MainActivity : FlutterActivity() {
     private val AUDIO_PICK_CODE = 2001
     private var pendingResult: MethodChannel.Result? = null
 
+    companion object {
+        private const val MEDIA_CHANNEL = "com.bharatpray/native_media_player"
+        var mediaMethodChannel: MethodChannel? = null
+
+        fun sendMediaActionToFlutter(action: String) {
+            mediaMethodChannel?.invokeMethod("onMediaAction", mapOf("action" to action))
+        }
+
+        fun sendSeekToFlutter(positionMs: Long) {
+            mediaMethodChannel?.invokeMethod("onSeekTo", mapOf("positionMs" to positionMs))
+        }
+    }
+
     override fun getRenderMode(): RenderMode {
         return RenderMode.texture
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getStringExtra("route") == "bhajan_now_playing") {
+            mediaMethodChannel?.invokeMethod("openNowPlaying", null)
+        }
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        mediaMethodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MEDIA_CHANNEL)
+        mediaMethodChannel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "showMediaNotification" -> {
+                    val title = call.argument<String>("title") ?: ""
+                    val subtitle = call.argument<String>("subtitle") ?: ""
+                    val isPlaying = call.argument<Boolean>("isPlaying") ?: true
+                    val imagePath = call.argument<String>("imagePath")
+                    val durationSec = call.argument<Int>("durationSec") ?: 0
+                    val positionSec = call.argument<Int>("positionSec") ?: 0
+                    MediaNotificationManager.showNotification(
+                        applicationContext,
+                        title,
+                        subtitle,
+                        isPlaying,
+                        imagePath,
+                        durationSec,
+                        positionSec
+                    )
+                    result.success(true)
+                }
+                "cancelMediaNotification" -> {
+                    MediaNotificationManager.cancelNotification(applicationContext)
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->

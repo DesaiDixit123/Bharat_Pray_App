@@ -184,12 +184,23 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
 
+    final bool hasSelectedLanguage = LanguageManager.instance.hasUserSelectedLanguage;
+
+    final Widget targetScreen;
+    if (!hasSelectedLanguage) {
+      targetScreen = const LanguageSelectionScreen(
+        isFullScreen: true,
+        isDismissible: false,
+      );
+    } else {
+      targetScreen = isLoggedIn ? const HomeScreen() : const LoginScreen();
+    }
+
     // Premium custom transition page route (Vanish fade + Scale merge)
     Navigator.pushReplacement(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            isLoggedIn ? const HomeScreen() : const LoginScreen(),
+        pageBuilder: (context, animation, secondaryAnimation) => targetScreen,
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(
             opacity: animation,

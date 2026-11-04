@@ -10,9 +10,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/localization/localized_api_helper.dart';
 import '../../models/bhajan_track_item.dart';
 import '../../services/api_service.dart';
 import '../../services/bhajan_audio_service.dart';
+import '../../services/bhajan_library_service.dart';
 
 class BhajanNowPlayingScreen extends StatefulWidget {
   const BhajanNowPlayingScreen({
@@ -130,9 +132,10 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
   @override
   void initState() {
     super.initState();
-    _isLiked = widget.currentTrack.isLiked;
-    _isDownloaded = widget.currentTrack.isDownloaded;
-    _isFavourite = widget.currentTrack.isFavourite;
+    final lib = BhajanLibraryService.instance;
+    _isLiked = lib.isLiked(widget.currentTrack.id) || widget.currentTrack.isLiked;
+    _isDownloaded = lib.isDownloaded(widget.currentTrack.id) || widget.currentTrack.isDownloaded;
+    _isFavourite = lib.playlists.any((p) => p.tracks.any((t) => t.id == widget.currentTrack.id));
 
     _rotationController = AnimationController(
       vsync: this,
@@ -191,7 +194,10 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
     _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
 
     final audio = BhajanAudioService.instance;
-    if (audio.currentTrack?.id != widget.currentTrack.id) {
+    final isSameTrack = audio.currentTrack != null &&
+        ((audio.currentTrack!.id.isNotEmpty && audio.currentTrack!.id == widget.currentTrack.id) ||
+            audio.currentTrack!.title.trim().toLowerCase() == widget.currentTrack.title.trim().toLowerCase());
+    if (!isSameTrack) {
       try {
         await audio.playTrack(widget.currentTrack, queue: widget.queue, token: _token);
       } catch (e) {
@@ -227,141 +233,52 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
   }
 
   Future<void> _toggleLike() async {
-    if (widget.currentTrack.id.isEmpty) return;
-    if (_token.isEmpty) {
-      final prefs = await SharedPreferences.getInstance();
-      _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
-    }
-
-    final previousState = _isLiked;
-    setState(() => _isLiked = !previousState);
-
-    try {
-      if (previousState) {
-        await ApiService.unlikeBhajan(_token, widget.currentTrack.id);
-      } else {
-        await ApiService.likeBhajan(_token, widget.currentTrack.id);
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLiked = previousState);
-        _showMessage('Unable to update like on server.');
-      }
-    }
+    HapticFeedback.selectionClick();
+    final nowLiked = await BhajanLibraryService.instance.toggleLike(
+      widget.currentTrack,
+      token: _token,
+    );
+    if (!mounted) return;
+    setState(() => _isLiked = nowLiked);
+    BhajanLibraryService.showLightSnackBar(
+      context,
+      nowLiked
+          ? '❤️ "${widget.currentTrack.title}" ${LocalizedApiHelper.parse("Added to Liked Bhajans")}'
+          : '"${widget.currentTrack.title}" ${LocalizedApiHelper.parse("Removed from Liked Bhajans")}',
+      icon: nowLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+    );
   }
 
-  Future<void> _toggleFavourite() async {
-    if (widget.currentTrack.id.isEmpty) return;
-    if (_token.isEmpty) {
-      final prefs = await SharedPreferences.getInstance();
-      _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
-    }
-
-    final previousState = _isFavourite;
-    setState(() => _isFavourite = !previousState);
-
-    try {
-      if (previousState) {
-        await ApiService.removeFavouriteBhajan(_token, widget.currentTrack.id);
-        _showMessage('Removed from favourites.');
-      } else {
-        await ApiService.addFavouriteBhajan(_token, widget.currentTrack.id);
-        _showMessage('Added to favourites.');
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isFavourite = previousState);
-        _showMessage('Unable to update favourite.');
-      }
-    }
+  Future<void> _openAddToPlaylist() async {
+    HapticFeedback.selectionClick();
+    await BhajanLibraryService.showAddToPlaylistSheet(context, widget.currentTrack);
+    if (!mounted) return;
+    setState(() {
+      _isFavourite = BhajanLibraryService.instance.playlists
+          .any((p) => p.tracks.any((t) => t.id == widget.currentTrack.id));
+    });
   }
 
   Future<void> _downloadTrack() async {
-    if (widget.currentTrack.id.isEmpty) return;
-    if (_token.isEmpty) {
-      final prefs = await SharedPreferences.getInstance();
-      _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
+    final lib = BhajanLibraryService.instance;
+    // Do not allow clicking Download a second time if already downloaded or currently downloading
+    if (lib.isDownloaded(widget.currentTrack.id) || lib.isDownloading(widget.currentTrack.id)) {
+      return;
     }
 
-    _showMessage('Downloading "${widget.currentTrack.title}"...');
+    HapticFeedback.lightImpact();
+    final completed = await lib.downloadTrack(
+      widget.currentTrack,
+      token: _token,
+    );
 
-    try {
-      final streamUrl = await ApiService.fetchBhajanStreamUrl(_token, widget.currentTrack.id);
-      if (streamUrl.isEmpty || streamUrl.startsWith('blob:')) {
-        throw Exception('Audio stream URL is not valid for download.');
-      }
-
-      final response = await http.get(Uri.parse(streamUrl)).timeout(const Duration(seconds: 45));
-      if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
-        throw Exception('Failed to download audio content from server.');
-      }
-
-      final safeName = widget.currentTrack.title
-          .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
-          .trim();
-      final fileName = '$safeName.mp3';
-
-      File? savedFile;
-      final List<String> possibleDirs = [
-        '/storage/emulated/0/Download',
-        '/storage/emulated/0/Music',
-        '/sdcard/Download',
-      ];
-      for (final dirPath in possibleDirs) {
-        try {
-          final dir = Directory(dirPath);
-          if (dir.existsSync()) {
-            final targetFile = File('${dir.path}/$fileName');
-            await targetFile.writeAsBytes(response.bodyBytes);
-            savedFile = targetFile;
-            break;
-          }
-        } catch (_) {}
-      }
-
-      if (savedFile == null) {
-        try {
-          final extDir = await getExternalStorageDirectory();
-          if (extDir != null) {
-            final targetFile = File('${extDir.path}/$fileName');
-            await targetFile.writeAsBytes(response.bodyBytes);
-            savedFile = targetFile;
-          }
-        } catch (_) {}
-      }
-
-      if (savedFile == null) {
-        final docDir = await getApplicationDocumentsDirectory();
-        final targetFile = File('${docDir.path}/$fileName');
-        await targetFile.writeAsBytes(response.bodyBytes);
-        savedFile = targetFile;
-      }
-
-      // Record download count on server
-      try {
-        await ApiService.downloadBhajan(_token, widget.currentTrack.id);
-      } catch (_) {}
-
-      if (!mounted) return;
+    if (completed && mounted) {
       setState(() => _isDownloaded = true);
-
-      final filePath = savedFile.path;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Saved to Downloads: $fileName', style: GoogleFonts.outfit()),
-          backgroundColor: const Color(0xFF4CAF50),
-          duration: const Duration(seconds: 6),
-          action: SnackBarAction(
-            label: 'Save / Share',
-            textColor: Colors.white,
-            onPressed: () {
-              Share.shareXFiles([XFile(filePath)], subject: fileName);
-            },
-          ),
-        ),
+      BhajanLibraryService.showLightSnackBar(
+        context,
+        '✅ "${widget.currentTrack.title}" ${LocalizedApiHelper.parse("Saved to Offline Downloads")}',
+        icon: Icons.download_done_rounded,
       );
-    } catch (e) {
-      _showMessage('Download failed: ${e.toString().replaceFirst("Exception: ", "")}');
     }
   }
 
@@ -581,32 +498,56 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
               ),
             ),
             const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _actionItem(
-                  _isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                  _isLiked ? 'Liked' : 'Like',
-                  iconColor: _isLiked ? const Color(0xFFFF3B30) : const Color(0xFF8E7963),
-                  textColor: _isLiked ? const Color(0xFFFF3B30) : const Color(0xFF8E7963),
-                  onTap: _toggleLike,
-                ),
-                _actionItem(
-                  _isDownloaded ? Icons.download_done_rounded : Icons.download_rounded,
-                  _isDownloaded ? 'Downloaded' : 'Download',
-                  iconColor: _isDownloaded ? const Color(0xFF4CAF50) : const Color(0xFF8E7963),
-                  textColor: _isDownloaded ? const Color(0xFF4CAF50) : const Color(0xFF8E7963),
-                  onTap: _downloadTrack,
-                ),
-                _actionItem(
-                  _isFavourite ? Icons.playlist_add_check_rounded : Icons.playlist_add_rounded,
-                  _isFavourite ? 'Favourited' : 'Favourite',
-                  iconColor: _isFavourite ? const Color(0xFFFF7B0F) : const Color(0xFF8E7963),
-                  textColor: _isFavourite ? const Color(0xFFFF7B0F) : const Color(0xFF8E7963),
-                  onTap: _toggleFavourite,
-                ),
-                _actionItem(Icons.share_rounded, 'Share', onTap: _shareTrack),
-              ],
+            AnimatedBuilder(
+              animation: BhajanLibraryService.instance,
+              builder: (context, _) {
+                final lib = BhajanLibraryService.instance;
+                final liked = lib.isLiked(widget.currentTrack.id) || _isLiked;
+                final downloading = lib.isDownloading(widget.currentTrack.id);
+                final downloadPct = lib.getDownloadPercentage(widget.currentTrack.id);
+                final downloaded = lib.isDownloaded(widget.currentTrack.id);
+                final inAnyPlaylist = lib.playlists
+                    .any((p) => p.tracks.any((t) => t.id == widget.currentTrack.id));
+
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _actionItem(
+                      liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                      liked
+                          ? LocalizedApiHelper.parse('Liked')
+                          : LocalizedApiHelper.parse('Like'),
+                      iconColor: liked ? const Color(0xFFFF3B30) : const Color(0xFF8E7963),
+                      textColor: liked ? const Color(0xFFFF3B30) : const Color(0xFF8E7963),
+                      onTap: _toggleLike,
+                    ),
+                    if (downloading)
+                      _downloadProgressActionItem(downloadPct)
+                    else
+                      _actionItem(
+                        downloaded ? Icons.download_done_rounded : Icons.download_rounded,
+                        downloaded
+                            ? LocalizedApiHelper.parse('Downloaded')
+                            : LocalizedApiHelper.parse('Download'),
+                        iconColor: downloaded ? const Color(0xFF4CAF50) : const Color(0xFF8E7963),
+                        textColor: downloaded ? const Color(0xFF4CAF50) : const Color(0xFF8E7963),
+                        onTap: downloaded ? null : _downloadTrack,
+                      ),
+                    _actionItem(
+                      inAnyPlaylist ? Icons.playlist_add_check_rounded : Icons.playlist_add_rounded,
+                      LocalizedApiHelper.parse('Add to Playlist'),
+                      iconColor: inAnyPlaylist ? const Color(0xFFFF7B0F) : const Color(0xFF8E7963),
+                      textColor: inAnyPlaylist ? const Color(0xFFFF7B0F) : const Color(0xFF8E7963),
+                      onTap: _openAddToPlaylist,
+                    ),
+                    _actionItem(
+                      Icons.share_rounded,
+                      LocalizedApiHelper.parse('Share'),
+                      onTap: _shareTrack,
+                    ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 10),
             SliderTheme(
@@ -654,19 +595,19 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
             ),
             const SizedBox(height: 18),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.shuffle_rounded, size: 30, color: Color(0xFF2E2A36)),
                 IconButton(
                   icon: Icon(
                     Icons.skip_previous_rounded,
-                    size: 42,
+                    size: 44,
                     color: _previousTrack == null
                         ? const Color(0xFF2E2A36).withValues(alpha: 0.28)
                         : const Color(0xFF2E2A36),
                   ),
                   onPressed: _previousTrack == null ? null : () => _openTrack(_previousTrack!),
                 ),
+                const SizedBox(width: 32),
                 InkWell(
                   borderRadius: BorderRadius.circular(44),
                   onTap: _togglePlayback,
@@ -684,88 +625,89 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
                     ),
                   ),
                 ),
+                const SizedBox(width: 32),
                 IconButton(
                   icon: Icon(
                     Icons.skip_next_rounded,
-                    size: 42,
+                    size: 44,
                     color: _nextTrack == null
                         ? const Color(0xFF2E2A36).withValues(alpha: 0.28)
                         : const Color(0xFF2E2A36),
                   ),
                   onPressed: _nextTrack == null ? null : () => _openTrack(_nextTrack!),
                 ),
-                const Icon(Icons.repeat_rounded, size: 30, color: Color(0xFF2E2A36)),
               ],
             ),
-            const SizedBox(height: 54), // Moved autoplay toggle further down below the initial fold
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Autoplay',
-                  style: GoogleFonts.outfit(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
-                  ),
-                ),
-                Switch(
-                  value: _autoplay,
-                  activeThumbColor: Colors.white,
-                  activeTrackColor: const Color(0xFFFF7B0F),
-                  inactiveThumbColor: Colors.white,
-                  inactiveTrackColor: const Color(0xFFD8C4AF),
-                  onChanged: (value) => setState(() => _autoplay = value),
-                ),
-              ],
-            ),
-              if (_showUpNext) ...[
-                const SizedBox(height: 38),
-                Row(
-                  children: [
-                    Text(
-                      'Up Next',
-                      style: GoogleFonts.outfit(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF2E2A36),
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      'Swipe up to view',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: const Color(0xFF2E2A36).withValues(alpha: 0.45),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                ..._upNext.map(_buildUpNextItem),
-                if (_upNext.isEmpty)
+            const SizedBox(height: 28),
+            if (_showUpNext) ...[
+              const SizedBox(height: 16),
+              Row(
+                children: [
                   Text(
-                    'No upcoming tracks.',
+                    'Up Next',
                     style: GoogleFonts.outfit(
-                      fontSize: 14,
-                      color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF2E2A36),
                     ),
                   ),
-              ] else ...[
-                const SizedBox(height: 28),
-                Center(
-                  child: Text(
-                    'Scroll to show Up Next',
+                  const Spacer(),
+                  Text(
+                    'Swipe up to view',
                     style: GoogleFonts.outfit(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: const Color(0xFF2E2A36).withValues(alpha: 0.42),
+                      color: const Color(0xFF2E2A36).withValues(alpha: 0.45),
                     ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              ..._upNext.map(_buildUpNextItem),
+              if (_upNext.isEmpty)
+                Text(
+                  'No upcoming tracks.',
+                  style: GoogleFonts.outfit(
+                    fontSize: 14,
+                    color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
+                  ),
                 ),
-                const SizedBox(height: 34),
-              ],
+              const SizedBox(height: 36),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Autoplay',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
+                    ),
+                  ),
+                  Switch(
+                    value: _autoplay,
+                    activeThumbColor: Colors.white,
+                    activeTrackColor: const Color(0xFFFF7B0F),
+                    inactiveThumbColor: Colors.white,
+                    inactiveTrackColor: const Color(0xFFD8C4AF),
+                    onChanged: (value) => setState(() => _autoplay = value),
+                  ),
+                ],
+              ),
+            ] else ...[
+              const SizedBox(height: 20),
+              Center(
+                child: Text(
+                  'Scroll to show Up Next',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFF2E2A36).withValues(alpha: 0.42),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 40),
+            ],
             ],
           ),
         );
@@ -932,10 +874,54 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
     );
   }
 
+  Widget _downloadProgressActionItem(int percentage) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+      child: Column(
+        children: [
+          SizedBox(
+            width: 24,
+            height: 24,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                CircularProgressIndicator(
+                  value: (percentage / 100.0).clamp(0.02, 1.0),
+                  strokeWidth: 2.4,
+                  backgroundColor: const Color(0xFFEBD7C2),
+                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFF7B0F)),
+                ),
+                const Icon(
+                  Icons.arrow_downward_rounded,
+                  size: 12,
+                  color: Color(0xFFFF7B0F),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          SizedBox(
+            width: 74,
+            child: Text(
+              '$percentage%',
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFFFF7B0F),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _actionItem(
     IconData icon,
     String label, {
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
     Color? iconColor,
     Color? textColor,
   }) {

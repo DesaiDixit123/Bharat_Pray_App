@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/localization/localization_constants.dart';
 import 'festival_detail_screen.dart';
 
 class UtsavScreen extends StatelessWidget {
@@ -44,7 +45,7 @@ class UtsavScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Utsav Vibes',
+          SpiritualTerms.get('festivals'),
           style: GoogleFonts.outfit(
             color: const Color(0xFF2E2A36),
             fontWeight: FontWeight.bold,
