@@ -661,18 +661,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_note_rounded, color: Color(0xFFFF7700), size: 28),
-            onPressed: () async {
-              final updated = await Navigator.push<bool>(
-                context,
-                MaterialPageRoute(builder: (context) => const EditProfileScreen()),
-              );
-              if (updated == true) _loadProfileData();
-            },
-          ),
-        ],
       ),
       body: RefreshIndicator(
         onRefresh: _loadProfileData,

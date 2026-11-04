@@ -587,7 +587,7 @@ class _YatraScreenState extends State<YatraScreen> {
           ),
           const SizedBox(height: 16),
           SizedBox(
-            height: 305,
+            height: 315,
             width: double.infinity,
             child: RefreshIndicator(
               onRefresh: () => _fetchYatras(forceRefresh: true),
@@ -675,211 +675,231 @@ class _YatraScreenState extends State<YatraScreen> {
   }
 
   Widget _buildYatraCard(YatraModel item, {required bool isPopular}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // 1. The Card Container (333 x 265)
-        Container(
-          width: 333,
-          height: 265,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(32),
-              topRight: Radius.circular(32),
-              bottomLeft: Radius.circular(10),
-              bottomRight: Radius.circular(10),
-            ),
-            border: Border.all(color: const Color(0xFFEFE6DB), width: 1.0),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
+    return Container(
+      width: 333,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFEFE6DB), width: 1.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
-          child: GestureDetector(
-            onTap: () {
-              if (isPopular) {
-                _openStartYatraOverview(item);
-              } else {
-                _openContinueYatra(item);
-              }
-            },
-            child: ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(32),
-                topRight: Radius.circular(32),
-                bottomLeft: Radius.circular(10),
-                bottomRight: Radius.circular(10),
+        ],
+      ),
+      child: GestureDetector(
+        onTap: () {
+          if (isPopular) {
+            _openStartYatraOverview(item);
+          } else {
+            _openContinueYatra(item);
+          }
+        },
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Top Image Section (333 x 175)
+              Stack(
+                children: [
+                  SizedBox(
+                    width: 333,
+                    height: 175,
+                    child: item.image.startsWith('http')
+                        ? Image.network(
+                            item.image,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Image.asset(
+                              'assets/images/somnath_temple_new.png',
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : Image.asset(
+                            item.image.isNotEmpty ? item.image : 'assets/images/somnath_temple_new.png',
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Image.asset(
+                              'assets/images/somnath_temple_new.png',
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                  ),
+                  // Dark bottom gradient overlay (Figma Match)
+                  Positioned.fill(
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [
+                            Color(0xFF000000),
+                            Color(0x00000000),
+                            Color(0x00000000),
+                          ],
+                          stops: [0.0, 0.6337, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // "Popular Yatra" / "Continue Yatra" Tag
+                  Positioned(
+                    top: 16,
+                    right: 16,
+                    height: 20,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF7A00).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(9999),
+                        border: Border.all(color: const Color(0xFFFF7A00), width: 1.0),
+                      ),
+                      alignment: Alignment.center,
+                      child: Center(
+                        child: Text(
+                          item.tag,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
+                            color: const Color(0xFFFF7A00),
+                            fontSize: 8,
+                            fontWeight: FontWeight.w600,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Title on bottom left
+                  Positioned(
+                    bottom: 12,
+                    left: 16,
+                    child: Text(
+                      item.title,
+                      style: GoogleFonts.outfit(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top Image Section (333 x 200)
-                Stack(
+              
+              // Bottom Details Section (Stats)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    SizedBox(
-                      width: 333,
-                      height: 200,
-                      child: item.image.startsWith('http')
-                          ? Image.network(
-                              item.image,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  Image.asset(
-                                'assets/images/somnath_temple_new.png',
-                                fit: BoxFit.cover,
-                              ),
-                            )
-                          : Image.asset(
-                              item.image.isNotEmpty ? item.image : 'assets/images/somnath_temple_new.png',
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  Image.asset(
-                                'assets/images/somnath_temple_new.png',
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                    ),
-                    // Dark bottom gradient overlay (Figma Match)
-                    Positioned.fill(
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.bottomCenter,
-                            end: Alignment.topCenter,
-                            colors: [
-                              Color(0xFF000000),
-                              Color(0x00000000),
-                              Color(0x00000000),
-                            ],
-                            stops: [0.0, 0.6337, 1.0],
-                          ),
-                        ),
-                      ),
-                    ),
-                    // "Popular Yatra" / "Continue Yatra" Tag
-                    Positioned(
-                      top: 20,
-                      right: 16,
-                      height: 20,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFF7A00).withValues(alpha: 0.08), // var(--color-orange-50) translucent background
-                          borderRadius: BorderRadius.circular(9999),
-                          border: Border.all(color: const Color(0xFFFF7A00), width: 1.0),
-                        ),
-                        alignment: Alignment.center,
-                        child: Center(
-                          child: Text(
-                            item.tag,
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.poppins(
-                              color: const Color(0xFFFF7A00),
-                              fontSize: 8,
-                              fontWeight: FontWeight.w600, // SemiBold
-                              height: 1.5,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Title on bottom left
-                    Positioned(
-                      bottom: 12,
-                      left: 16,
-                      child: Text(
-                        item.title,
-                        style: GoogleFonts.outfit(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                    _buildStatColumn(_pinSvg, item.distance),
+                    _buildStatColumn(_footprintsSvg, item.steps),
+                    _buildStatColumn(_clockSvg, item.duration),
+                    _buildStatColumn(_peopleSvg, item.groupSize),
                   ],
                 ),
-                
-                // Bottom Details Section (65px remaining height)
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildStatColumn(_pinSvg, item.distance),
-                        _buildStatColumn(_footprintsSvg, item.steps),
-                        _buildStatColumn(_clockSvg, item.duration),
-                        _buildStatColumn(_peopleSvg, item.groupSize),
-                      ],
+              ),
+
+              // Divider inside card
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Divider(
+                  height: 1,
+                  thickness: 0.8,
+                  color: Color(0xFFF3ECE4),
+                ),
+              ),
+
+              // Progress Bar (Only shown for Continue Yatra)
+              if (!isPopular) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Progress',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF8C827A),
+                        ),
+                      ),
+                      Text(
+                        '${(item.progress * 100).toInt()}%',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFFFF7A00),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      height: 6,
+                      width: double.infinity,
+                      color: const Color(0xFFEFE6DB),
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: item.progress.clamp(0.0, 1.0),
+                        child: Container(
+                          color: const Color(0xFFFF7A00),
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ],
-            ),
-          ),
-        ),
-      ),
-        
-        const SizedBox(height: 12), // Spacing: 12px
-        
-        // 2. Below-card progress & action button row (height 28)
-        SizedBox(
-          width: 333,
-          height: 28,
-          child: Row(
-            children: [
-              // Progress Bar
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(3),
-                  child: Container(
-                    height: 6,
-                    color: const Color(0xFFEFE6DB),
-                    child: FractionallySizedBox(
-                      alignment: Alignment.centerLeft,
-                      widthFactor: item.progress,
-                      child: Container(
-                        color: const Color(0xFFFF7A00),
+
+              // Full-width Action Button cleanly centered across the card
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 38,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      if (isPopular) {
+                        _openStartYatraOverview(item);
+                      } else {
+                        _openContinueYatra(item);
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF7A00),
+                      elevation: 0,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
                       ),
+                      padding: EdgeInsets.zero,
                     ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              // Button
-              GestureDetector(
-                onTap: () {
-                  if (isPopular) {
-                    _openStartYatraOverview(item);
-                  } else {
-                    _openContinueYatra(item);
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFF7A00),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFFF7A00).withValues(alpha: 0.2),
-                        blurRadius: 6,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Text(
-                    isPopular ? 'Start Yatra' : 'Continue Yatra',
-                    style: GoogleFonts.outfit(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          isPopular ? 'Start Yatra' : 'Continue Yatra',
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Icon(
+                          Icons.arrow_forward_rounded,
+                          size: 15,
+                          color: Colors.white,
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -887,7 +907,7 @@ class _YatraScreenState extends State<YatraScreen> {
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 

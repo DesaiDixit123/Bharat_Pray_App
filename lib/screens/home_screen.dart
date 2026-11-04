@@ -584,69 +584,42 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             _buildDynamicHeader(),
 
-            // 2. Search gods, temples row
+            // 2. Search gods, temples bar (full width)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(30),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.03),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                        border: Border.all(
-                          color: const Color(0xFFEFE6DB),
-                          width: 1.0,
-                        ),
-                      ),
-                      child: TextField(
-                        style: GoogleFonts.outfit(color: const Color(0xFF2E2A36)),
-                        decoration: InputDecoration(
-                          hintText: 'Search gods, temples, bhajans...',
-                          hintStyle: GoogleFonts.outfit( // Corrected from withValues to withOpacity
-                            color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
-                            fontSize: 14,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.search_rounded,
-                            color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 13),
-                        ),
-                      ),
+              child: Container(
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
                     ),
+                  ],
+                  border: Border.all(
+                    color: const Color(0xFFEFE6DB),
+                    width: 1.0,
                   ),
-                  const SizedBox(width: 12),
-                  // Orange Tune Filter Button
-                  Container(
-                    height: 48,
-                    width: 48,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFF7700),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFFFF7700).withValues(alpha: 0.3),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+                ),
+                child: TextField(
+                  style: GoogleFonts.outfit(color: const Color(0xFF2E2A36)),
+                  decoration: InputDecoration(
+                    hintText: 'Search gods, temples, bhajans...',
+                    hintStyle: GoogleFonts.outfit(
+                      color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
+                      fontSize: 14,
                     ),
-                    child: IconButton(
-                      icon: const Icon(Icons.tune_rounded, color: Colors.white, size: 22),
-                      onPressed: () {},
+                    prefixIcon: Icon(
+                      Icons.search_rounded,
+                      color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
                     ),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 13),
                   ),
-                ],
+                ),
               ),
             ),
 
@@ -777,7 +750,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   SizedBox(
                     width: 178,
                     child: _buildDeityCard(
-                      imageUrl: 'assets/images/bhagavad_gita.png',
+                      imageUrl: 'assets/images/bhagavad_gita_card.png',
                       height: 208,
                       onTap: () => Navigator.push(
                         context,
