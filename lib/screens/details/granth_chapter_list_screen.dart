@@ -1,7 +1,9 @@
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/api_service.dart';
 import '../../services/saved_items_service.dart';
@@ -31,7 +33,24 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
   @override
   void initState() {
     super.initState();
+    _saveRecentGranthSelection();
     _loadChapters();
+  }
+
+  Future<void> _saveRecentGranthSelection() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final title = (widget.granth['name'] ?? widget.granth['title'] ?? '').toString().trim();
+      final rawImg = (widget.granth['coverImage'] ?? widget.granth['image'] ?? '').toString().trim();
+      if (title.isNotEmpty) {
+        await prefs.setString('recent_granth_title', title);
+      }
+      if (rawImg.isNotEmpty) {
+        await prefs.setString('recent_granth_image', ApiService.resolveImageUrl(rawImg));
+      }
+      await prefs.setString('recent_granth_json', jsonEncode(widget.granth));
+      await prefs.setString('recent_granth_category_json', jsonEncode(widget.category));
+    } catch (_) {}
   }
 
   Future<void> _loadChapters() async {

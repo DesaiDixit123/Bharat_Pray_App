@@ -334,6 +334,22 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
   }
 
   void _openJapDetail(JapConfig entry) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('last_active_jap_id', entry.id);
+      await prefs.setString('last_jap_id', entry.id);
+      await prefs.setString('last_jap_title', entry.name);
+      await prefs.setString(
+        'last_jap_image',
+        entry.thumbnailUrl.isNotEmpty ? entry.thumbnailUrl : entry.darshanImageUrl,
+      );
+      await prefs.setString('last_jap_shlok', entry.shlokText);
+      await prefs.setString('last_jap_audio', entry.shlokAudioUrl ?? '');
+      await prefs.setInt('last_jap_target', entry.targetCount);
+      await prefs.setString('last_jap_shape', entry.particleShape ?? '');
+      await prefs.setBool('last_jap_custom', entry.isCustom);
+    } catch (_) {}
+
     final bool isCinematic = entry.name.toLowerCase().contains('ram') ||
         entry.shlokText.toLowerCase().contains('राम') ||
         entry.name.toLowerCase().contains('radha') ||

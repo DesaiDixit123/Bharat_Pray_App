@@ -49,6 +49,10 @@ class BhajanAudioService {
   int _currentIndex = -1;
   String _activeToken = '';
   int _lastNotificationPositionSec = -1;
+  int _lastSavedPositionSec = -1;
+  final Map<String, Duration> _savedPositions = {};
+  final Map<String, Duration> _savedDurations = {};
+  final Map<String, double> _savedProgress = {};
 
   List<BhajanTrackItem> get queue => List.unmodifiable(_queue);
   int get currentIndex => _currentIndex;
@@ -78,6 +82,7 @@ class BhajanAudioService {
     );
 
     _initNotificationChannel();
+    _loadPersistedPositionsAndProgress();
 
     _audioPlayer.onPlayerStateChanged.listen((state) {
       playerStateNotifier.value = state;
@@ -86,16 +91,108 @@ class BhajanAudioService {
 
     _audioPlayer.onPositionChanged.listen((pos) {
       positionNotifier.value = pos;
+      final track = currentTrackNotifier.value;
+      final dur = durationNotifier.value;
+      if (track != null && track.id.isNotEmpty && pos.inMilliseconds > 500) {
+        _savedPositions[track.id] = pos;
+        if (dur.inMilliseconds > 0) {
+          _savedDurations[track.id] = dur;
+          _savedProgress[track.id] = (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0);
+        }
+        if ((pos.inSeconds - _lastSavedPositionSec).abs() >= 2) {
+          _lastSavedPositionSec = pos.inSeconds;
+          _persistTrackPosition(track.id, pos, dur);
+        }
+      }
     });
 
     _audioPlayer.onDurationChanged.listen((dur) {
       durationNotifier.value = dur;
+      final track = currentTrackNotifier.value;
+      final pos = positionNotifier.value;
+      if (track != null && track.id.isNotEmpty && dur.inMilliseconds > 0) {
+        _savedDurations[track.id] = dur;
+        if (pos.inMilliseconds > 0) {
+          _savedProgress[track.id] = (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0);
+        }
+      }
       _updateMediaNotification();
     });
 
     _audioPlayer.onPlayerComplete.listen((_) {
+      final finished = currentTrackNotifier.value;
+      if (finished != null && finished.id.isNotEmpty) {
+        _savedPositions.remove(finished.id);
+        _savedDurations.remove(finished.id);
+        _savedProgress.remove(finished.id);
+        _clearPersistedTrackPosition(finished.id);
+      }
       next();
     });
+  }
+
+  Future<void> _loadPersistedPositionsAndProgress() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      for (final k in prefs.getKeys()) {
+        if (k.startsWith('bhajan_saved_pos_ms_')) {
+          final id = k.replaceFirst('bhajan_saved_pos_ms_', '');
+          final ms = prefs.getInt(k) ?? 0;
+          if (id.isNotEmpty && ms > 0) {
+            _savedPositions[id] = Duration(milliseconds: ms);
+          }
+        } else if (k.startsWith('bhajan_saved_prog_')) {
+          final id = k.replaceFirst('bhajan_saved_prog_', '');
+          final prog = prefs.getDouble(k) ?? 0.0;
+          if (id.isNotEmpty && prog > 0) {
+            _savedProgress[id] = prog.clamp(0.0, 1.0);
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  double getSavedProgressSync(String trackId) {
+    if (trackId.isEmpty) return 0.0;
+    return (_savedProgress[trackId] ?? 0.0).clamp(0.0, 1.0);
+  }
+
+  Future<void> _persistTrackPosition(String trackId, Duration pos, [Duration? dur]) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('bhajan_saved_pos_ms_$trackId', pos.inMilliseconds);
+      final effectiveDur = dur ?? _savedDurations[trackId] ?? durationNotifier.value;
+      if (effectiveDur.inMilliseconds > 0) {
+        final prog = (pos.inMilliseconds / effectiveDur.inMilliseconds).clamp(0.0, 1.0);
+        _savedProgress[trackId] = prog;
+        await prefs.setDouble('bhajan_saved_prog_$trackId', prog);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _clearPersistedTrackPosition(String trackId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('bhajan_saved_pos_ms_$trackId');
+      await prefs.remove('bhajan_saved_prog_$trackId');
+    } catch (_) {}
+  }
+
+  Future<Duration> getSavedPosition(String trackId) async {
+    if (trackId.isEmpty) return Duration.zero;
+    if (_savedPositions.containsKey(trackId)) {
+      return _savedPositions[trackId]!;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ms = prefs.getInt('bhajan_saved_pos_ms_$trackId') ?? 0;
+      if (ms > 0) {
+        final d = Duration(milliseconds: ms);
+        _savedPositions[trackId] = d;
+        return d;
+      }
+    } catch (_) {}
+    return Duration.zero;
   }
 
   void _setupIsolatePort() {
@@ -192,10 +289,13 @@ class BhajanAudioService {
   }
 
   /// Plays a track. If the same track is paused, it simply resumes.
+  /// If [resumeFromSavedPosition] is true (or if a saved position exists for this track),
+  /// it seeks to the saved position so playback continues where it left off.
   Future<void> playTrack(
     BhajanTrackItem track, {
     List<BhajanTrackItem>? queue,
     String? token,
+    bool resumeFromSavedPosition = true,
   }) async {
     if (token != null && token.isNotEmpty) {
       _activeToken = token;
@@ -234,9 +334,18 @@ class BhajanAudioService {
       }
     }
 
+    // Save position of previous track before switching
+    final prevTrack = currentTrackNotifier.value;
+    if (prevTrack != null && prevTrack.id.isNotEmpty && positionNotifier.value.inSeconds > 1) {
+      _savedPositions[prevTrack.id] = positionNotifier.value;
+      _persistTrackPosition(prevTrack.id, positionNotifier.value);
+    }
+
+    final savedPos = resumeFromSavedPosition ? await getSavedPosition(track.id) : Duration.zero;
+
     currentTrackNotifier.value = track;
-    positionNotifier.value = Duration.zero;
-    durationNotifier.value = Duration.zero;
+    positionNotifier.value = savedPos;
+    durationNotifier.value = _savedDurations[track.id] ?? Duration.zero;
     isBufferingNotifier.value = true;
 
     try {
@@ -245,6 +354,9 @@ class BhajanAudioService {
       if (localAudioPath != null && File(localAudioPath).existsSync()) {
         await _audioPlayer.stop();
         await _audioPlayer.setSource(DeviceFileSource(localAudioPath));
+        if (savedPos.inSeconds > 1) {
+          await _audioPlayer.seek(savedPos);
+        }
         playerStateNotifier.value = PlayerState.playing;
         await _audioPlayer.resume();
         isBufferingNotifier.value = false;
@@ -258,6 +370,9 @@ class BhajanAudioService {
       if (rawUrl.isNotEmpty && !rawUrl.startsWith('http') && File(rawUrl).existsSync()) {
         await _audioPlayer.stop();
         await _audioPlayer.setSource(DeviceFileSource(rawUrl));
+        if (savedPos.inSeconds > 1) {
+          await _audioPlayer.seek(savedPos);
+        }
         playerStateNotifier.value = PlayerState.playing;
         await _audioPlayer.resume();
         isBufferingNotifier.value = false;
@@ -278,6 +393,9 @@ class BhajanAudioService {
 
       await _audioPlayer.stop();
       await _audioPlayer.setSource(UrlSource(streamUrl));
+      if (savedPos.inSeconds > 1) {
+        await _audioPlayer.seek(savedPos);
+      }
       playerStateNotifier.value = PlayerState.playing;
       await _audioPlayer.resume();
       isBufferingNotifier.value = false;
@@ -298,6 +416,11 @@ class BhajanAudioService {
       final pos = await _audioPlayer.getCurrentPosition();
       if (pos != null) {
         positionNotifier.value = pos;
+        final track = currentTrackNotifier.value;
+        if (track != null && track.id.isNotEmpty && pos.inSeconds > 1) {
+          _savedPositions[track.id] = pos;
+          _persistTrackPosition(track.id, pos);
+        }
       }
     } catch (_) {}
     await _audioPlayer.pause();
@@ -349,10 +472,30 @@ class BhajanAudioService {
   Future<void> seek(Duration targetPosition) async {
     await _audioPlayer.seek(targetPosition);
     positionNotifier.value = targetPosition;
+    final track = currentTrackNotifier.value;
+    final dur = durationNotifier.value;
+    if (track != null && track.id.isNotEmpty) {
+      _savedPositions[track.id] = targetPosition;
+      if (dur.inMilliseconds > 0) {
+        _savedProgress[track.id] = (targetPosition.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0);
+      }
+      _persistTrackPosition(track.id, targetPosition, dur);
+    }
     _updateMediaNotification();
   }
 
   Future<void> stop() async {
+    final track = currentTrackNotifier.value;
+    final pos = positionNotifier.value;
+    final dur = durationNotifier.value;
+    if (track != null && track.id.isNotEmpty && pos.inMilliseconds > 500) {
+      _savedPositions[track.id] = pos;
+      if (dur.inMilliseconds > 0) {
+        _savedDurations[track.id] = dur;
+        _savedProgress[track.id] = (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0);
+      }
+      await _persistTrackPosition(track.id, pos, dur);
+    }
     await _audioPlayer.stop();
     currentTrackNotifier.value = null;
     positionNotifier.value = Duration.zero;

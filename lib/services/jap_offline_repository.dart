@@ -159,6 +159,10 @@ class JapOfflineRepository {
       // 2. Mirror legacy keys for backward compatibility
       await prefs.setInt('$_prefixCount${record.japId}', record.currentCount);
       await prefs.setInt('$_prefixMalas${record.japId}', record.completedMalas);
+      if (record.currentCount > 0) {
+        final baseId = record.japId.replaceAll(RegExp(r'_(jal|dhup|prakash|pushp)$'), '');
+        await prefs.setString('last_active_jap_id', baseId);
+      }
       if (record.isDirty) {
         await prefs.setBool('$_prefixDirty${record.japId}', true);
       }
