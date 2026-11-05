@@ -736,6 +736,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
   Widget build(BuildContext context) {
     final imageUrl = _resolveImageUrl(widget.imageUrl);
     final isHorizontal = _isLandscape || MediaQuery.of(context).orientation == Orientation.landscape;
+    final isOfflineView = (_isOffline || _isError) && !_isLoading;
 
     return PopScope(
       canPop: !isHorizontal,
@@ -746,15 +747,15 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
         }
       },
       child: AnnotatedRegion<SystemUiOverlayStyle>(
-        value: const SystemUiOverlayStyle(
+        value: SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
-          statusBarIconBrightness: Brightness.light,
-          statusBarBrightness: Brightness.dark,
-          systemNavigationBarColor: Colors.black,
-          systemNavigationBarIconBrightness: Brightness.light,
+          statusBarIconBrightness: isOfflineView ? Brightness.dark : Brightness.light,
+          statusBarBrightness: isOfflineView ? Brightness.light : Brightness.dark,
+          systemNavigationBarColor: isOfflineView ? const Color(0xFFFFE8D6) : Colors.black,
+          systemNavigationBarIconBrightness: isOfflineView ? Brightness.dark : Brightness.light,
         ),
         child: Scaffold(
-          backgroundColor: Colors.black,
+          backgroundColor: isOfflineView ? const Color(0xFFFFE8D6) : Colors.black,
           body: _isLoading
               ? const Center(
                   child: CircularProgressIndicator(
@@ -1670,7 +1671,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
     final imageUrl = _resolveImageUrl(widget.imageUrl);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0E13),
+      backgroundColor: const Color(0xFFFFE8D6),
       body: SafeArea(
         child: Column(
           children: [
@@ -1682,15 +1683,23 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
                     child: Container(
-                      padding: const EdgeInsets.all(10),
+                      width: 40,
+                      height: 40,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.08),
+                        color: Colors.white,
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                        border: Border.all(color: const Color(0xFFC8A882), width: 1.0),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF8A6844).withValues(alpha: 0.1),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       child: const Icon(
                         Icons.arrow_back_ios_new_rounded,
-                        color: Colors.white,
+                        color: Color(0xFF2E2A36),
                         size: 18,
                       ),
                     ),
@@ -1704,7 +1713,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                           widget.templeName.isNotEmpty ? widget.templeName : 'Temple Darshan',
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.outfit(
-                            color: Colors.white,
+                            color: const Color(0xFF2E2A36),
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1715,7 +1724,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                               width: 8,
                               height: 8,
                               decoration: const BoxDecoration(
-                                color: Colors.orangeAccent,
+                                color: Color(0xFFFF7700),
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -1723,8 +1732,9 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                             Text(
                               'Live Stream Offline',
                               style: GoogleFonts.outfit(
-                                color: Colors.white60,
+                                color: const Color(0xFF8C7E72),
                                 fontSize: 12,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
@@ -1739,22 +1749,21 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
             Expanded(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 child: Column(
                   children: [
-                    const SizedBox(height: 10),
                     // 2. Temple Banner Card
                     Container(
                       height: 220,
                       width: double.infinity,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                        border: Border.all(color: const Color(0xFFEBD7C2)),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.5),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
+                            color: const Color(0xFF8A6844).withValues(alpha: 0.12),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
                           ),
                         ],
                       ),
@@ -1785,7 +1794,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                                     end: Alignment.bottomCenter,
                                     colors: [
                                       Colors.transparent,
-                                      Colors.black.withValues(alpha: 0.85),
+                                      Colors.black.withValues(alpha: 0.7),
                                     ],
                                   ),
                                 ),
@@ -1809,7 +1818,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                                       children: [
                                         const Icon(
                                           Icons.sensors_off_rounded,
-                                          color: Colors.orangeAccent,
+                                          color: Color(0xFFFF8A00),
                                           size: 14,
                                         ),
                                         const SizedBox(width: 6),
@@ -1833,15 +1842,22 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                       ),
                     ),
 
-                    const SizedBox(height: 28),
+                    const SizedBox(height: 24),
 
                     // 3. Informative Spiritual Card
                     Container(
                       padding: const EdgeInsets.all(22),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1B1924),
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: const Color(0xFF2C283B)),
+                        border: Border.all(color: const Color(0xFFEBD7C2)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF8A6844).withValues(alpha: 0.08),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
                       child: Column(
                         children: [
@@ -1876,7 +1892,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                             'Live Darshan Currently Offline',
                             textAlign: TextAlign.center,
                             style: GoogleFonts.outfit(
-                              color: Colors.white,
+                              color: const Color(0xFF2E2A36),
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
                             ),
@@ -1886,13 +1902,13 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                             'The admin is currently offline. Live Aarti and Darshan stream for ${widget.templeName.isNotEmpty ? widget.templeName : "this temple"} will resume during scheduled temple timings.',
                             textAlign: TextAlign.center,
                             style: GoogleFonts.outfit(
-                              color: Colors.white70,
+                              color: const Color(0xFF70655E),
                               fontSize: 13,
                               height: 1.5,
                             ),
                           ),
                           const SizedBox(height: 20),
-                          const Divider(color: Colors.white10),
+                          const Divider(color: Color(0xFFF0DEC8)),
                           const SizedBox(height: 16),
 
                           // Timings Info Grid
@@ -1902,23 +1918,23 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                                 child: Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.04),
+                                    color: const Color(0xFFFFF8F2),
                                     borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                                    border: Border.all(color: const Color(0xFFF3DEC9)),
                                   ),
                                   child: Column(
                                     children: [
-                                      const Icon(Icons.wb_sunny_rounded, color: Color(0xFFFFB300), size: 20),
+                                      const Icon(Icons.wb_sunny_rounded, color: Color(0xFFFF7700), size: 20),
                                       const SizedBox(height: 6),
                                       Text(
                                         'Morning Aarti',
-                                        style: GoogleFonts.outfit(color: Colors.white60, fontSize: 11),
+                                        style: GoogleFonts.outfit(color: const Color(0xFF8C7E72), fontSize: 11),
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
                                         '06:00 AM',
                                         style: GoogleFonts.outfit(
-                                          color: Colors.white,
+                                          color: const Color(0xFF2E2A36),
                                           fontSize: 13,
                                           fontWeight: FontWeight.bold,
                                         ),
@@ -1932,9 +1948,9 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                                 child: Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.04),
+                                    color: const Color(0xFFFFF8F2),
                                     borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                                    border: Border.all(color: const Color(0xFFF3DEC9)),
                                   ),
                                   child: Column(
                                     children: [
@@ -1942,13 +1958,13 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                                       const SizedBox(height: 6),
                                       Text(
                                         'Evening Aarti',
-                                        style: GoogleFonts.outfit(color: Colors.white60, fontSize: 11),
+                                        style: GoogleFonts.outfit(color: const Color(0xFF8C7E72), fontSize: 11),
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
                                         '06:30 PM',
                                         style: GoogleFonts.outfit(
-                                          color: Colors.white,
+                                          color: const Color(0xFF2E2A36),
                                           fontSize: 13,
                                           fontWeight: FontWeight.bold,
                                         ),
@@ -1974,8 +1990,8 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFFF7A00),
                           foregroundColor: Colors.white,
-                          elevation: 4,
-                          shadowColor: const Color(0xFFFF7A00).withValues(alpha: 0.4),
+                          elevation: 2,
+                          shadowColor: const Color(0xFFFF7A00).withValues(alpha: 0.35),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(26),
                           ),
@@ -2013,7 +2029,8 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                       height: 50,
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: Colors.white.withValues(alpha: 0.2), width: 1.0),
+                          backgroundColor: Colors.white,
+                          side: const BorderSide(color: Color(0xFFFF7A00), width: 1.2),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(25),
                           ),
@@ -2033,14 +2050,14 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.notifications_active_outlined, color: Colors.white70, size: 18),
+                            const Icon(Icons.notifications_active_outlined, color: Color(0xFFFF7A00), size: 18),
                             const SizedBox(width: 8),
                             Text(
                               'Notify Me When Live',
                               style: GoogleFonts.outfit(
-                                color: Colors.white,
+                                color: const Color(0xFFFF7A00),
                                 fontSize: 14,
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ],

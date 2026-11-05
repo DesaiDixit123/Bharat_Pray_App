@@ -339,28 +339,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                   ),
                                   textAlign: TextAlign.center,
                                 ),
-                                const SizedBox(height: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    _generatedOtp.isNotEmpty
-                                        ? '⚡ Console OTP: $_generatedOtp (or 123456)'
-                                        : '⚡ Test / Console OTP: 123456',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: const Color(0xFFFBBF24),
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
+
 
                                 const SizedBox(height: 24),
 

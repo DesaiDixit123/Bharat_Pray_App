@@ -247,9 +247,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                                           ScaffoldMessenger.of(context).showSnackBar(
                                             SnackBar(
                                               content: Text(
-                                                receivedOtp != null
-                                                    ? 'OTP generated! Console / Test OTP: $receivedOtp'
-                                                    : 'OTP sent! (If SMS delayed, use 123456)',
+                                                'OTP sent successfully to $phone.',
                                                 style: GoogleFonts.outfit(color: Colors.white),
                                               ),
                                               backgroundColor: const Color(0xFFFF7A00),

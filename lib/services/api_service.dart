@@ -15,8 +15,8 @@ class ApiService {
   static const bool isLive = false;
 
   // Local backend configuration:
-  // Active Wi-Fi IP = 192.168.29.227, Port = 3020
-  static const String _localIp = '192.168.29.227';
+  // Active Wi-Fi IP = 192.168.29.74, Port = 3020
+  static const String _localIp = '192.168.29.74';
   static const int _localPort = 3020;
 
   static String get baseUrl {
@@ -117,7 +117,7 @@ class ApiService {
 
   static final List<String> _fallbackHosts = isLive
       ? const ['api.bharatpray.com']
-      : const ['192.168.29.227', '192.168.29.209', '127.0.0.1', '10.0.2.2', 'api.bharatpray.com'];
+      : const ['192.168.29.74', '192.168.29.227', '192.168.29.209', '127.0.0.1', '10.0.2.2', 'api.bharatpray.com'];
 
   static Map<String, String> _withDefaultHeaders([Map<String, String>? headers]) {
     final langCode = LanguageManager.instance.currentLanguageCode;

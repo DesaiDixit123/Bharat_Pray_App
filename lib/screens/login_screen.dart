@@ -79,11 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              receivedOtp != null
-                  ? 'OTP generated! Console / Test OTP: $receivedOtp'
-                  : (_isPhoneLogin
-                      ? 'OTP sent! (If SMS delayed, use 123456)'
-                      : 'OTP sent successfully to $contact.'),
+              'OTP sent successfully to $contact.',
               style: GoogleFonts.outfit(color: Colors.white),
             ),
             backgroundColor: const Color(0xFFFF7A00),
@@ -307,7 +303,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       const Icon(Icons.language_rounded, color: Color(0xFFFF7700), size: 16),
                                       const SizedBox(width: 6),
                                       Text(
-                                        '🌐 ${LanguageManager.instance.currentLanguageModel.nativeName}',
+                                        LanguageManager.instance.currentLanguageModel.nativeName,
                                         style: GoogleFonts.outfit(
                                           color: Colors.white,
                                           fontWeight: FontWeight.bold,
