@@ -127,6 +127,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
         search: _searchController.text,
         categoryId: _selectedCategoryId,
         page: page,
+        limit: 100,
       );
 
       if (mounted) {
@@ -234,11 +235,15 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
   }
 
   Widget _buildGridDeityCard(BuildContext context, dynamic deity) {
-    final String imagePath = _resolveImageUrl(deity['image']);
+    final String rawImg = (deity['image'] ??
+            deity['temple']?['thumbnailImage'] ??
+            deity['temple']?['bannerImage'] ??
+            deity['bannerImage'] ??
+            '')
+        .toString();
+    final String imagePath = _resolveImageUrl(rawImg);
     final String deityName = LocalizedApiHelper.parse(deity['name'], defaultValue: 'Deity');
     final String templeName = (deity['temple'] != null) ? LocalizedApiHelper.parse(deity['temple']['name']) : '';
-    // Backend /user/darshan/list now only returns darshans with is_live_status: true.
-    // getDetails expects darshan_id = darshans._id (NOT livedarshans._id).
     final String liveDarshanId = (deity['darshan_id'] ?? deity['_id'])?.toString() ?? '';
 
     return GestureDetector(
@@ -307,10 +312,11 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                   children: [
                     Text(
                       deityName,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.outfit(
-                        fontSize: 14,
+                        fontSize: 13,
+                        height: 1.2,
                         fontWeight: FontWeight.bold,
                         color: const Color(0xFF2E2A36),
                       ),
@@ -374,7 +380,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
   Widget build(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
     final double cardWidth = (screenWidth - 40 - 12) / 2;
-    final double childAspectRatio = cardWidth / 233;
+    final double childAspectRatio = cardWidth / 252;
 
     return RefreshIndicator(
       color: const Color(0xFFFF7A00),
@@ -572,7 +578,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                     : _deities.isEmpty
                         ? Center(
                             child: Text(
-                              'No live Darshans found.',
+                              'No Darshans found.',
                               style: GoogleFonts.outfit(
                                 fontSize: 16,
                                 color: const Color(0xFF2E2A36).withValues(alpha: 0.5),

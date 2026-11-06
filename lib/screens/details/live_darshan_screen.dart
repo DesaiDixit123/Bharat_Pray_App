@@ -78,6 +78,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
   // Sockets / Timers
   IO.Socket? _socket;
   Timer? _heartbeatTimer;
+  bool _isSendingComment = false;
 
   @override
   void initState() {
@@ -89,7 +90,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
   Future<void> _loadProfileAndInit() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _token = prefs.getString('auth_token') ?? '';
+      _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
       _userName = prefs.getString('user_name') ?? prefs.getString('name') ?? 'Devotee';
       _userAvatar = prefs.getString('user_avatar') ?? prefs.getString('profile_pic') ?? '';
 
@@ -302,17 +303,25 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
     final baseSocketUrl = ApiService.baseUrl.replaceAll('/user', ''); // https://api.bharatpray.com
     
     _socket = IO.io(baseSocketUrl, IO.OptionBuilder()
-      .setTransports(['websocket'])
+      .setTransports(['websocket', 'polling'])
+      .setAuth({'token': _token})
       .setQuery({'token': _token})
+      .enableAutoConnect()
+      .enableReconnection()
+      .setReconnectionDelay(2000)
       .build());
 
     _socket!.onConnect((_) {
-      debugPrint('Socket connected successfully');
+      debugPrint('Live Darshan socket connected successfully');
       _socket!.emit('join_stream', {'darshan_id': _darshanId});
     });
 
+    _socket!.onConnectError((err) {
+      debugPrint('Live Darshan socket connect error: $err');
+    });
+
     _socket!.onDisconnect((_) {
-      debugPrint('Socket disconnected');
+      debugPrint('Live Darshan socket disconnected');
     });
 
     // Handle updates
@@ -355,13 +364,23 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
         final commentUser = (data['user'] is Map ? data['user']['name'] : null) ?? data['userName'] ?? data['user_name'] ?? 'Devotee';
         final commentText = data['comment'] ?? data['content'] ?? data['message'] ?? '';
         final commentAvatar = (data['user'] is Map ? data['user']['profile_pic'] : null) ?? data['userAvatar'] ?? '';
+        final incomingId = data['_id']?.toString() ?? data['id']?.toString();
 
-        // Prevent duplicate if this is the user's own comment echoed back
-        final isOwnEcho = commentUser == _userName && _liveFeed.isNotEmpty && _liveFeed.last['message'] == commentText;
-        if (!isOwnEcho && commentText.toString().isNotEmpty) {
+        // Check if this matches our most recent optimistic comment
+        bool matchedOptimistic = false;
+        if (_liveFeed.isNotEmpty && _liveFeed.last['message'] == commentText) {
+          if (_liveFeed.last['id'] == null) {
+            _liveFeed.last['id'] = incomingId;
+            matchedOptimistic = true;
+          } else if (_liveFeed.last['id'] == incomingId) {
+            matchedOptimistic = true;
+          }
+        }
+
+        if (!matchedOptimistic && commentText.toString().isNotEmpty) {
           setState(() {
             _liveFeed.add({
-              'id': data['_id']?.toString() ?? data['id']?.toString(),
+              'id': incomingId,
               'user': commentUser.toString(),
               'message': commentText.toString(),
               'avatar': commentAvatar.toString(),
@@ -375,6 +394,30 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
           });
           _scrollToBottom();
         }
+      }
+    });
+
+    _socket!.on('comment_deleted', (data) {
+      if (mounted && data is Map) {
+        final commentId = (data['comment_id'] ?? data['commentId'])?.toString();
+        if (commentId != null && commentId.isNotEmpty) {
+          setState(() {
+            _liveFeed.removeWhere((c) => c['id'] == commentId);
+          });
+        }
+      }
+    });
+
+    _socket!.on('comment_blocked', (data) {
+      if (mounted && data is Map) {
+        final msg = data['message'] ?? 'You have been blocked from commenting.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg.toString()),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     });
 
@@ -476,7 +519,11 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
 
   Future<void> _sendComment() async {
     final text = _commentController.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || _isSendingComment) return;
+
+    _isSendingComment = true;
+    _commentController.clear();
+    _commentFocusNode.unfocus();
 
     // 1. Instantly update UI locally (Optimistic update so chat ALWAYS shows user's comment)
     setState(() {
@@ -491,24 +538,27 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
       _commentsCount += 1;
     });
 
-    _commentController.clear();
-    _commentFocusNode.unfocus();
     _scrollToBottom();
 
-    // 2. Emit over socket if connected
-    if (_socket != null && _socket!.connected) {
-      _socket!.emit('send_comment', {
-        'darshan_id': _darshanId,
-        'comment': text,
-        'content': text,
-      });
-    }
-
-    // 3. Send over HTTP API as fallback / persistence
     try {
-      await ApiService.sendLiveComment(_token, _darshanId, text);
+      // 2. If socket is connected, emit ONLY via socket (avoids duplicate HTTP call)
+      if (_socket != null && _socket!.connected) {
+        _socket!.emit('send_comment', {
+          'darshan_id': _darshanId,
+          'comment': text,
+          'content': text,
+        });
+      } else {
+        // 3. Fallback to HTTP API ONLY when socket is disconnected
+        final res = await ApiService.sendLiveComment(_token, _darshanId, text);
+        if (res.isNotEmpty && _liveFeed.isNotEmpty && _liveFeed.last['message'] == text) {
+          _liveFeed.last['id'] = res['_id']?.toString() ?? res['id']?.toString();
+        }
+      }
     } catch (e) {
-      debugPrint('Error sending comment via HTTP API: $e');
+      debugPrint('Error sending live comment: $e');
+    } finally {
+      _isSendingComment = false;
     }
   }
 

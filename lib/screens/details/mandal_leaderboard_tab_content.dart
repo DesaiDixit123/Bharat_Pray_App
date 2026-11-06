@@ -30,6 +30,7 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
   List<Map<String, dynamic>> _topThree = [];
   String? _userMandalName;
 
+  bool _hasActiveFestival = false;
   bool _hasEndedFestival = false;
   Map<String, dynamic>? _completedFestival;
   final Map<String, bool> _likedMandals = {};
@@ -47,6 +48,9 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
       final allFestivals = await UtsavService.getFestivals(status: 'ALL');
       final completedList = allFestivals
           .where((f) => (f['status'] ?? '').toString().toLowerCase() == 'completed')
+          .toList();
+      final activeList = allFestivals
+          .where((f) => (f['status'] ?? '').toString().toLowerCase() == 'active')
           .toList();
 
       if (mounted) {
@@ -71,9 +75,14 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
             }
           }
 
+          _hasActiveFestival = activeList.isNotEmpty;
           _hasEndedFestival = completedList.isNotEmpty;
           _completedFestival = completedList.isNotEmpty ? completedList.first : null;
-          if (!_hasEndedFestival) {
+
+          // If no active festival is running, lock access directly to Winners View (_contestState = 1)
+          if (!_hasActiveFestival) {
+            _contestState = 1;
+          } else if (!_hasEndedFestival) {
             _contestState = 0;
           }
           _isLoading = false;
@@ -164,8 +173,8 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
     return Column(
       children: [
         // ── State Selector (Contest Active / Contest Ended) ──────────────────
-        // Only visible when a festival contest has actually ended!
-        if (_hasEndedFestival)
+        // Only visible when BOTH an active contest and a past ended contest exist!
+        if (_hasActiveFestival && _hasEndedFestival)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
             child: Container(
@@ -189,9 +198,11 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
           child: RefreshIndicator(
             color: const Color(0xFFFF7700),
             onRefresh: _loadLeaderboardData,
-            child: (_hasEndedFestival && _contestState == 1)
+            child: (!_hasActiveFestival)
                 ? _buildWinnersView()
-                : _buildLeaderboardView(),
+                : (_hasEndedFestival && _contestState == 1)
+                    ? _buildWinnersView()
+                    : _buildLeaderboardView(),
           ),
         ),
       ],

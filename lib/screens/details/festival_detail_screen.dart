@@ -59,7 +59,7 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
   }
 
   Future<void> _loadMyRegistration() async {
-    final reg = await UtsavService.getMyMandalRegistration();
+    final reg = await UtsavService.getMyMandalRegistration(festivalName: widget.festivalName);
     if (mounted) {
       setState(() {
         _myRegistration = reg;
@@ -581,8 +581,43 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
   }
 
   Widget _buildRegisterButton() {
-    // 1. If user already has a registration
-    if (_myRegistration != null) {
+    final String festStatus = (_festivalData?['status'] ?? '').toString().toLowerCase();
+    final bool isFestCompleted = festStatus == 'completed';
+
+    // 1. If festival has concluded/completed, registrations are closed!
+    if (isFestCompleted) {
+      return SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.grey[400],
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            elevation: 0,
+          ),
+          onPressed: null,
+          child: Text(
+            'Festival Completed • Registrations Closed',
+            style: GoogleFonts.outfit(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // 2. Check if user already registered for THIS specific festival
+    final String regFestival = (_myRegistration?['festival'] ?? _myRegistration?['festivalName'] ?? '').toString().trim().toLowerCase();
+    final String currentFestName = widget.festivalName.trim().toLowerCase();
+    final bool isThisFestivalReg = _myRegistration != null &&
+        (regFestival.isNotEmpty && currentFestName.isNotEmpty &&
+            (regFestival == currentFestName || currentFestName.contains(regFestival) || regFestival.contains(currentFestName)));
+
+    if (isThisFestivalReg) {
       final regStatus = (_myRegistration!['status'] ?? 'Pending').toString().toLowerCase();
       final mandalName = (_myRegistration!['mandalName'] ?? 'Your Mandal').toString();
       final logo = _myRegistration!['logo']?.toString();
@@ -692,51 +727,32 @@ class _FestivalDetailScreenState extends State<FestivalDetailScreen> {
       }
     }
 
-    // 2. Default registration flow when no registration exists
-    final status = _festivalData?['registrationStatus']?.toString() ??
-        UtsavService.computeRegistrationStatus(
-          _festivalData?['regStartDate']?.toString(),
-          _festivalData?['regEndDate']?.toString(),
-          'coming_soon',
-          festivalName: widget.festivalName,
-        );
-    final isOpen = status == 'open';
-    final isClosed = status == 'closed';
-
-    String btnText = 'Register Mandal';
-    if (isClosed) {
-      btnText = 'Registrations Closed';
-    } else if (!isOpen) {
-      btnText = 'Registration Starts Soon';
-    }
-
+    // 3. User can register for this festival (Active or Upcoming)
     return SizedBox(
       width: double.infinity,
       height: 52,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: isOpen ? const Color(0xFFFF7700) : Colors.grey[400],
+          backgroundColor: const Color(0xFFFF7700),
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
           elevation: 0,
         ),
-        onPressed: isOpen
-            ? () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => MandalRegistrationScreen(
-                      initialFestival: widget.festivalName,
-                    ),
-                  ),
-                );
-                _loadMyRegistration();
-              }
-            : null,
+        onPressed: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => MandalRegistrationScreen(
+                initialFestival: widget.festivalName,
+              ),
+            ),
+          );
+          _loadMyRegistration();
+        },
         child: Text(
-          btnText,
+          'Register Mandal',
           style: GoogleFonts.outfit(
             fontSize: 16,
             fontWeight: FontWeight.bold,

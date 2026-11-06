@@ -9,6 +9,7 @@ import '../../services/yatra_personal_chat_service.dart';
 import '../../core/localization/localized_api_helper.dart';
 import 'live_darshan_screen.dart';
 import 'messages_screen.dart';
+import 'notification_screen.dart';
 import '../../widgets/user_avatar.dart';
 
 class DeityTemplesScreen extends StatefulWidget {
@@ -93,7 +94,7 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
       final data = await ApiService.getDarshansList(
         token: _token,
         search: widget.deityName,
-        limit: 20,
+        limit: 100,
       );
       if (mounted) {
         setState(() {
@@ -238,7 +239,10 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
               width: 24,
               height: 24,
               child: GestureDetector(
-                onTap: () => _showMailNotificationSheet(context, "Notifications", "📿 Daily Chant Reminder: You have not completed your Jap goals for today. Tap the center bead button to start chanting."),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NotificationScreen()),
+                ),
                 child: SvgPicture.string(
                   _getBellSvg(_notificationCount),
                   width: 24,
@@ -253,13 +257,17 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
   }
 
   String _getHeaderTitle(String name) {
-    if (name.contains("Krishna")) return "Krishna's Darshan";
-    if (name.contains("Shiva") || name.contains("Shiv")) return "Shiva's Darshan";
-    if (name.contains("Hanuman")) return "Hanuman's Darshan";
-    if (name.contains("Amba")) return "Amba Mata's Darshan";
-    if (name.contains("Ram")) return "Ram's Darshan";
-    if (name.contains("Ganesha")) return "Ganesha's Darshan";
-    return "$name's Darshan";
+    final trimmed = name.trim();
+    if (trimmed.toLowerCase().contains('darshan')) {
+      return trimmed;
+    }
+    if (trimmed.contains("Krishna")) return "Krishna's Darshan";
+    if (trimmed.contains("Shiva") || trimmed.contains("Shiv")) return "Shiva's Darshan";
+    if (trimmed.contains("Hanuman")) return "Hanuman's Darshan";
+    if (trimmed.contains("Amba")) return "Amba Mata's Darshan";
+    if (trimmed.contains("Ram")) return "Ram's Darshan";
+    if (trimmed.contains("Ganesha") || trimmed.contains("Ganesh")) return "Ganesha's Darshan";
+    return "$trimmed's Darshan";
   }
 
   Widget _buildPlaceholderImage() {
@@ -489,7 +497,7 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
   Widget build(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
     final double cardWidth = (screenWidth - 40 - 12) / 2;
-    final double childAspectRatio = cardWidth / 233;
+    final double childAspectRatio = cardWidth / 252;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -535,13 +543,22 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
                               ),
                             ),
                           ),
-                          // Title
-                          Text(
-                            _getHeaderTitle(widget.deityName),
-                            style: GoogleFonts.outfit(
-                              color: const Color(0xFF2E2A36),
-                              fontWeight: FontWeight.bold,
-                              fontSize: 20,
+                           // Title (Wrapped in Expanded so long temple names never overflow)
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                              child: Text(
+                                _getHeaderTitle(widget.deityName),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.outfit(
+                                  color: const Color(0xFF2E2A36),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 17,
+                                  height: 1.2,
+                                ),
+                              ),
                             ),
                           ),
                           // Circular Filter Button
@@ -648,7 +665,13 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
   }
 
   Widget _buildTempleCard(BuildContext context, dynamic deity) {
-    final imagePath = _resolveImageUrl(deity['image']);
+    final String rawImg = (deity['image'] ??
+            deity['temple']?['thumbnailImage'] ??
+            deity['temple']?['bannerImage'] ??
+            deity['bannerImage'] ??
+            '')
+        .toString();
+    final imagePath = _resolveImageUrl(rawImg);
     final String deityName = LocalizedApiHelper.parse(deity['name'], defaultValue: widget.deityName);
     final String templeName = (deity['temple'] != null) ? LocalizedApiHelper.parse(deity['temple']['name']) : '';
 
@@ -691,10 +714,11 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
                 children: [
                   Text(
                     deityName,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.outfit(
-                      fontSize: 14,
+                      fontSize: 13,
+                      height: 1.2,
                       fontWeight: FontWeight.bold,
                       color: const Color(0xFF2E2A36),
                     ),
@@ -727,7 +751,7 @@ class _DeityTemplesScreenState extends State<DeityTemplesScreen> {
                           context,
                           MaterialPageRoute(
                             builder: (context) => LiveDarshanScreen(
-                              darshanId: (deity['darshan_id'] ?? deity['live_darshan_id'] ?? deity['darshanId'])?.toString() ?? '',
+                              darshanId: (deity['darshan_id'] ?? deity['_id'] ?? deity['live_darshan_id'] ?? deity['darshanId'])?.toString() ?? '',
                               templeName: templeName.isNotEmpty ? templeName : deityName,
                               imageUrl: imagePath,
                             ),

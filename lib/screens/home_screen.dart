@@ -333,7 +333,7 @@ class _HomeScreenState extends State<HomeScreen> {
             debugPrint('Error getDarshanHome: $e');
             return <String, dynamic>{};
           }),
-          ApiService.getDarshansList(token: token, limit: 10).timeout(const Duration(seconds: 5)).catchError((e) {
+          ApiService.getDarshansList(token: token, limit: 100).timeout(const Duration(seconds: 5)).catchError((e) {
             debugPrint('Error getDarshansList: $e');
             return <String, dynamic>{};
           }),
@@ -380,9 +380,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final docs = darshanListData['docs'] as List<dynamic>? ?? [];
     for (final item in docs) {
       if (item is Map) {
+        final bool hasYtVideo = item['yt_info'] is Map &&
+            (item['yt_info']['youtubeVideoId']?.toString().trim().isNotEmpty ?? false);
         final bool isLive = (item['is_live_status'] == true) ||
-            (item['live_darshan_info'] is Map && item['live_darshan_info']['is_live_status'] == true) ||
-            (item['yt_info'] is Map && item['yt_info']['isLiveStatus'] == true);
+            (hasYtVideo && item['yt_info']['isLiveStatus'] == true);
 
         final String darshanId = (item['darshan_id'] ?? item['_id'])?.toString() ?? '';
         final String title = (item['name'] ?? item['temple']?['name'] ?? 'Sacred Darshan').toString();
@@ -430,15 +431,15 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         final String rawImg = (
-          item['bannerImage'] ??
-          item['banner_image'] ??
-          item['temple']?['bannerImage'] ??
-          item['temple']?['banner_image'] ??
-          item['temple_id']?['bannerImage'] ??
-          item['temple_id']?['banner_image'] ??
           item['image'] ??
           item['temple']?['thumbnailImage'] ??
+          item['temple']?['bannerImage'] ??
+          item['bannerImage'] ??
+          item['banner_image'] ??
+          item['temple']?['banner_image'] ??
           item['temple_id']?['thumbnailImage'] ??
+          item['temple_id']?['bannerImage'] ??
+          item['temple_id']?['banner_image'] ??
           item['temple']?['image'] ??
           item['temple_id']?['image'] ??
           (ytThumbnail.isNotEmpty ? ytThumbnail : '')
@@ -796,7 +797,10 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 24,
               height: 24,
               child: GestureDetector(
-                onTap: () => _showNotificationPopup(context),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                ).then((_) => _fetchDashboardData()),
                 child: SvgPicture.string(
                   _getBellSvg(_notificationCount),
                   width: 24,
@@ -883,7 +887,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
 
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14.0),
+              padding: const EdgeInsets.symmetric(vertical: 10.0),
               child: SizedBox(
                 height: 353,
                 child: _buildHeroSection(),
@@ -930,7 +934,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
 
             // 5. Devotional 4-Card Horizontal Slider (Yatra, Jap, Bhajan, Granth)
             SizedBox(
@@ -1041,11 +1045,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
             // 6. Festivals Horizontal Slider (display-only, non-clickable)
             SizedBox(
-              height: 300,
+              height: 286,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
@@ -1057,7 +1061,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       title: 'Dhanterash',
                       dateText: 'Nov 07\nSAT',
                       imageUrl: 'assets/images/new_year_card.png',
-                      height: 300,
+                      height: 286,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -1067,7 +1071,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       title: 'Diwali',
                       dateText: 'Nov 08\nSUN',
                       imageUrl: 'assets/images/diwali_card.png',
-                      height: 300,
+                      height: 286,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -1077,7 +1081,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       title: 'Gujarati New Year',
                       dateText: 'Nov 10\nTUE',
                       imageUrl: 'assets/images/dhanteras_card.png',
-                      height: 300,
+                      height: 286,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -1087,13 +1091,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       title: 'Bhaibeej',
                       dateText: 'Nov 11\nWED',
                       imageUrl: 'assets/images/bhaiduj_card.png',
-                      height: 300,
+                      height: 286,
                     ),
                   ),
                 ],
               ),
             ),
-            SizedBox(height: 140 + MediaQuery.of(context).padding.bottom), // Extra clearance for floating Jap button
+            ValueListenableBuilder<BhajanTrackItem?>(
+              valueListenable: BhajanAudioService.instance.currentTrackNotifier,
+              builder: (context, activeTrack, _) {
+                final double bottomClearance = activeTrack != null ? 196.0 : 124.0;
+                return SizedBox(height: bottomClearance + MediaQuery.of(context).padding.bottom);
+              },
+            ),
           ],
         ),
       ),
@@ -1385,7 +1395,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Positioned(
               left: 0,
               right: 0,
-              bottom: 114 + MediaQuery.of(context).padding.bottom,
+              bottom: 108 + MediaQuery.of(context).padding.bottom,
               child: const BhajanMiniPlayerWidget(bottomMargin: 0),
             ),
             // 7. Custom Floating Arched Bottom Navigation Bar
@@ -2003,10 +2013,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Text(
                         title,
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.outfit(
-                          fontSize: 22,
+                          fontSize: 19.5,
+                          height: 1.2,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                         ),
@@ -2228,8 +2239,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     // 3. Title & Optional Progress Bar
                     Positioned(
                       left: 11,
-                      right: showProgressBar ? 12 : 52,
-                      bottom: showProgressBar ? 25 : 11,
+                      right: 50,
+                      bottom: showProgressBar ? 24 : 11,
                       child: Text(
                         title,
                         maxLines: 1,

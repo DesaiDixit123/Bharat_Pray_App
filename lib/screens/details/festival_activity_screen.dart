@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -42,12 +43,20 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
   List<Map<String, String>> _reels = [];
   bool _isLoading = true;
 
+  String _getPostId(Map<String, dynamic> post) {
+    final rawId = post['id']?.toString() ?? '';
+    if (rawId.isNotEmpty) return rawId;
+    return '${post['mandalName']}_${post['createdAt'] ?? post['timeAgo'] ?? post['time'] ?? 'p'}';
+  }
+
+  int _parseLikes(dynamic rawLikes) {
+    if (rawLikes is num) return rawLikes.toInt();
+    return int.tryParse(rawLikes?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '0') ?? 0;
+  }
+
   void _triggerHeartAnimation(String postId, Map<String, dynamic> post) async {
     final isLiked = _likedPosts[postId] ?? false;
-    final dynamic rawLikes = _likeCounts[postId] ?? post['likes'];
-    final currentLikes = (rawLikes is num)
-        ? rawLikes.toInt()
-        : int.tryParse(rawLikes?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '0') ?? 0;
+    final currentLikes = _likeCounts[postId] ?? _parseLikes(post['likes']);
 
     setState(() {
       _heartAnimatedPostId = postId;
@@ -121,96 +130,116 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
         }
       }
 
-      // Dynamic inclusion of current user's registered mandal:
-      // If the mandal is approved, or if no other posts exist yet, always include the user's added posts dynamically
+      // Dynamic inclusion of current user's registered mandal / group (e.g. "fire crakers" for Diwali):
       try {
-        final myReg = await UtsavService.getMyMandalRegistration();
-        if (myReg != null) {
-          final myStatus = (myReg['status'] ?? '').toString().toLowerCase();
-          final isApproved = myStatus == 'approved' || myStatus == 'active' || myReg['isAdminApproved'] == true;
+        final prefs = await SharedPreferences.getInstance();
+        final allMyRegs = await UtsavService.getMyMandalRegistrations();
+        final festNameLower = widget.festivalName.trim().toLowerCase();
 
-          final myMandalName = (myReg['mandalName'] ?? '').toString().trim();
-          if (myMandalName.isNotEmpty && (isApproved || allPosts.isEmpty)) {
-            List<Map<String, dynamic>> myPosts = await UtsavService.getMandalPosts(myMandalName);
-            if (myPosts.isEmpty) {
-              final prefs = await SharedPreferences.getInstance();
-              final raw = prefs.getString('my_mandal_posts');
-              if (raw != null && raw.isNotEmpty) {
-                try {
-                  final decoded = jsonDecode(raw) as List;
-                  myPosts = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-                } catch (_) {}
-              }
-            }
-
-            final logoImg = (myReg['logo'] ?? myReg['logoUrl'] ?? myReg['cover'] ?? myReg['coverUrl'] ?? '').toString();
-            final areaStr = (myReg['city'] ?? myReg['address'] ?? '').toString();
-
-            for (final p in myPosts) {
-              final pImg = (p['imageUrl'] ?? p['image'] ?? '').toString();
-              final pId = (p['id'] ?? '').toString();
-              if (!allPosts.any((existing) => (pId.isNotEmpty && existing['id']?.toString() == pId) || (pImg.isNotEmpty && (existing['imageUrl'] == pImg || existing['image'] == pImg)))) {
-                allPosts.insert(0, {
-                  ...p,
-                  'image': pImg,
-                  'imageUrl': pImg,
-                  'mandalName': myMandalName,
-                  'logo': logoImg.isNotEmpty ? logoImg : (p['logo'] ?? p['avatarUrl'] ?? ''),
-                  'avatarUrl': logoImg.isNotEmpty ? logoImg : (p['avatarUrl'] ?? p['logo'] ?? ''),
-                  'area': areaStr.isNotEmpty ? areaStr : (p['area'] ?? p['location'] ?? ''),
-                  'location': areaStr.isNotEmpty ? areaStr : (p['location'] ?? p['area'] ?? ''),
-                });
-              }
-            }
-
-            List<Map<String, dynamic>> myReels = await UtsavService.getMandalReels(myMandalName);
-            for (final r in myReels) {
-              final rId = r['id']?.toString() ?? '';
-              if (!allReels.any((existing) => rId.isNotEmpty && existing['id'] == rId)) {
-                allReels.insert(0, {
-                  'id': rId,
-                  'title': r['title']?.toString() ?? '',
-                  'mandalName': myMandalName,
-                  'thumbnailUrl': (r['thumbnailUrl'] ?? r['imageUrl'] ?? '').toString(),
-                  'videoUrl': r['videoUrl']?.toString() ?? '',
-                  'area': areaStr,
-                  'views': r['views']?.toString() ?? '0',
-                  'likes': (r['likes'] ?? '0').toString(),
-                });
-              }
-            }
-
-            if (!list.any((m) => (m['name'] ?? '').toString().trim().toLowerCase() == myMandalName.toLowerCase())) {
-              list.add({
-                '_id': myReg['_id'] ?? myReg['id'] ?? myReg['registrationId'] ?? 'my_mandal',
-                'name': myMandalName,
-                'city': areaStr,
-                'location': areaStr,
-                'avatarUrl': logoImg,
-                'coverUrl': myReg['cover'] ?? myReg['coverUrl'] ?? '',
-                'logo': logoImg,
-                'imageUrl': myReg['cover'] ?? myReg['coverUrl'] ?? '',
-                'status': myReg['status'] ?? 'Approved',
-                'isAdminApproved': isApproved,
-              });
+        final Set<String> myMandalNames = {};
+        for (final r in allMyRegs) {
+          final rFest = (r['festival']?['name'] ?? r['festival'] ?? r['festivalName'] ?? '').toString().toLowerCase();
+          final rFestId = (r['festivalId'] ?? r['festival']?['_id'] ?? '').toString();
+          final mName = (r['mandalName'] ?? r['name'] ?? '').toString().trim();
+          if (mName.isNotEmpty) {
+            if ((festId != null && rFestId == festId.toString()) || rFest.contains(festNameLower) || festNameLower.contains(rFest)) {
+              myMandalNames.add(mName);
             }
           }
         }
+
+        final singleReg = await UtsavService.getMyMandalRegistration(
+          festivalName: widget.festivalName,
+          festivalId: festId?.toString(),
+        );
+        if (singleReg != null) {
+          final sName = (singleReg['mandalName'] ?? '').toString().trim();
+          if (sName.isNotEmpty) myMandalNames.add(sName);
+        }
+
+        // Also check if any posts were saved under festival name or generic 'my_mandal_posts'
+        myMandalNames.add(widget.festivalName);
+
+        for (final myMandalName in myMandalNames) {
+          List<Map<String, dynamic>> myPosts = await UtsavService.getMandalPosts(myMandalName);
+          if (myPosts.isEmpty && myMandalName == widget.festivalName) {
+            final raw = prefs.getString('my_mandal_posts');
+            if (raw != null && raw.isNotEmpty) {
+              try {
+                final decoded = jsonDecode(raw) as List;
+                myPosts = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+              } catch (_) {}
+            }
+          }
+
+          final logoImg = (singleReg?['logo'] ?? singleReg?['logoUrl'] ?? singleReg?['cover'] ?? '').toString();
+          final areaStr = (singleReg?['city'] ?? singleReg?['address'] ?? 'Gujarat, India').toString();
+
+          for (final p in myPosts) {
+            final pImg = (p['imageUrl'] ?? p['image'] ?? '').toString();
+            final pId = (p['id'] ?? '').toString();
+            final exists = allPosts.any((existing) =>
+                (pId.isNotEmpty && existing['id']?.toString() == pId) ||
+                (pImg.isNotEmpty && (existing['imageUrl'] == pImg || existing['image'] == pImg)));
+
+            if (!exists) {
+              allPosts.add({
+                ...p,
+                'image': pImg,
+                'imageUrl': pImg,
+                'mandalName': myMandalName,
+                'logo': logoImg.isNotEmpty ? logoImg : (p['logo'] ?? p['avatarUrl'] ?? ''),
+                'avatarUrl': logoImg.isNotEmpty ? logoImg : (p['avatarUrl'] ?? p['logo'] ?? ''),
+                'area': areaStr.isNotEmpty ? areaStr : (p['area'] ?? p['location'] ?? ''),
+                'location': areaStr.isNotEmpty ? areaStr : (p['location'] ?? p['area'] ?? ''),
+              });
+            }
+          }
+
+          List<Map<String, dynamic>> myReels = await UtsavService.getMandalReels(myMandalName);
+          for (final r in myReels) {
+            final rId = r['id']?.toString() ?? '';
+            if (!allReels.any((existing) => rId.isNotEmpty && existing['id'] == rId)) {
+              allReels.add({
+                'id': rId,
+                'title': r['title']?.toString() ?? '',
+                'mandalName': myMandalName,
+                'thumbnailUrl': (r['thumbnailUrl'] ?? r['imageUrl'] ?? '').toString(),
+                'videoUrl': r['videoUrl']?.toString() ?? '',
+                'area': areaStr,
+                'views': r['views']?.toString() ?? '0',
+                'likes': (r['likes'] ?? '0').toString(),
+              });
+            }
+          }
+
+          if (!list.any((m) => (m['name'] ?? '').toString().trim().toLowerCase() == myMandalName.toLowerCase())) {
+            list.add({
+              '_id': singleReg?['_id'] ?? 'user_mandal_$myMandalName',
+              'name': myMandalName,
+              'city': areaStr,
+              'location': areaStr,
+              'avatarUrl': logoImg,
+              'coverUrl': singleReg?['cover'] ?? singleReg?['coverUrl'] ?? '',
+              'logo': logoImg,
+              'imageUrl': singleReg?['cover'] ?? singleReg?['coverUrl'] ?? '',
+              'status': singleReg?['status'] ?? 'Approved',
+              'isAdminApproved': true,
+            });
+          }
+        }
       } catch (err) {
-        debugPrint('[FestivalActivityScreen] Error loading my approved mandal posts: $err');
+        debugPrint('[FestivalActivityScreen] Error loading my mandal posts: $err');
       }
+
+      // Randomize reels across all mandals for a dynamic, like-based discovery mix
+      allReels.shuffle(Random());
 
       // Sync persisted like states & counts for each post
       for (final p in allPosts) {
-        final rawId = p['id']?.toString() ?? '';
-        final pId = rawId.isNotEmpty
-            ? rawId
-            : '${p['mandalName']}_${p['createdAt'] ?? p['timeAgo'] ?? p['time'] ?? 'p'}';
+        final pId = _getPostId(p);
         final savedLiked = await UtsavService.isPostLiked(pId);
-        final dynamic rawL = p['likes'];
-        final baseCount = (rawL is num)
-            ? rawL.toInt()
-            : int.tryParse(rawL?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '0') ?? 0;
+        final baseCount = _parseLikes(p['likes']);
         final savedCount = await UtsavService.getPostLikeCount(pId, baseCount);
         _likedPosts[pId] = savedLiked;
         _likeCounts[pId] = savedCount;
@@ -242,7 +271,24 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
 
   List<Map<String, dynamic>> get _currentMandals => _mandals;
   List<Map<String, String>> get _currentReels => _reels;
-  List<Map<String, dynamic>> get _currentPosts => _posts;
+
+  // Real-time Sorted Popular Posts: Highest Likes First, Newest First as tie-breaker
+  List<Map<String, dynamic>> get _currentPosts {
+    final list = List<Map<String, dynamic>>.from(_posts);
+    list.sort((a, b) {
+      final idA = _getPostId(a);
+      final idB = _getPostId(b);
+      final likesA = _likeCounts[idA] ?? _parseLikes(a['likes']);
+      final likesB = _likeCounts[idB] ?? _parseLikes(b['likes']);
+      if (likesB != likesA) {
+        return likesB.compareTo(likesA); // Highest likes first (Popular/Trending)
+      }
+      final dateA = DateTime.tryParse(a['createdAt']?.toString() ?? '') ?? DateTime(2000);
+      final dateB = DateTime.tryParse(b['createdAt']?.toString() ?? '') ?? DateTime(2000);
+      return dateB.compareTo(dateA); // Newer post first
+    });
+    return list;
+  }
 
   List<Map<String, dynamic>> get _filteredMandals {
     if (_query.isEmpty) return [];
@@ -261,7 +307,8 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
     return _currentReels.where((r) {
       final mn = (r['mandalName'] ?? '').toLowerCase();
       final area = (r['area'] ?? '').toLowerCase();
-      return mn.contains(q) || area.contains(q);
+      final title = (r['title'] ?? '').toLowerCase();
+      return mn.contains(q) || area.contains(q) || title.contains(q);
     }).toList();
   }
 
@@ -270,8 +317,9 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
     final q = _query.toLowerCase().trim();
     return _currentPosts.where((p) {
       final mn = (p['mandalName'] ?? '').toString().toLowerCase();
-      final area = (p['area'] ?? '').toString().toLowerCase();
-      return mn.contains(q) || area.contains(q);
+      final area = (p['area'] ?? p['location'] ?? '').toString().toLowerCase();
+      final caption = (p['caption'] ?? '').toString().toLowerCase();
+      return mn.contains(q) || area.contains(q) || caption.contains(q);
     }).toList();
   }
 
@@ -734,13 +782,16 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
         final convertedReels = list.asMap().entries.map((entry) {
           final r = entry.value;
           final i = entry.key;
+          final thumb = (r['thumbnailUrl'] ?? r['imageUrl'] ?? r['image'] ?? 'assets/images/ram_bhajan.png').toString();
           return ReelItem(
-            id: 'reel_${r['mandalName']}_$i',
-            thumbnailUrl: r['image'] ?? 'assets/images/ram_bhajan.png',
-            videoUrl: videoAssets[i % videoAssets.length],
-            title: r['caption'] ?? 'Divine Mandal Aarti Clip',
+            id: r['id']?.toString() ?? 'reel_${r['mandalName']}_$i',
+            thumbnailUrl: thumb,
+            videoUrl: (r['videoUrl'] != null && r['videoUrl']!.isNotEmpty)
+                ? r['videoUrl']!
+                : videoAssets[i % videoAssets.length],
+            title: r['title'] ?? r['caption'] ?? 'Divine Mandal Aarti Clip',
             audioTrack: 'Original Mandal Audio • Sacred Chants',
-            views: r['likes'] ?? '0',
+            views: r['views'] ?? r['likes'] ?? '0',
             likes: int.tryParse(r['likes']?.replaceAll(RegExp(r'[^0-9]'), '') ?? '0') ?? 0,
           );
         }).toList();
@@ -775,10 +826,9 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Image.asset(
-                reel['image'] ?? 'assets/images/new_year_card.png',
+              buildSmartImage(
+                reel['thumbnailUrl'] ?? reel['imageUrl'] ?? reel['image'] ?? 'assets/images/new_year_card.png',
                 fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => Container(color: const Color(0xFFFFEAD8)),
               ),
               // Gradient
               Container(
@@ -834,15 +884,9 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
   }
 
   Widget _buildPostCard(Map<String, dynamic> post) {
-    final rawId = post['id']?.toString() ?? '';
-    final postId = rawId.isNotEmpty
-        ? rawId
-        : '${post['mandalName']}_${post['createdAt'] ?? post['timeAgo'] ?? post['time'] ?? 'p'}';
+    final postId = _getPostId(post);
     final isLiked = _likedPosts[postId] ?? (post['isLiked'] == true);
-    final dynamic rawLikes = _likeCounts[postId] ?? post['likes'];
-    final currentLikes = (rawLikes is num)
-        ? rawLikes.toInt()
-        : int.tryParse(rawLikes?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '0') ?? 0;
+    final currentLikes = _likeCounts[postId] ?? _parseLikes(post['likes']);
     final isSaved = _savedPosts[postId] ?? false;
 
     // find matching mandal

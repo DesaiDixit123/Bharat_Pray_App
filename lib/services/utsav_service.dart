@@ -223,26 +223,13 @@ class UtsavService {
   }
 
   static String computeFestivalStatus(String? startDateStr, String? endDateStr, String fallbackStatus, {String? festivalName}) {
-    if (festivalName != null) {
-      final nameLower = festivalName.toLowerCase();
-      if (nameLower.contains('ganesh') || nameLower.contains('chaturthi')) {
-        return 'Completed';
-      }
-      if (nameLower.contains('pre') && nameLower.contains('navratri')) {
-        return 'Active';
-      }
-    }
-
-    if (fallbackStatus.toLowerCase() == 'active') {
-      return 'Active';
-    }
-
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
     final start = _parseDate(startDateStr);
     final end = _parseDate(endDateStr);
 
+    // If endDate is in the past, festival is Completed
     if (end != null) {
       final endDay = DateTime(end.year, end.month, end.day);
       if (today.isAfter(endDay)) return 'Completed';
@@ -268,58 +255,11 @@ class UtsavService {
     String? festivalStatus,
     String? festivalName,
   }) {
-    if (festivalName != null && (festivalName.toLowerCase().contains('ganesh') || festivalName.toLowerCase().contains('chaturthi'))) {
+    if (festivalStatus?.toLowerCase() == 'completed') {
       return 'closed';
     }
-
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
-    final regStart = _parseDate(regStartDateStr);
-    final regEnd = _parseDate(regEndDateStr);
-
-    if (regStart != null && regEnd != null) {
-      final startDay = DateTime(regStart.year, regStart.month, regStart.day);
-      final endDay = DateTime(regEnd.year, regEnd.month, regEnd.day);
-
-      if (today.isBefore(startDay)) {
-        return 'coming_soon';
-      } else if (today.isAfter(endDay)) {
-        return 'closed';
-      } else {
-        return 'open';
-      }
-    }
-
-    if (festivalName != null && festivalName.toLowerCase().contains('navratri')) {
-      final nStart = DateTime(2026, 9, 20);
-      final nEnd = DateTime(2026, 10, 10);
-      if ((today.isAfter(nStart) || today.isAtSameMomentAs(nStart)) && (today.isBefore(nEnd) || today.isAtSameMomentAs(nEnd))) {
-        return 'open';
-      } else if (today.isBefore(nStart)) {
-        return 'coming_soon';
-      } else {
-        return 'closed';
-      }
-    }
-
-    if (festivalName != null && festivalName.toLowerCase().contains('diwali')) {
-      final dStart = DateTime(2026, 10, 15);
-      final dEnd = DateTime(2026, 11, 5);
-      if (today.isBefore(dStart)) {
-        return 'coming_soon';
-      } else if (today.isAfter(dEnd)) {
-        return 'closed';
-      } else {
-        return 'open';
-      }
-    }
-
-    if (fallbackStatus != null && fallbackStatus.isNotEmpty && fallbackStatus != 'open') {
-      return fallbackStatus;
-    }
-
-    return 'coming_soon';
+    // As per user specification, registrations can be made anytime for Upcoming & Active festivals
+    return 'open';
   }
 
   static Future<bool> isRegistrationActive(Map<String, dynamic>? reg) async {
@@ -1215,9 +1155,18 @@ class UtsavService {
 
   // ─── User Mandal Registration Status ───────────────────────────────────────
 
-  static Future<Map<String, dynamic>?> getMyMandalRegistration() async {
+  static Future<Map<String, dynamic>?> getMyMandalRegistration({String? festivalName, String? festivalId}) async {
     final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString('my_mandal_registration');
+    final cleanFestKey = festivalName != null && festivalName.trim().isNotEmpty
+        ? festivalName.trim().toLowerCase()
+        : null;
+
+    String? saved;
+    if (cleanFestKey != null) {
+      saved = prefs.getString('my_mandal_registration_$cleanFestKey');
+    }
+    saved ??= prefs.getString('my_mandal_registration');
+
     String? phone;
     Map<String, dynamic>? localData;
 
@@ -1229,6 +1178,9 @@ class UtsavService {
 
         // Purge old dummy Ganesh registrations
         if (mName.contains('Lalbaug') || mName.contains('Ganesh') || localData['registrationId'] == 'REG-2026-DUMMY') {
+          if (cleanFestKey != null) {
+            await prefs.remove('my_mandal_registration_$cleanFestKey');
+          }
           await prefs.remove('my_mandal_registration');
           await prefs.remove('is_mandal_registered');
           await prefs.remove('is_mandal_leader');
@@ -1240,17 +1192,33 @@ class UtsavService {
 
     if (phone != null && phone.isNotEmpty) {
       try {
-        final remoteData = await _fetchMyRegistrationRemote('/api/utsav/mandal/my-registration?mobile=$phone');
+        final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+        final last10 = cleanPhone.length >= 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
+        String queryUrl = '/api/utsav/mandal/my-registration?mobile=$last10';
+        if (festivalName != null && festivalName.trim().isNotEmpty) {
+          queryUrl += '&festival=${Uri.encodeComponent(festivalName.trim())}';
+        }
+        if (festivalId != null && festivalId.trim().isNotEmpty) {
+          queryUrl += '&festivalId=${Uri.encodeComponent(festivalId.trim())}';
+        }
+
+        final remoteData = await _fetchMyRegistrationRemote(queryUrl);
         if (remoteData != null) {
           if (remoteData['_isDeletedOrNotFoundOnServer'] == true) {
             if (localData != null) {
               localData['status'] = 'deleted';
               localData['deletionReason'] = 'Your Mandal account was deleted by Bharat Pray Admin.';
+              if (cleanFestKey != null) {
+                await prefs.setString('my_mandal_registration_$cleanFestKey', jsonEncode(localData));
+              }
               await prefs.setString('my_mandal_registration', jsonEncode(localData));
               await prefs.setBool('is_mandal_registered', false);
               await prefs.setBool('is_mandal_leader', false);
               return localData;
             } else {
+              if (cleanFestKey != null) {
+                await prefs.remove('my_mandal_registration_$cleanFestKey');
+              }
               await prefs.remove('my_mandal_registration');
               await prefs.setBool('is_mandal_registered', false);
               await prefs.setBool('is_mandal_leader', false);
@@ -1280,12 +1248,18 @@ class UtsavService {
 
           final rStatus = remoteData['status']?.toString().toLowerCase();
           if (rStatus == 'deleted') {
+            if (cleanFestKey != null) {
+              await prefs.setString('my_mandal_registration_$cleanFestKey', jsonEncode(remoteData));
+            }
             await prefs.setString('my_mandal_registration', jsonEncode(remoteData));
             await prefs.setBool('is_mandal_registered', false);
             await prefs.setBool('is_mandal_leader', false);
             return remoteData;
           }
 
+          if (cleanFestKey != null) {
+            await prefs.setString('my_mandal_registration_$cleanFestKey', jsonEncode(remoteData));
+          }
           await prefs.setString('my_mandal_registration', jsonEncode(remoteData));
           await prefs.setBool('is_mandal_registered', true);
           if (remoteData['status']?.toString().toLowerCase() == 'approved') {
@@ -1304,11 +1278,60 @@ class UtsavService {
     return localData;
   }
 
-  static Future<void> clearMyMandalRegistration() async {
+  static Future<void> clearMyMandalRegistration({String? festivalName}) async {
     final prefs = await SharedPreferences.getInstance();
+    if (festivalName != null && festivalName.trim().isNotEmpty) {
+      final cleanKey = festivalName.trim().toLowerCase();
+      await prefs.remove('my_mandal_registration_$cleanKey');
+    }
     await prefs.remove('my_mandal_registration');
     await prefs.remove('is_mandal_registered');
     await prefs.remove('is_mandal_leader');
+  }
+
+  static Future<List<Map<String, dynamic>>> getMyMandalRegistrations() async {
+    final List<Map<String, dynamic>> results = [];
+    final prefs = await SharedPreferences.getInstance();
+    final phone = prefs.getString('user_phone') ?? prefs.getString('auth_mobile');
+
+    // 1. Fetch from remote backend /api/utsav/mandal/my-registrations
+    if (phone != null && phone.isNotEmpty) {
+      try {
+        final clean = phone.replaceAll(RegExp(r'\D'), '');
+        final last10 = clean.length >= 10 ? clean.substring(clean.length - 10) : clean;
+        final uri = Uri.parse('${ApiService.baseUrl}/api/utsav/mandal/my-registrations?mobile=$last10');
+        final response = await http.get(uri, headers: _defaultHeaders()).timeout(const Duration(seconds: 4));
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          if (data['IsSuccess'] == true && data['Data'] is List) {
+            final list = (data['Data'] as List).cast<Map<String, dynamic>>();
+            results.addAll(list);
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 2. Also merge local cached registrations
+    try {
+      final keys = prefs.getKeys();
+      for (final key in keys) {
+        if (key.startsWith('my_mandal_registration_') || key == 'my_mandal_registration') {
+          final raw = prefs.getString(key);
+          if (raw != null && raw.isNotEmpty) {
+            final map = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+            final mName = (map['mandalName'] ?? '').toString().trim();
+            if (mName.isNotEmpty &&
+                !results.any((r) =>
+                    (r['mandalName'] ?? r['name'])?.toString().trim().toLowerCase() ==
+                    mName.toLowerCase())) {
+              results.add(map);
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    return results;
   }
 
   static Future<void> saveMandalRegistration({
@@ -1345,7 +1368,9 @@ class UtsavService {
     };
 
     final prefs = await SharedPreferences.getInstance();
+    final cleanFestKey = festival.trim().toLowerCase();
     await prefs.setString('my_mandal_registration', jsonEncode(regData));
+    await prefs.setString('my_mandal_registration_$cleanFestKey', jsonEncode(regData));
     await prefs.setBool('is_mandal_registered', true);
     if (status.toLowerCase() == 'approved') {
       await prefs.setBool('is_mandal_leader', true);
