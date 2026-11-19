@@ -44,7 +44,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
   @override
   JapConfig get japEntry => widget.entry;
 
-  late final int _target = widget.entry.isCustom ? math.max(1, widget.entry.targetCount) : 108;
+  late final int _target = widget.entry.targetCount > 0 ? widget.entry.targetCount : 108;
   late int _count;
   int _completedMalas = 0;
 
@@ -78,12 +78,11 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
   );
 
   String get _effectiveImageAsset {
-    if (widget.entry.isCustom && widget.entry.darshanImageUrl.isNotEmpty) {
+    if (widget.entry.darshanImageUrl.isNotEmpty) {
       return widget.entry.darshanImageUrl;
     }
-    if (widget.entry.darshanImageUrl.isNotEmpty &&
-        widget.entry.darshanImageUrl.startsWith('assets/')) {
-      return widget.entry.darshanImageUrl;
+    if (widget.entry.thumbnailUrl.isNotEmpty) {
+      return widget.entry.thumbnailUrl;
     }
     return _theme.imageAsset;
   }
@@ -297,11 +296,11 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
         duration: 1.80, // Calibrated meditative flight; reveals image upon arrival
         onArrived: () {
           if (!mounted) return;
-          if (!_revealedNodes.any((n) => n.step == newlyNode.step)) {
-            _revealedNodes.add(newlyNode);
-            _revealedNodes.sort((a, b) => a.step.compareTo(b.step));
-          }
-          _newestNode = newlyNode;
+          final currentRevealed = RamPathCalculator.getRevealedNodesForCount(nextCount, target: _target);
+          setState(() {
+            _revealedNodes = currentRevealed;
+            _newestNode = newlyNode;
+          });
           _shimmerController.forward(from: 0.0);
           _persistProgress();
         },
@@ -509,7 +508,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
                     isCompleted: isFullCompleted,
                     completionGlowProgress: _completionController.value,
                     imageAsset: _effectiveImageAsset,
-                    revealProgress: widget.entry.isCustom ? _count / _target : null,
+                    revealProgress: (_count / _target).clamp(0.0, 1.0),
                   );
                 } else {
                   // 4 New Selectable Animation Effects
@@ -521,6 +520,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
                     isCompleted: isFullCompleted,
                     completionGlowProgress: _completionController.value,
                     imageAsset: _effectiveImageAsset,
+                    revealProgress: (_count / _target).clamp(0.0, 1.0),
                   );
                 }
               },
@@ -638,7 +638,9 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
                       flights: _activeFlights,
                       effectType: _selectedEffect,
                       screenSize: screenSize,
-                      chantText: _theme.mantraText,
+                      chantText: widget.entry.shlokText.isNotEmpty
+                          ? widget.entry.shlokText
+                          : _theme.mantraText,
                     ),
                     size: Size.infinite,
                   ),

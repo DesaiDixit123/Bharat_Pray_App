@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -56,8 +57,21 @@ mixin JapVoiceSelection<T extends StatefulWidget> on State<T> {
     }
   }
 
-  /// The selected voice's clip, or this mantra's bundled clip until it is ready.
+  /// The custom/admin uploaded audio, selected voice clip, or bundled asset fallback.
   Source get japChantSource {
+    final customAudio = japEntry.shlokAudioUrl;
+    if (customAudio != null && customAudio.isNotEmpty) {
+      if (customAudio.contains('assets/audio/')) {
+        final assetSub = customAudio.substring(customAudio.indexOf('assets/audio/')).replaceFirst('assets/', '');
+        return AssetSource(assetSub);
+      } else if (customAudio.startsWith('http://') || customAudio.startsWith('https://')) {
+        return UrlSource(customAudio);
+      } else if (customAudio.startsWith('assets/')) {
+        return AssetSource(customAudio.replaceFirst('assets/', ''));
+      } else if (File(customAudio).existsSync()) {
+        return DeviceFileSource(customAudio);
+      }
+    }
     final clip = japChantClipPath;
     if (clip != null) return DeviceFileSource(clip);
     return AssetSource(_japTheme.audioAsset.replaceFirst('assets/', ''));

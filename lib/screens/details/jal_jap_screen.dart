@@ -40,7 +40,7 @@ class _JalJapScreenState extends State<JalJapScreen>
   @override
   JapConfig get japEntry => widget.entry;
 
-  static const int _target = 108;
+  late final int _target = widget.entry.targetCount > 0 ? widget.entry.targetCount : 108;
   late int _count;
   int _completedMalas = 0;
   bool _isCompleted = false;
@@ -370,7 +370,7 @@ class _JalJapScreenState extends State<JalJapScreen>
 
     setState(() {
       _count = nextCount;
-      _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count);
+      _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count, target: _target);
     });
 
     _shimmerController.forward(from: 0.0);
@@ -403,7 +403,9 @@ class _JalJapScreenState extends State<JalJapScreen>
           ? audioUrl
           : 'audio/ram_chant.mp3';
 
-      if (rawAudio.startsWith('http://') || rawAudio.startsWith('https://')) {
+      if (rawAudio.contains('assets/audio/')) {
+        await _audioPlayer.play(AssetSource(rawAudio.substring(rawAudio.indexOf('assets/audio/')).replaceFirst('assets/', '')));
+      } else if (rawAudio.startsWith('http://') || rawAudio.startsWith('https://')) {
         await _audioPlayer.play(UrlSource(rawAudio));
       } else if (rawAudio.startsWith('assets/')) {
         await _audioPlayer.play(AssetSource(rawAudio.replaceFirst('assets/', '')));
@@ -541,7 +543,11 @@ class _JalJapScreenState extends State<JalJapScreen>
                     ambientTime: _ambientController.value,
                     isCompleted: _isCompleted,
                     completionGlow: _completionController.value,
-                    imageAsset: 'assets/images/ram_deity_transparent.png',
+                    imageAsset: widget.entry.darshanImageUrl.isNotEmpty
+                        ? widget.entry.darshanImageUrl
+                        : (widget.entry.thumbnailUrl.isNotEmpty
+                            ? widget.entry.thumbnailUrl
+                            : 'assets/images/ram_deity_transparent.png'),
                   );
                 },
               ),

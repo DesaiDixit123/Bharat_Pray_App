@@ -44,7 +44,9 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
 
   bool _isLoading = true;
   String _token = '';
-  List<JapConfig> _allJaps = [];
+  List<JapConfig> _adminJaps = [];
+  List<JapConfig> _customJaps = [];
+  int _selectedTabIndex = 0; // 0: Divine Japs (Admin), 1: My Custom Japs
 
   // Dynamic user profile fields matching HomeScreen
   String _profileName = 'Devotee';
@@ -104,122 +106,38 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
     // 3. Load user's custom Japs from backend and offline cache
     List<JapConfig> customJaps = [];
     try {
-      // Clean up any stale custom test japs like 'dixit'
-      final localCustomsRaw = await JapOfflineRepository.getCustomJaps();
-      for (final raw in localCustomsRaw) {
-        final localName = (raw['name'] ?? '').toString().toLowerCase();
-        final localId = (raw['id'] ?? raw['_id'] ?? '').toString();
-        if (localName == 'dixit' || localName.contains('bike') || localName.contains('shivji')) {
-          await JapOfflineRepository.removeCustomJap(localId);
-        }
-      }
-
       if (_token.isNotEmpty) {
         final serverCustoms = await ApiService.getMyCustomJaps(_token);
-        final serverIds = <String>{};
         for (final sc in serverCustoms) {
           final cfg = JapConfig.fromJson(sc);
-          if (cfg.name.toLowerCase() != 'dixit' && !cfg.name.toLowerCase().contains('bike')) {
+          if (!customJaps.any((c) => c.id == cfg.id)) {
             customJaps.add(cfg);
-            serverIds.add(cfg.id);
           }
         }
       }
       final localCustoms = await JapOfflineRepository.getCustomJaps();
       for (final raw in localCustoms) {
         final cfg = JapConfig.fromJson(raw);
-        if (cfg.name.toLowerCase() != 'dixit' && !cfg.name.toLowerCase().contains('bike')) {
-          if (!customJaps.any((c) => c.id == cfg.id)) {
-            customJaps.add(cfg);
-          }
+        if (!customJaps.any((c) => c.id == cfg.id)) {
+          customJaps.add(cfg);
         }
       }
     } catch (e) {
       debugPrint('[JapCounterScreen] Error loading custom japs: $e');
     }
 
-    // 4. Combine remote admin japs and user custom japs
-    List<JapConfig> combined = [
-      ...remoteJaps,
-      ...customJaps.where((c) => !remoteJaps.any((r) => r.id == c.id)),
-    ];
-
-    // Filter out test entries (dixit, shivji's jap, bike)
-    combined.removeWhere((j) {
-      final n = j.name.toLowerCase();
-      return n == 'dixit' ||
-          n.contains('bike') ||
-          n == "shivji's jap" ||
-          j.id == '6ad31b0a015c2a40cb3c584a' ||
-          j.id == '6a56119e039eb816c106f3b0' ||
-          j.id == '6aca2e1cfd3149164af9088f';
-    });
-
-    if (combined.isEmpty) {
-      combined = _getDefaultPresets();
-    } else {
-      final hasRam = combined.any((j) => j.name.toLowerCase().contains('ram'));
-      if (!hasRam) {
-        combined.insert(0, _createRamPreset());
-      }
-      for (final p in _getDefaultPresets()) {
-        final exists = combined.any((j) =>
-            j.id == p.id ||
-            j.name.toLowerCase() == p.name.toLowerCase());
-        if (!exists) {
-          combined.add(p);
-        }
-      }
+    // 4. Separate Admin/Company Japs and User Custom Japs
+    List<JapConfig> adminList = [...remoteJaps];
+    if (adminList.isEmpty) {
+      adminList = _getDefaultPresets();
     }
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final hasResetRamV6 = prefs.getBool('has_reset_ram_v6') ?? false;
-      if (!hasResetRamV6) {
-        for (final jap in combined) {
-          if (jap.name.toLowerCase().contains('ram') || jap.id.toLowerCase().contains('ram')) {
-            jap.progress = 0;
-            await JapOfflineRepository.saveProgress(
-              japId: jap.id,
-              count: 0,
-              completedMalas: 0,
-              targetCount: jap.targetCount,
-            );
-            await JapOfflineRepository.saveProgress(
-              japId: '${jap.id}_jal',
-              count: 0,
-              completedMalas: 0,
-              targetCount: jap.targetCount,
-            );
-            await JapOfflineRepository.saveProgress(
-              japId: '${jap.id}_dhup',
-              count: 0,
-              completedMalas: 0,
-              targetCount: jap.targetCount,
-            );
-            await JapOfflineRepository.saveProgress(
-              japId: '${jap.id}_prakash',
-              count: 0,
-              completedMalas: 0,
-              targetCount: jap.targetCount,
-            );
-            await JapOfflineRepository.saveProgress(
-              japId: '${jap.id}_pushp',
-              count: 0,
-              completedMalas: 0,
-              targetCount: jap.targetCount,
-            );
-          }
-        }
-        await prefs.setBool('has_reset_ram_v6', true);
-      }
 
-      for (final jap in combined) {
-        if (!hasResetRamV6 &&
-            (jap.name.toLowerCase().contains('ram') ||
-                jap.id.toLowerCase().contains('ram'))) {
-          jap.progress = 0;
-          continue;
-        }
+    List<JapConfig> userCustomList = [...customJaps];
+
+    // Overlay progress for all
+    final all = [...adminList, ...userCustomList];
+    try {
+      for (final jap in all) {
         final cached = await JapOfflineRepository.getProgress(
           jap.id,
           defaultTarget: jap.targetCount,
@@ -238,7 +156,8 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
 
     if (mounted) {
       setState(() {
-        _allJaps = combined;
+        _adminJaps = adminList;
+        _customJaps = userCustomList;
         _isLoading = false;
       });
     }
@@ -315,9 +234,10 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
 
 
   List<JapConfig> get _filteredJaps {
-    if (_searchQuery.isEmpty) return _allJaps;
+    final activeList = _selectedTabIndex == 0 ? _adminJaps : _customJaps;
+    if (_searchQuery.isEmpty) return activeList;
     final q = _searchQuery.toLowerCase();
-    return _allJaps
+    return activeList
         .where(
           (j) =>
               j.name.toLowerCase().contains(q) ||
@@ -350,28 +270,25 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       await prefs.setBool('last_jap_custom', entry.isCustom);
     } catch (_) {}
 
-    final bool isCinematic = entry.name.toLowerCase().contains('ram') ||
-        entry.shlokText.toLowerCase().contains('राम') ||
-        entry.name.toLowerCase().contains('radha') ||
-        entry.shlokText.toLowerCase().contains('राधे') ||
-        entry.shlokText.toLowerCase().contains('राधा') ||
-        entry.name.toLowerCase().contains('krishna') ||
-        entry.shlokText.toLowerCase().contains('कृष्ण') ||
-        entry.name.toLowerCase().contains('shiv') ||
-        entry.shlokText.toLowerCase().contains('शिव') ||
-        entry.name.toLowerCase().contains('mahadev');
-
     if (entry.progress >= entry.targetCount || entry.progress % entry.targetCount == 0) {
       entry.progress = 0;
     }
 
+    final shape = (entry.particleShape ?? '').toLowerCase();
     final Widget destination;
-    if (entry.isCustom && entry.particleShape == 'dhup') {
+    if (shape == 'dhup' || shape == 'dhoop') {
       destination = DhupJapScreen(entry: entry);
-    } else if (isCinematic || (entry.isCustom && entry.particleShape == 'ram')) {
-      destination = CinematicJapScreen(entry: entry);
-    } else {
+    } else if (shape == 'jal') {
+      destination = JalJapScreen(entry: entry);
+    } else if (shape == 'prakash' || shape == 'diya') {
+      destination = PrakashJapScreen(entry: entry);
+    } else if (shape == 'pushp' || shape == 'flower') {
+      destination = PushpVarshaJapScreen(entry: entry);
+    } else if (shape == 'standard' || shape == 'mala') {
       destination = JapDetailScreen(entry: entry);
+    } else {
+      // Default: Cinematic progressive darshan reveal for all deities
+      destination = CinematicJapScreen(entry: entry);
     }
 
     final updatedProgress = await Navigator.push<int>(
@@ -542,7 +459,8 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
 
       if (!mounted) return;
       setState(() {
-        _allJaps.insert(0, newCustomConfig);
+        _customJaps.insert(0, newCustomConfig);
+        _selectedTabIndex = 1;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -747,6 +665,180 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
 
             const SizedBox(height: 12),
 
+            // ── 2 Tab Buttons: Divine Japs (Admin) vs My Custom Japs ──
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF3ECE4),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFEADFD3)),
+                ),
+                child: Row(
+                  children: [
+                    // Tab 1: Divine / Daily Japs
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          if (_selectedTabIndex != 0) {
+                            setState(() => _selectedTabIndex = 0);
+                          }
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 250),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _selectedTabIndex == 0
+                                ? Colors.white
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: _selectedTabIndex == 0
+                                ? [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.06),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.auto_awesome,
+                                size: 15,
+                                color: _selectedTabIndex == 0
+                                    ? const Color(0xFFFF7700)
+                                    : const Color(0xFF8A7D71),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                'Divine Japs',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  fontWeight: _selectedTabIndex == 0
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: _selectedTabIndex == 0
+                                      ? const Color(0xFF2E2A36)
+                                      : const Color(0xFF8A7D71),
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _selectedTabIndex == 0
+                                      ? const Color(0xFFFFEEE0)
+                                      : const Color(0xFFE5DDD3),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  '${_adminJaps.length}',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: _selectedTabIndex == 0
+                                        ? const Color(0xFFFF7700)
+                                        : const Color(0xFF8A7D71),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Tab 2: My Custom Japs
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          if (_selectedTabIndex != 1) {
+                            setState(() => _selectedTabIndex = 1);
+                          }
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 250),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _selectedTabIndex == 1
+                                ? Colors.white
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: _selectedTabIndex == 1
+                                ? [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.06),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.person_outline_rounded,
+                                size: 16,
+                                color: _selectedTabIndex == 1
+                                    ? const Color(0xFFFF7700)
+                                    : const Color(0xFF8A7D71),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                'My Custom Japs',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  fontWeight: _selectedTabIndex == 1
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: _selectedTabIndex == 1
+                                      ? const Color(0xFF2E2A36)
+                                      : const Color(0xFF8A7D71),
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _selectedTabIndex == 1
+                                      ? const Color(0xFFFFEEE0)
+                                      : const Color(0xFFE5DDD3),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  '${_customJaps.length}',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: _selectedTabIndex == 1
+                                        ? const Color(0xFFFF7700)
+                                        : const Color(0xFF8A7D71),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
             // ── Create Custom Jap Button ─────────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -804,14 +896,38 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                           SizedBox(
                             height: 300,
                             child: Center(
-                              child: Text(
-                                'No results found',
-                                style: GoogleFonts.outfit(
-                                  color: const Color(
-                                    0xFF2E2A36,
-                                  ).withValues(alpha: 0.4),
-                                  fontSize: 15,
-                                ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    _selectedTabIndex == 1
+                                        ? Icons.self_improvement_rounded
+                                        : Icons.search_off_rounded,
+                                    size: 44,
+                                    color: const Color(0xFFC8A882).withOpacity(0.5),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    _selectedTabIndex == 1
+                                        ? 'No custom japs added yet'
+                                        : 'No divine japs found',
+                                    style: GoogleFonts.outfit(
+                                      color: const Color(0xFF2E2A36).withOpacity(0.6),
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  if (_selectedTabIndex == 1) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Tap "+ Create Custom Jap" above to add your own chanting.',
+                                      style: GoogleFonts.outfit(
+                                        color: const Color(0xFF8A7D71),
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ),
                           ),

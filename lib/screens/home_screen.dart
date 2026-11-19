@@ -1161,28 +1161,24 @@ class _HomeScreenState extends State<HomeScreen> {
           effectPack: EffectPack.resolve(name: 'Shri Krishna'),
         );
 
-    final bool isCinematic = entry.name.toLowerCase().contains('ram') ||
-        entry.shlokText.toLowerCase().contains('राम') ||
-        entry.name.toLowerCase().contains('radha') ||
-        entry.shlokText.toLowerCase().contains('राधे') ||
-        entry.shlokText.toLowerCase().contains('राधा') ||
-        entry.name.toLowerCase().contains('krishna') ||
-        entry.shlokText.toLowerCase().contains('कृष्ण') ||
-        entry.name.toLowerCase().contains('shiv') ||
-        entry.shlokText.toLowerCase().contains('शिव') ||
-        entry.name.toLowerCase().contains('mahadev');
-
     if (entry.progress >= entry.targetCount) {
       entry.progress = 0;
     }
 
+    final shape = (entry.particleShape ?? '').toLowerCase();
     final Widget destination;
-    if (entry.isCustom && entry.particleShape == 'dhup') {
+    if (shape == 'dhup' || shape == 'dhoop') {
       destination = DhupJapScreen(entry: entry);
-    } else if (isCinematic || (entry.isCustom && entry.particleShape == 'ram')) {
-      destination = CinematicJapScreen(entry: entry);
-    } else {
+    } else if (shape == 'jal') {
+      destination = JalJapScreen(entry: entry);
+    } else if (shape == 'prakash' || shape == 'diya') {
+      destination = PrakashJapScreen(entry: entry);
+    } else if (shape == 'pushp' || shape == 'flower') {
+      destination = PushpVarshaJapScreen(entry: entry);
+    } else if (shape == 'standard' || shape == 'mala') {
       destination = JapDetailScreen(entry: entry);
+    } else {
+      destination = CinematicJapScreen(entry: entry);
     }
 
     final updatedProgress = await Navigator.push<int>(

@@ -27,7 +27,12 @@ class _CustomJapDarshanVideoState extends State<CustomJapDarshanVideo> {
   }
 
   Future<void> _initialize() async {
-    final controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    VideoPlayerController controller;
+    if (widget.url.startsWith('http://') || widget.url.startsWith('https://')) {
+      controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    } else {
+      controller = VideoPlayerController.asset('assets/videos/lord_shri_ram_live_darshan.mp4');
+    }
     try {
       await controller.initialize();
       await controller.setLooping(true);

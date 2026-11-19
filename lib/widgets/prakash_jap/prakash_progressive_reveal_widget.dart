@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../cinematic_jap/ram_path_calculator.dart';
+import '../cinematic_jap/reveal_image_loader.dart';
 
 /// Progressive Image Reveal for Prakash Mandal (Divine Light Reveal).
 /// Unveils Lord Shri Ram progressively on every Jap tap (1..108)
@@ -56,9 +57,9 @@ class _PrakashProgressiveRevealWidgetState
 
   Future<void> _loadImage() async {
     try {
-      final ByteData data = await rootBundle.load(widget.imageAsset);
+      final bytes = await loadRevealImageBytes(widget.imageAsset);
       final ui.Codec codec =
-          await ui.instantiateImageCodec(data.buffer.asUint8List());
+          await ui.instantiateImageCodec(bytes);
       final ui.FrameInfo frameInfo = await codec.getNextFrame();
       if (mounted) {
         setState(() {

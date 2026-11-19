@@ -17,6 +17,7 @@ class DhoopSmokeRevealPainter extends CustomPainter {
   final double shimmerProgress;
   final bool isCompleted;
   final double completionGlowProgress;
+  final double? revealProgress;
 
   final Paint _backgroundPaint = Paint()..color = Colors.black;
   final Paint _imagePaint = Paint()..filterQuality = FilterQuality.high;
@@ -31,6 +32,7 @@ class DhoopSmokeRevealPainter extends CustomPainter {
     required this.shimmerProgress,
     required this.isCompleted,
     required this.completionGlowProgress,
+    this.revealProgress,
   });
 
   @override
@@ -85,7 +87,7 @@ class DhoopSmokeRevealPainter extends CustomPainter {
     }
 
     // 3. Ambient Base Dhoop Ember Glow & Rising Wisps in Background
-    final double progressRatio = (revealedNodes.length / 108.0).clamp(0.0, 1.0);
+    final double progressRatio = (revealProgress ?? (revealedNodes.length / 108.0)).clamp(0.0, 1.0);
     _drawDhoopEmberGlow(canvas, smokeBase, dstRect.width * 0.40, progressRatio);
 
     // 4. SaveLayer for progressive feathered aperture masking
@@ -238,6 +240,7 @@ class DhoopSmokeRevealPainter extends CustomPainter {
         oldDelegate.shimmerProgress != shimmerProgress ||
         oldDelegate.isCompleted != isCompleted ||
         oldDelegate.completionGlowProgress != completionGlowProgress ||
+        oldDelegate.revealProgress != revealProgress ||
         oldDelegate.image != image;
   }
 }

@@ -228,35 +228,30 @@ class RamPathCalculator {
       RevealNode(step: 107, u: 0.500, v: 0.020, radiusNorm: 0.058, label: "Divine Apex Pinnacle"),
   ];
 
-  /// Returns the set of nodes revealed up to and including [japCount] (0..108).
+  /// Returns the set of nodes revealed up to and including [japCount] (0..target).
+  /// Scales dynamically for ANY custom target count (e.g. 11, 21, 51, 108, 1008)
+  /// ensuring proportional, seamless reveal with zero dark holes and full completion.
   static List<RevealNode> getRevealedNodesForCount(int japCount, {int target = targetJapCount}) {
     if (japCount <= 0) return const [];
-    if (target > targetJapCount) {
-      final nodeCount = (japCount * targetJapCount / target).ceil();
-      return revealNodes.sublist(0, math.min(nodeCount, targetJapCount));
-    }
-    if (target < targetJapCount) {
-      return List.generate(
-        math.min(japCount, target),
-        (step) => getNodeForStep(step, target: target),
-      );
-    }
-    if (japCount >= targetJapCount) return revealNodes;
-    return revealNodes.sublist(0, japCount);
+    final effectiveTarget = target > 0 ? target : targetJapCount;
+    if (japCount >= effectiveTarget) return revealNodes;
+
+    final int nodeCount = ((japCount * targetJapCount) / effectiveTarget).round().clamp(1, targetJapCount);
+    return revealNodes.sublist(0, nodeCount);
   }
 
-  /// Returns the newly revealed node on [japStep] (0..107).
-  /// A [target] below 108 spreads its chants evenly over the portrait with larger
-  /// reveals, so the whole image opens by the final chant.
+  /// Returns the newly revealed node on [japStep] (0..target-1).
+  /// Accurately scales across all 108 nodes proportionally to target count.
   static RevealNode getNodeForStep(int japStep, {int target = targetJapCount}) {
-    if (target == targetJapCount) {
+    final effectiveTarget = target > 0 ? target : targetJapCount;
+    if (effectiveTarget == targetJapCount) {
       final idx = japStep.clamp(0, targetJapCount - 1);
       return revealNodes[idx];
     }
-    final idx = (japStep * targetJapCount ~/ target).clamp(0, targetJapCount - 1);
+    final int idx = (((japStep + 1) * targetJapCount / effectiveTarget) - 1).round().clamp(0, targetJapCount - 1);
     final node = revealNodes[idx];
-    if (target > targetJapCount) return node;
-    final scale = math.min(3.2, math.sqrt(targetJapCount / target));
+    if (effectiveTarget > targetJapCount) return node;
+    final scale = math.min(3.2, math.sqrt(targetJapCount / effectiveTarget));
     return RevealNode(
       step: node.step,
       u: node.u,

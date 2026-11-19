@@ -42,7 +42,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
   @override
   JapConfig get japEntry => widget.entry;
 
-  late final int _target = widget.entry.isCustom ? math.max(1, widget.entry.targetCount) : 108;
+  late final int _target = widget.entry.targetCount > 0 ? widget.entry.targetCount : 108;
   late int _count;
   int _completedMalas = 0;
   bool _isCompleted = false;
@@ -422,7 +422,9 @@ class _DhupJapScreenState extends State<DhupJapScreen>
           ? audioUrl
           : 'audio/ram_chant.mp3';
 
-      if (rawAudio.startsWith('http://') || rawAudio.startsWith('https://')) {
+      if (rawAudio.contains('assets/audio/')) {
+        await _audioPlayer.play(AssetSource(rawAudio.substring(rawAudio.indexOf('assets/audio/')).replaceFirst('assets/', '')));
+      } else if (rawAudio.startsWith('http://') || rawAudio.startsWith('https://')) {
         await _audioPlayer.play(UrlSource(rawAudio));
       } else if (rawAudio.startsWith('assets/')) {
         await _audioPlayer.play(AssetSource(rawAudio.replaceFirst('assets/', '')));
@@ -560,10 +562,12 @@ class _DhupJapScreenState extends State<DhupJapScreen>
                     shimmerProgress: _shimmerController.value,
                     isCompleted: _isCompleted,
                     completionGlowProgress: _completionController.value,
-                    imageAsset: widget.entry.isCustom && widget.entry.darshanImageUrl.isNotEmpty
+                    imageAsset: widget.entry.darshanImageUrl.isNotEmpty
                         ? widget.entry.darshanImageUrl
-                        : 'assets/images/lord_shri_ram_darshan.png',
-                    revealProgress: widget.entry.isCustom ? _count / _target : null,
+                        : (widget.entry.thumbnailUrl.isNotEmpty
+                            ? widget.entry.thumbnailUrl
+                            : 'assets/images/lord_shri_ram_darshan.png'),
+                    revealProgress: _count / _target,
                   );
                 },
               ),

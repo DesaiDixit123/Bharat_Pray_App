@@ -19,6 +19,7 @@ class CinematicDarshanView extends StatefulWidget {
   final bool isSoundEnabled;
   final VoidCallback? onExitRequested;
   final bool showDeityHighlights; // Eye and jewel glints placed for the bundled Shri Ram image
+  final bool isCustom;
 
   const CinematicDarshanView({
     super.key,
@@ -28,6 +29,7 @@ class CinematicDarshanView extends StatefulWidget {
     this.isSoundEnabled = true,
     this.onExitRequested,
     this.showDeityHighlights = true,
+    this.isCustom = false,
   });
 
   @override
@@ -295,8 +297,58 @@ class _CinematicDarshanViewState extends State<CinematicDarshanView>
               builder: (context, _) {
                 final double entryOpacity = Curves.easeOut.transform(_entryFadeController.value);
 
-                // When live darshan video is ready, render it full-screen with seamless BoxFit.cover
+                // When live darshan video is ready, render it
                 if (_isVideoInitialized && _videoController != null) {
+                  if (widget.isCustom) {
+                    // For Custom Jap with uploaded deity image:
+                    // Render the free ambient video as the dynamic living temple BACKGROUND,
+                    // and float the user's deity portrait in front with breathing & aura!
+                    final double cameraScale = 1.0 + (0.038 * Curves.easeInOutCubic.transform(_cameraController.value));
+                    final double breathVal = _breathingController.value;
+                    final double breathCurve = math.sin(breathVal * math.pi);
+                    final double scaleX = cameraScale * (1.0 + (0.005 * breathCurve));
+                    final double scaleY = cameraScale * (1.0 + (0.013 * breathCurve));
+
+                    return Opacity(
+                      opacity: entryOpacity,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          // 1. Living Background Video
+                          SizedBox.expand(
+                            child: FittedBox(
+                              fit: BoxFit.cover,
+                              child: SizedBox(
+                                width: _videoController!.value.size.width,
+                                height: _videoController!.value.size.height,
+                                child: VideoPlayer(_videoController!),
+                              ),
+                            ),
+                          ),
+                          // 2. Devotional Atmosphere overlay
+                          Container(
+                            decoration: BoxDecoration(
+                              gradient: RadialGradient(
+                                center: Alignment.center,
+                                radius: 0.9,
+                                colors: [
+                                  Colors.transparent,
+                                  Colors.black.withValues(alpha: 0.40),
+                                ],
+                              ),
+                            ),
+                          ),
+                          // 3. User's uploaded Deity Portrait with breathing motion & aura
+                          Transform(
+                            transform: Matrix4.diagonal3Values(scaleX, scaleY, 1.0),
+                            alignment: const Alignment(0.0, 0.15),
+                            child: _buildDarshanImage(),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
                   return Opacity(
                     opacity: entryOpacity,
                     child: SizedBox.expand(

@@ -305,8 +305,16 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   }
 
   void _initImageProvider() {
-    final url = _activeTheme.imageAsset;
-    if (url.startsWith('http')) {
+    String url = '';
+    if (widget.entry.darshanImageUrl.isNotEmpty) {
+      url = widget.entry.darshanImageUrl;
+    } else if (widget.entry.thumbnailUrl.isNotEmpty) {
+      url = widget.entry.thumbnailUrl;
+    } else {
+      url = _activeTheme.imageAsset;
+    }
+
+    if (url.startsWith('http://') || url.startsWith('https://')) {
       _imageProvider = NetworkImage(url);
     } else if (url.startsWith('assets/')) {
       _imageProvider = AssetImage(url);
@@ -887,12 +895,17 @@ class _JapDetailScreenState extends State<JapDetailScreen>
     if (!_preferences.soundEnabled) return;
     try {
       await _audioPlayer.stop();
-      final audioAsset = _activeTheme.audioAsset;
-      if (audioAsset.startsWith('assets/')) {
+      final audioAsset = (widget.entry.shlokAudioUrl != null && widget.entry.shlokAudioUrl!.isNotEmpty)
+          ? widget.entry.shlokAudioUrl!
+          : _activeTheme.audioAsset;
+      if (audioAsset.contains('assets/audio/')) {
+        final assetSub = audioAsset.substring(audioAsset.indexOf('assets/audio/')).replaceFirst('assets/', '');
+        await _audioPlayer.play(AssetSource(assetSub));
+      } else if (audioAsset.startsWith('assets/')) {
         await _audioPlayer.play(AssetSource(audioAsset.replaceFirst('assets/', '')));
-      } else if (audioAsset.startsWith('http')) {
+      } else if (audioAsset.startsWith('http://') || audioAsset.startsWith('https://')) {
         await _audioPlayer.play(UrlSource(audioAsset));
-      } else {
+      } else if (File(audioAsset).existsSync()) {
         await _audioPlayer.play(DeviceFileSource(audioAsset));
       }
       if (mounted) setState(() => _isAudioPlaying = true);

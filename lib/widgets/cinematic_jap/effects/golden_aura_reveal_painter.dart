@@ -17,6 +17,7 @@ class GoldenAuraRevealPainter extends CustomPainter {
   final double shimmerProgress;
   final bool isCompleted;
   final double completionGlowProgress;
+  final double? revealProgress;
 
   final Paint _backgroundPaint = Paint()..color = Colors.black;
   final Paint _imagePaint = Paint()..filterQuality = FilterQuality.high;
@@ -31,6 +32,7 @@ class GoldenAuraRevealPainter extends CustomPainter {
     required this.shimmerProgress,
     required this.isCompleted,
     required this.completionGlowProgress,
+    this.revealProgress,
   });
 
   @override
@@ -83,7 +85,7 @@ class GoldenAuraRevealPainter extends CustomPainter {
     }
 
     // 3. In-Progress Reveal: Golden Volumetric Ray Background Glow
-    final double progressRatio = (revealedNodes.length / 108.0).clamp(0.0, 1.0);
+    final double progressRatio = (revealProgress ?? (revealedNodes.length / 108.0)).clamp(0.0, 1.0);
     final double bgAuraAlpha = (0.22 * progressRatio).clamp(0.0, 0.25);
     if (bgAuraAlpha > 0.02) {
       _drawGoldenAuraRays(canvas, haloCenter, dstRect.width * 0.9, bgAuraAlpha);
@@ -201,6 +203,7 @@ class GoldenAuraRevealPainter extends CustomPainter {
         oldDelegate.shimmerProgress != shimmerProgress ||
         oldDelegate.isCompleted != isCompleted ||
         oldDelegate.completionGlowProgress != completionGlowProgress ||
+        oldDelegate.revealProgress != revealProgress ||
         oldDelegate.image != image;
   }
 }
