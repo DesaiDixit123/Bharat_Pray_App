@@ -56,12 +56,35 @@ Widget buildSmartImage(String? path, {BoxFit fit = BoxFit.cover, double? width, 
     );
   }
   if (clean.startsWith('assets/')) {
-    return Image.asset(clean, fit: fit, width: width, height: height);
+    return Image.asset(
+      clean,
+      fit: fit,
+      width: width,
+      height: height,
+      errorBuilder: (_, __, ___) => Image.asset('assets/images/ram_bhajan.png', fit: fit, width: width, height: height),
+    );
+  }
+  final lower = clean.toLowerCase();
+  if (lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.mkv') || lower.endsWith('.webm') || lower.endsWith('.avi')) {
+    return Container(
+      width: width,
+      height: height,
+      color: const Color(0xFF2E2A36),
+      child: const Center(
+        child: Icon(Icons.movie_creation_outlined, color: Color(0xFFFF7700), size: 36),
+      ),
+    );
   }
   try {
     final file = File(clean);
     if (file.existsSync()) {
-      return Image.file(file, fit: fit, width: width, height: height);
+      return Image.file(
+        file,
+        fit: fit,
+        width: width,
+        height: height,
+        errorBuilder: (_, __, ___) => Image.asset('assets/images/ram_bhajan.png', fit: fit, width: width, height: height),
+      );
     }
   } catch (_) {}
   return Image.asset('assets/images/ram_bhajan.png', fit: fit, width: width, height: height);

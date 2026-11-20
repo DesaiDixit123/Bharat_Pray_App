@@ -172,31 +172,10 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
 
   Future<void> _fetchDetailsAndComments() async {
     try {
-      // Record unique view for darshan
       final prefs = await SharedPreferences.getInstance();
-      final viewedList = prefs.getStringList('viewed_darshan_ids') ?? [];
-      if (_darshanId.isNotEmpty && !viewedList.contains(_darshanId)) {
-        viewedList.add(_darshanId);
-        await prefs.setStringList('viewed_darshan_ids', viewedList);
-        final cur = prefs.getInt('darshan_views_$_darshanId') ?? 0;
-        await prefs.setInt('darshan_views_$_darshanId', cur + 1);
-        ApiService.recordDarshanView(_token, _darshanId);
-      }
 
       // 1. Fetch live details (joins stream as well)
       final details = await ApiService.getLiveDarshanDetails(_token, _darshanId);
-      
-      // Update counts (user is viewing, so viewer count is at least 1)
-      final rawViewers = details['total_viewers'] ?? details['views'] ?? details['current_viewers'] ?? details['currentViewers'] ?? 0;
-      final savedLocal = prefs.getInt('darshan_views_$_darshanId');
-      final effectiveViewers = (savedLocal != null && savedLocal > (rawViewers is num ? rawViewers.toInt() : 0))
-          ? savedLocal
-          : (rawViewers is num ? rawViewers.toInt() : 1);
-      _viewerCount = effectiveViewers > 0 ? effectiveViewers : 1;
-      _likesCount = details['like_count'] ?? details['likesCount'] ?? 0;
-      _commentsCount = details['comments_count'] ?? details['commentsCount'] ?? 0;
-      _shareCount = details['share_count'] ?? details['sharesCount'] ?? 0;
-      _isFavourite = false; // default, fetch active status in next call
 
       // Extract Youtube Video ID
       if (details['youtube_darshan_details'] != null) {
@@ -212,20 +191,64 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
       _isShort = ytUrl.contains('shorts') || _youtubeVideoId == 'SmYpQzL7RRg';
 
       // Check if stream is live or has an active configured YouTube video
-      final bool isLiveFlag = _youtubeVideoId.trim().isNotEmpty;
+      final bool isLiveFlag = _youtubeVideoId.trim().isNotEmpty && (details['is_live_status'] != false);
 
       if (!isLiveFlag) {
         _isOffline = true;
+        _viewerCount = 0;
         if (mounted) {
           setState(() {
             _isLoading = false;
             _isOffline = true;
+            _viewerCount = 0;
           });
         }
         return;
       }
 
       _isOffline = false;
+
+      // Check if a new stream URL has been configured by admin
+      final viewedList = prefs.getStringList('viewed_darshan_ids') ?? [];
+      final currentStreamUrl = (details['youtube_darshan_details']?['youtubeUrl'] ?? 
+                                details['live_stream_url'] ?? 
+                                _youtubeVideoId).toString().trim();
+      bool isNewUrl = false;
+      if (currentStreamUrl.isNotEmpty) {
+        final lastUrl = prefs.getString('darshan_last_url_$_darshanId') ?? '';
+        if (lastUrl.isNotEmpty && lastUrl != currentStreamUrl) {
+          // New URL set by admin! Views start from 0
+          isNewUrl = true;
+          await prefs.setString('darshan_last_url_$_darshanId', currentStreamUrl);
+          await prefs.setInt('darshan_views_$_darshanId', 0);
+          viewedList.remove(_darshanId);
+          await prefs.setStringList('viewed_darshan_ids', viewedList);
+        } else if (lastUrl.isEmpty) {
+          await prefs.setString('darshan_last_url_$_darshanId', currentStreamUrl);
+        }
+      }
+
+      // Record unique view ONLY for live stream
+      if (_darshanId.isNotEmpty && !viewedList.contains(_darshanId)) {
+        viewedList.add(_darshanId);
+        await prefs.setStringList('viewed_darshan_ids', viewedList);
+        final cur = isNewUrl ? 0 : (prefs.getInt('darshan_views_$_darshanId') ?? 0);
+        final newCount = cur + 1;
+        await prefs.setInt('darshan_views_$_darshanId', newCount);
+        ApiService.recordDarshanView(_token, _darshanId);
+      }
+      
+      // Update counts (user is viewing live stream, so viewer count starts from 1)
+      final rawViewers = isNewUrl ? 0 : (details['total_viewers'] ?? details['views'] ?? details['current_viewers'] ?? details['currentViewers'] ?? 0);
+      final savedLocal = prefs.getInt('darshan_views_$_darshanId');
+      final effectiveViewers = (savedLocal != null && savedLocal > (rawViewers is num ? rawViewers.toInt() : 0))
+          ? savedLocal
+          : (rawViewers is num ? rawViewers.toInt() : 1);
+      _viewerCount = effectiveViewers > 0 ? effectiveViewers : 1;
+      _likesCount = details['like_count'] ?? details['likesCount'] ?? 0;
+      _commentsCount = details['comments_count'] ?? details['commentsCount'] ?? 0;
+      _shareCount = details['share_count'] ?? details['sharesCount'] ?? 0;
+      _isFavourite = false; // default, fetch active status in next call
 
       // Initialize YouTube Player
       if (_youtubeVideoId.isNotEmpty) {
@@ -329,7 +352,11 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
       if (mounted && data is Map) {
         final incoming = data['current_viewers'] ?? 0;
         setState(() {
-          _viewerCount = incoming > 0 ? incoming : 1;
+          if (!_isOffline) {
+            _viewerCount = incoming > 0 ? incoming : 1;
+          } else {
+            _viewerCount = 0;
+          }
         });
       }
     });
@@ -1065,8 +1092,8 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                           ),
                         ),
 
-                      // 7. Views Count Badge - portrait only
-                      if (!isHorizontal)
+                      // 7. Views Count Badge - portrait only, only shown when stream is LIVE
+                      if (!isHorizontal && !_isOffline)
                         Positioned(
                           top: 125,
                           left: 110,

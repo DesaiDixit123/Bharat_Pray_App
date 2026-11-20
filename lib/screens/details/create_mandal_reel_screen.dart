@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
 import '../../services/utsav_service.dart';
 import 'mandal_profile_screen.dart';
 
@@ -24,6 +26,8 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
 
   String _festivalName = "Pre Navratri";
   String? _selectedVideoPath;
+  VideoPlayerController? _videoController;
+  bool _isVideoInitializing = false;
 
   @override
   void initState() {
@@ -32,6 +36,48 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
       _festivalName = widget.festivalName!;
     }
     _loadMandalRegistration();
+  }
+
+  @override
+  void dispose() {
+    _videoController?.dispose();
+    _titleController.dispose();
+    _audioController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initVideoController(String path) async {
+    try {
+      await _videoController?.dispose();
+      _videoController = null;
+      setState(() {
+        _selectedVideoPath = path;
+        _isVideoInitializing = true;
+      });
+
+      final isAsset = path.startsWith('assets/');
+      final controller = isAsset
+          ? VideoPlayerController.asset(path)
+          : VideoPlayerController.file(File(path));
+
+      await controller.initialize();
+      await controller.setLooping(true);
+      await controller.setVolume(1.0);
+      await controller.play();
+
+      if (mounted) {
+        setState(() {
+          _videoController = controller;
+          _isVideoInitializing = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isVideoInitializing = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadMandalRegistration() async {
@@ -92,13 +138,9 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
                   try {
                     final XFile? picked = await _picker.pickVideo(source: ImageSource.camera);
                     if (picked != null) {
-                      setState(() => _selectedVideoPath = picked.path);
-                    } else {
-                      setState(() => _selectedVideoPath = "assets/images/ram_bhajan.png");
+                      await _initVideoController(picked.path);
                     }
-                  } catch (e) {
-                    setState(() => _selectedVideoPath = "assets/images/ram_bhajan.png");
-                  }
+                  } catch (e) {}
                 },
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
@@ -140,13 +182,9 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
                   try {
                     final XFile? picked = await _picker.pickVideo(source: ImageSource.gallery);
                     if (picked != null) {
-                      setState(() => _selectedVideoPath = picked.path);
-                    } else {
-                      setState(() => _selectedVideoPath = "assets/images/krishna.png");
+                      await _initVideoController(picked.path);
                     }
-                  } catch (e) {
-                    setState(() => _selectedVideoPath = "assets/images/krishna.png");
-                  }
+                  } catch (e) {}
                 },
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
@@ -253,16 +291,96 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
                       )
                     : ClipRRect(
                         borderRadius: BorderRadius.circular(18),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            buildSmartImage(_selectedVideoPath, fit: BoxFit.cover),
-                            Container(color: Colors.black38),
-                            const Center(
-                              child: Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 48),
-                            ),
-                          ],
-                        ),
+                        child: _isVideoInitializing
+                            ? Container(
+                                color: const Color(0xFF2E2A36),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const CircularProgressIndicator(color: Color(0xFFFF7700)),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      "Loading Video Preview...",
+                                      style: GoogleFonts.outfit(color: Colors.white, fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : (_videoController != null && _videoController!.value.isInitialized)
+                                ? Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      FittedBox(
+                                        fit: BoxFit.cover,
+                                        clipBehavior: Clip.hardEdge,
+                                        child: SizedBox(
+                                          width: _videoController!.value.size.width,
+                                          height: _videoController!.value.size.height,
+                                          child: VideoPlayer(_videoController!),
+                                        ),
+                                      ),
+                                      Container(color: Colors.black26),
+                                      Center(
+                                        child: InkWell(
+                                          onTap: () {
+                                            setState(() {
+                                              if (_videoController!.value.isPlaying) {
+                                                _videoController!.pause();
+                                              } else {
+                                                _videoController!.play();
+                                              }
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: const BoxDecoration(
+                                              color: Colors.black45,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Icon(
+                                              _videoController!.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                              color: Colors.white,
+                                              size: 38,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        top: 10,
+                                        right: 10,
+                                        child: InkWell(
+                                          onTap: _showMediaSourceDialog,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFF7700),
+                                              borderRadius: BorderRadius.circular(20),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.edit_rounded, color: Colors.white, size: 14),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  "Change",
+                                                  style: GoogleFonts.outfit(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      Container(color: const Color(0xFF2E2A36)),
+                                      const Center(
+                                        child: Icon(Icons.videocam_rounded, color: Color(0xFFFF7700), size: 48),
+                                      ),
+                                    ],
+                                  ),
                       ),
               ),
             ),
@@ -394,7 +512,8 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
                   }
                   final newReel = ReelItem(
                     id: DateTime.now().millisecondsSinceEpoch.toString(),
-                    thumbnailUrl: _selectedVideoPath ?? "assets/images/ram_bhajan.png",
+                    thumbnailUrl: "assets/images/devotional/navratri_garba_festival.jpg",
+                    videoUrl: _selectedVideoPath,
                     title: _titleController.text.trim(),
                     audioTrack: _audioController.text.trim(),
                     festivalName: _festivalName,

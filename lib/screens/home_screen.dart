@@ -28,6 +28,7 @@ import 'details/deity_temples_screen.dart';
 import 'details/festivals_home_tab_content.dart';
 import '../models/bhajan_track_item.dart';
 import '../models/journey_models.dart';
+import '../models/yatra_model.dart';
 import '../models/jap_models.dart';
 import '../models/jap_theme_config.dart';
 import '../services/jap_offline_repository.dart';
@@ -65,6 +66,21 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _liveDarshanBanners = [];
   bool _isLoadingLiveDarshans = true;
   Set<String> _viewedDarshanIds = {};
+
+  // Home Screen Search state
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  String _searchQuery = '';
+  Timer? _searchDebounce;
+  bool _isSearching = false;
+  List<Map<String, dynamic>> _searchedDarshans = [];
+  List<JapThemeConfig> _searchedJaps = [];
+  List<YatraModel> _searchedYatras = [];
+  List<BhajanTrackItem> _searchedBhajans = [];
+  List<String> _recentSearches = [];
+
+  // Dynamic Festival Cards state (Configurable from Admin: date, color, image)
+  List<Map<String, dynamic>> _festivalCards = [];
 
   // Dynamic state for the 4 Home Devotional Cards (Yatra, Jap, Bhajan, Granth)
   String _yatraCardTitle = 'Somnath Temple';
@@ -111,8 +127,42 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: 0);
+    _loadRecentSearches();
+    _searchFocusNode.addListener(_onSearchFocusChanged);
     _loadProfileName();
+    _loadFestivals();
     GlobalSocketService.instance.connect();
+  }
+
+  Future<void> _loadFestivals() async {
+    try {
+      final festivals = await ApiService.getFestivalCards();
+      if (mounted) {
+        setState(() {
+          if (festivals.isNotEmpty) {
+            _festivalCards = festivals;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading festival cards: $e');
+    }
+  }
+
+  Future<void> _onRefreshHome() async {
+    try {
+      await Future.wait([
+        _loadProfileName(),
+        _loadFestivals(),
+        _loadHomeFourCardsProgress(),
+      ]);
+    } catch (e) {
+      debugPrint('Error refreshing home screen: $e');
+    }
+  }
+
+  void _onSearchFocusChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadProfileName() async {
@@ -353,7 +403,7 @@ class _HomeScreenState extends State<HomeScreen> {
             });
           }
 
-          _processLiveDarshans(darshanListData, homeData);
+          await _processLiveDarshans(darshanListData, homeData);
         }
       } else {
         if (mounted) {
@@ -373,8 +423,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _processLiveDarshans(Map<String, dynamic> darshanListData, Map<String, dynamic> homeData) {
+  Future<void> _processLiveDarshans(Map<String, dynamic> darshanListData, Map<String, dynamic> homeData) async {
     final List<Map<String, dynamic>> banners = [];
+    final prefs = await SharedPreferences.getInstance();
 
     // 1. Process docs from /user/darshan/list
     final docs = darshanListData['docs'] as List<dynamic>? ?? [];
@@ -383,7 +434,8 @@ class _HomeScreenState extends State<HomeScreen> {
         final bool hasYtVideo = item['yt_info'] is Map &&
             (item['yt_info']['youtubeVideoId']?.toString().trim().isNotEmpty ?? false);
         final bool isLive = (item['is_live_status'] == true) ||
-            (hasYtVideo && item['yt_info']['isLiveStatus'] == true);
+            (hasYtVideo && item['yt_info']['isLiveStatus'] == true) ||
+            (item['live_darshan_info'] is Map && item['live_darshan_info']['is_live_status'] == true);
 
         final String darshanId = (item['darshan_id'] ?? item['_id'])?.toString() ?? '';
         final String title = (item['name'] ?? item['temple']?['name'] ?? 'Sacred Darshan').toString();
@@ -400,17 +452,6 @@ class _HomeScreenState extends State<HomeScreen> {
           desc = isLive ? 'Join live aarti and seek divine blessings.' : 'Daily darshan and sacred blessings.';
         }
 
-        // Dynamic viewer calculation with unique user view check
-        final dynamic liveInfo = item['live_darshan_info'];
-        dynamic viewersRaw;
-        if (liveInfo is Map) {
-          viewersRaw = liveInfo['total_viewers'] ?? liveInfo['current_viewers'] ?? liveInfo['peak_viewers'];
-        }
-        viewersRaw ??= item['views'] ?? item['total_viewers'] ?? item['current_viewers'] ?? item['viewers'];
-
-        int numericViews = _parseNumericViews(viewersRaw);
-        final String viewsFormatted = _formatViewerCount(numericViews, darshanId: darshanId);
-
         // Dynamic temple banner image resolution
         String ytThumbnail = '';
         final dynamic ytObj = item['yt_info'] ?? item['youtube_darshan_details'];
@@ -418,7 +459,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 (ytObj is Map ? ytObj['youtubeVideoId'] ?? ytObj['youtube_video_id'] : null) ??
                 item['live_stream_url'] ??
                 '')
-            .toString();
+            .toString().trim();
         if (ytId.isNotEmpty) {
           if (ytId.contains('v=')) {
             ytId = ytId.split('v=').last.split('&').first;
@@ -428,6 +469,49 @@ class _HomeScreenState extends State<HomeScreen> {
           if (ytId.length == 11) {
             ytThumbnail = 'https://img.youtube.com/vi/$ytId/hqdefault.jpg';
           }
+        }
+
+        final String currentStreamUrl = (item['live_stream_url'] ??
+                (ytObj is Map ? ytObj['youtubeUrl'] ?? ytObj['youtubeVideoId'] : null) ??
+                item['youtube_video_id'] ??
+                ytId)
+            ?.toString()
+            .trim() ??
+            '';
+
+        bool isNewUrl = false;
+        if (darshanId.isNotEmpty && currentStreamUrl.isNotEmpty) {
+          final savedUrl = prefs.getString('darshan_last_url_$darshanId') ?? '';
+          if (savedUrl.isNotEmpty && savedUrl != currentStreamUrl) {
+            isNewUrl = true;
+            await prefs.setString('darshan_last_url_$darshanId', currentStreamUrl);
+            await prefs.setInt('darshan_views_$darshanId', 0);
+            final viewedList = prefs.getStringList('viewed_darshan_ids') ?? [];
+            viewedList.remove(darshanId);
+            await prefs.setStringList('viewed_darshan_ids', viewedList);
+            _viewedDarshanIds.remove(darshanId);
+          } else if (savedUrl.isEmpty) {
+            await prefs.setString('darshan_last_url_$darshanId', currentStreamUrl);
+          }
+        }
+
+        // If offline: views must NOT be shown
+        int numericViews = 0;
+        String viewsFormatted = '';
+        if (isLive) {
+          final dynamic liveInfo = item['live_darshan_info'];
+          dynamic viewersRaw;
+          if (liveInfo is Map) {
+            viewersRaw = liveInfo['total_viewers'] ?? liveInfo['current_viewers'] ?? liveInfo['peak_viewers'];
+          }
+          viewersRaw ??= item['views'] ?? item['total_viewers'] ?? item['current_viewers'] ?? item['viewers'];
+
+          numericViews = isNewUrl ? 0 : _parseNumericViews(viewersRaw);
+          final savedLocal = prefs.getInt('darshan_views_$darshanId');
+          if (!isNewUrl && savedLocal != null && savedLocal > numericViews) {
+            numericViews = savedLocal;
+          }
+          viewsFormatted = _formatViewerCount(numericViews, darshanId: darshanId);
         }
 
         final String rawImg = (
@@ -482,8 +566,55 @@ class _HomeScreenState extends State<HomeScreen> {
             if (desc.isEmpty) {
               desc = isLive ? 'Join live aarti and seek divine blessings.' : 'Daily darshan and sacred blessings.';
             }
-            int numericViews = _parseNumericViews(item['views'] ?? item['total_viewers'] ?? item['current_viewers']);
-            final String viewsFormatted = _formatViewerCount(numericViews, darshanId: darshanId);
+
+            final dynamic ytObj = item['yt_info'] ?? item['youtube_darshan_details'];
+            String ytId = (item['youtube_video_id'] ??
+                    (ytObj is Map ? ytObj['youtubeVideoId'] ?? ytObj['youtube_video_id'] : null) ??
+                    item['live_stream_url'] ??
+                    '')
+                .toString().trim();
+            if (ytId.isNotEmpty) {
+              if (ytId.contains('v=')) {
+                ytId = ytId.split('v=').last.split('&').first;
+              } else if (ytId.contains('youtu.be/')) {
+                ytId = ytId.split('youtu.be/').last.split('?').first;
+              }
+            }
+
+            final String currentStreamUrl = (item['live_stream_url'] ??
+                    (ytObj is Map ? ytObj['youtubeUrl'] ?? ytObj['youtubeVideoId'] : null) ??
+                    item['youtube_video_id'] ??
+                    ytId)
+                ?.toString()
+                .trim() ??
+                '';
+
+            bool isNewUrl = false;
+            if (darshanId.isNotEmpty && currentStreamUrl.isNotEmpty) {
+              final savedUrl = prefs.getString('darshan_last_url_$darshanId') ?? '';
+              if (savedUrl.isNotEmpty && savedUrl != currentStreamUrl) {
+                isNewUrl = true;
+                await prefs.setString('darshan_last_url_$darshanId', currentStreamUrl);
+                await prefs.setInt('darshan_views_$darshanId', 0);
+                final viewedList = prefs.getStringList('viewed_darshan_ids') ?? [];
+                viewedList.remove(darshanId);
+                await prefs.setStringList('viewed_darshan_ids', viewedList);
+                _viewedDarshanIds.remove(darshanId);
+              } else if (savedUrl.isEmpty) {
+                await prefs.setString('darshan_last_url_$darshanId', currentStreamUrl);
+              }
+            }
+
+            int numericViews = 0;
+            String viewsFormatted = '';
+            if (isLive) {
+              numericViews = isNewUrl ? 0 : _parseNumericViews(item['views'] ?? item['total_viewers'] ?? item['current_viewers']);
+              final savedLocal = prefs.getInt('darshan_views_$darshanId');
+              if (!isNewUrl && savedLocal != null && savedLocal > numericViews) {
+                numericViews = savedLocal;
+              }
+              viewsFormatted = _formatViewerCount(numericViews, darshanId: darshanId);
+            }
 
             final String rawImg = (
               item['bannerImage'] ??
@@ -571,12 +702,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final darshanId = (banner['id'] ?? banner['darshan_id'] ?? '').toString();
     final title = banner['title']?.toString() ?? 'Live Darshan';
     final image = banner['image']?.toString() ?? '';
+    final bool isLive = banner['isLive'] == true;
 
     final prefs = await SharedPreferences.getInstance();
     final viewedList = prefs.getStringList('viewed_darshan_ids') ?? [];
 
-    // Track unique view: only increment if user enters for the first time!
-    if (darshanId.isNotEmpty && !viewedList.contains(darshanId)) {
+    // Track unique view: only increment if stream is LIVE! Offline streams do not track/show views.
+    if (isLive && darshanId.isNotEmpty && !viewedList.contains(darshanId)) {
       viewedList.add(darshanId);
       await prefs.setStringList('viewed_darshan_ids', viewedList);
 
@@ -609,13 +741,20 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
 
-    // On return from Darshan screen: verify view count remains 1 and is NOT incremented again
+    // On return from Darshan screen: sync view count if live, or ensure empty if offline
     if (mounted && darshanId.isNotEmpty) {
-      final savedCount = prefs.getInt('darshan_views_$darshanId');
-      if (savedCount != null) {
+      if (isLive) {
+        final savedCount = prefs.getInt('darshan_views_$darshanId');
+        if (savedCount != null) {
+          setState(() {
+            banner['raw_views'] = savedCount;
+            banner['views'] = _formatViewerCount(savedCount, darshanId: darshanId);
+          });
+        }
+      } else {
         setState(() {
-          banner['raw_views'] = savedCount;
-          banner['views'] = _formatViewerCount(savedCount, darshanId: darshanId);
+          banner['views'] = '';
+          banner['raw_views'] = 0;
         });
       }
     }
@@ -834,65 +973,1351 @@ class _HomeScreenState extends State<HomeScreen> {
     YatraPersonalChatService().unreadMessageCount.removeListener(_onUnreadMessagesChanged);
     _carouselTimer?.cancel();
     _pageController.dispose();
+    _searchController.dispose();
+    _searchFocusNode.removeListener(_onSearchFocusChanged);
+    _searchFocusNode.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
-  Widget _buildHomeTabBody() {
-    return SafeArea(
-      bottom: false,
-      child: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildDynamicHeader(),
+  Future<void> _loadRecentSearches() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList('home_recent_searches') ?? [];
+    if (mounted) {
+      setState(() {
+        _recentSearches = saved;
+      });
+    }
+  }
 
-            // 2. Search gods, temples bar (full width)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-              child: Container(
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+  Future<void> _saveRecentSearch(String query) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    _recentSearches.remove(trimmed);
+    _recentSearches.insert(0, trimmed);
+    if (_recentSearches.length > 10) {
+      _recentSearches = _recentSearches.sublist(0, 10);
+    }
+    await prefs.setStringList('home_recent_searches', _recentSearches);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _removeRecentSearch(String query) async {
+    final prefs = await SharedPreferences.getInstance();
+    _recentSearches.remove(query);
+    await prefs.setStringList('home_recent_searches', _recentSearches);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _clearAllRecentSearches() async {
+    final prefs = await SharedPreferences.getInstance();
+    _recentSearches.clear();
+    await prefs.setStringList('home_recent_searches', []);
+    if (mounted) setState(() {});
+  }
+
+  void _onSearchChanged(String query) {
+    _searchDebounce?.cancel();
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) {
+      setState(() {
+        _searchQuery = '';
+        _isSearching = false;
+        _searchedDarshans.clear();
+        _searchedJaps.clear();
+        _searchedYatras.clear();
+        _searchedBhajans.clear();
+      });
+      return;
+    }
+
+    setState(() {
+      _searchQuery = query;
+      _isSearching = true;
+    });
+
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      _performSearch(trimmed);
+    });
+  }
+
+  void _clearSearch() {
+    _searchDebounce?.cancel();
+    _searchController.clear();
+    setState(() {
+      _searchQuery = '';
+      _isSearching = false;
+      _searchedDarshans.clear();
+      _searchedJaps.clear();
+      _searchedYatras.clear();
+      _searchedBhajans.clear();
+    });
+    _searchFocusNode.unfocus();
+  }
+
+  Future<void> _performSearch(String query) async {
+    if (!mounted) return;
+    _saveRecentSearch(query);
+    setState(() {
+      _isSearching = true;
+    });
+
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
+    final lowerQuery = query.toLowerCase();
+
+    // 1. Search Temple Darshan (local banners + API)
+    final localDarshans = _liveDarshanBanners.where((b) {
+      final title = (b['title'] ?? '').toString().toLowerCase();
+      final sub = (b['subtitle'] ?? '').toString().toLowerCase();
+      final desc = (b['desc'] ?? '').toString().toLowerCase();
+      return title.contains(lowerQuery) || sub.contains(lowerQuery) || desc.contains(lowerQuery);
+    }).map((b) => Map<String, dynamic>.from(b)).toList();
+
+    List<Map<String, dynamic>> apiDarshans = [];
+    try {
+      final res = await ApiService.getDarshansList(token: token, search: query, limit: 12);
+      final docs = (res['docs'] as List<dynamic>?) ?? [];
+      for (final item in docs) {
+        if (item is! Map) continue;
+        final hasYtVideo = item['yt_info'] is Map &&
+            (item['yt_info']['youtubeVideoId']?.toString().trim().isNotEmpty ?? false);
+        final bool isLive = (item['is_live_status'] == true) ||
+            (hasYtVideo && item['yt_info']['isLiveStatus'] == true) ||
+            (item['live_darshan_info'] is Map && item['live_darshan_info']['is_live_status'] == true);
+
+        final String darshanId = (item['darshan_id'] ?? item['_id'])?.toString() ?? '';
+        final String title = (item['name'] ?? item['temple']?['name'] ?? 'Sacred Darshan').toString();
+        final String subtitle = (item['temple']?['location'] ?? item['location'] ?? 'Holy Shrine').toString();
+        final String desc = (item['description'] ?? (isLive ? 'Live Darshan' : 'Sacred Darshan')).toString();
+
+        String bannerImg = (item['bannerImage'] ?? item['image'] ?? item['thumbnailUrl'] ?? '').toString().trim();
+        if (bannerImg.isEmpty && hasYtVideo) {
+          final ytId = item['yt_info']['youtubeVideoId'].toString();
+          bannerImg = 'https://img.youtube.com/vi/$ytId/hqdefault.jpg';
+        }
+
+        int numericViews = 0;
+        String viewsFormatted = '';
+        if (isLive) {
+          numericViews = _parseNumericViews(item['views'] ?? item['total_viewers'] ?? item['current_viewers']);
+          final savedLocal = prefs.getInt('darshan_views_$darshanId');
+          if (savedLocal != null && savedLocal > numericViews) {
+            numericViews = savedLocal;
+          }
+          viewsFormatted = _formatViewerCount(numericViews, darshanId: darshanId);
+        }
+
+        apiDarshans.add({
+          'id': darshanId,
+          'title': title,
+          'subtitle': subtitle,
+          'desc': desc,
+          'image': bannerImg.isNotEmpty ? bannerImg : 'assets/images/h1.jpg',
+          'isLive': isLive,
+          'views': viewsFormatted,
+          'raw_views': numericViews,
+          'raw': item,
+        });
+      }
+    } catch (_) {}
+
+    final darshanMap = <String, Map<String, dynamic>>{};
+    for (final d in [...localDarshans, ...apiDarshans]) {
+      final id = (d['id'] ?? d['darshan_id'] ?? '').toString();
+      if (id.isNotEmpty && !darshanMap.containsKey(id)) {
+        darshanMap[id] = d;
+      }
+    }
+
+    // 2. Search Jap Mantras & Themes
+    final matchedJaps = JapThemeConfig.allThemes.where((theme) {
+      final name = theme.name.toLowerCase();
+      final deity = theme.deityName.toLowerCase();
+      final mantra = theme.mantraText.toLowerCase();
+      final blessing = theme.blessingSubtitle.toLowerCase();
+      return name.contains(lowerQuery) ||
+          deity.contains(lowerQuery) ||
+          mantra.contains(lowerQuery) ||
+          blessing.contains(lowerQuery) ||
+          lowerQuery.contains('jap') ||
+          lowerQuery.contains('mala') ||
+          lowerQuery.contains('mantra') ||
+          lowerQuery.contains('chant');
+    }).toList();
+
+    // 3. Search Yatra
+    const localYatras = [
+      YatraModel(
+        id: '1',
+        title: 'Somnath Temple Yatra',
+        distance: '450 KM',
+        steps: '108k Steps',
+        duration: '5 Days',
+        groupSize: '12.5 k',
+        image: 'assets/images/somnath_temple_new.png',
+        tag: 'Popular Yatra',
+        progress: 0.0,
+        description: 'First Jyotirlinga sacred pilgrimage journey.',
+      ),
+      YatraModel(
+        id: '2',
+        title: 'Dwarkadhish Temple Yatra',
+        distance: '220 KM',
+        steps: '80k Steps',
+        duration: '4 Days',
+        groupSize: '8.2 k',
+        image: 'assets/images/dwarka_temple.jpg',
+        tag: 'Popular Yatra',
+        progress: 0.0,
+        description: 'Holy kingdom of Lord Krishna pilgrimage.',
+      ),
+      YatraModel(
+        id: '3',
+        title: 'Ayodhya Ram Mandir Yatra',
+        distance: '620 KM',
+        steps: '145k Steps',
+        duration: '7 Days',
+        groupSize: '25.4 k',
+        image: 'assets/images/lord_shri_ram_darshan.png',
+        tag: 'Popular Yatra',
+        progress: 0.0,
+        description: 'Sacred birthplace of Lord Shri Rama.',
+      ),
+      YatraModel(
+        id: '4',
+        title: 'Kedarnath Dham Yatra',
+        distance: '310 KM',
+        steps: '95k Steps',
+        duration: '6 Days',
+        groupSize: '18.1 k',
+        image: 'assets/images/deity_shiva.png',
+        tag: 'Popular Yatra',
+        progress: 0.0,
+        description: 'Himalayan abode of Lord Shiva.',
+      ),
+    ];
+
+    final matchedLocalYatras = localYatras.where((y) {
+      final title = y.title.toLowerCase();
+      final desc = y.description.toLowerCase();
+      return title.contains(lowerQuery) ||
+          desc.contains(lowerQuery) ||
+          lowerQuery.contains('yatra') ||
+          lowerQuery.contains('journey') ||
+          lowerQuery.contains('pilgrim');
+    }).toList();
+
+    List<YatraModel> apiYatras = [];
+    try {
+      final yatraRes = await ApiService.getPopularYatra(token: token, search: query, limit: 8);
+      if (yatraRes.data != null && yatraRes.data!.isNotEmpty) {
+        apiYatras = yatraRes.data!;
+      }
+    } catch (_) {}
+
+    final yatraMap = <String, YatraModel>{};
+    for (final y in [...matchedLocalYatras, ...apiYatras]) {
+      final id = y.id.isNotEmpty ? y.id : y.title;
+      if (!yatraMap.containsKey(id)) {
+        yatraMap[id] = y;
+      }
+    }
+
+    // 4. Search Bhajans (local + API)
+    final localBhajans = BhajanLibraryService.instance.recentTracks
+        .followedBy(BhajanLibraryService.instance.downloadedTracks)
+        .followedBy(BhajanLibraryService.instance.likedTracks)
+        .where((track) {
+          final title = track.title.toLowerCase();
+          final singer = track.singer.toLowerCase();
+          return title.contains(lowerQuery) ||
+              singer.contains(lowerQuery) ||
+              lowerQuery.contains('bhajan') ||
+              lowerQuery.contains('song') ||
+              lowerQuery.contains('aarti');
+        })
+        .toList();
+
+    List<BhajanTrackItem> apiBhajans = [];
+    try {
+      final res = await ApiService.searchBhajans(token: token, search: query, limit: 12);
+      final List<dynamic> bList = (res['docs'] ?? res['bhajans'] ?? res['data']) as List<dynamic>? ?? [];
+      for (final raw in bList) {
+        if (raw is Map) {
+          try {
+            apiBhajans.add(BhajanTrackItem.fromJson(Map<String, dynamic>.from(raw)));
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+
+    final bhajanMap = <String, BhajanTrackItem>{};
+    for (final b in [...localBhajans, ...apiBhajans]) {
+      if (b.id.isNotEmpty && !bhajanMap.containsKey(b.id)) {
+        bhajanMap[b.id] = b;
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _searchedDarshans = darshanMap.values.toList();
+      _searchedJaps = matchedJaps;
+      _searchedYatras = yatraMap.values.toList();
+      _searchedBhajans = bhajanMap.values.toList();
+      _isSearching = false;
+    });
+  }
+
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+      child: Container(
+        height: 48,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(
+            color: const Color(0xFFEFE6DB),
+            width: 1.0,
+          ),
+        ),
+        child: TextField(
+          controller: _searchController,
+          focusNode: _searchFocusNode,
+          onChanged: _onSearchChanged,
+          onSubmitted: (val) => _performSearch(val.trim()),
+          textInputAction: TextInputAction.search,
+          style: GoogleFonts.outfit(color: const Color(0xFF2E2A36), fontSize: 14),
+          decoration: InputDecoration(
+            hintText: LocalizedApiHelper.parse('Search gods, temples, bhajans...'),
+            hintStyle: GoogleFonts.outfit(
+              color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
+              fontSize: 14,
+            ),
+            prefixIcon: const Icon(
+              Icons.search_rounded,
+              color: Color(0xFF8C8797),
+            ),
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_isSearching)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 8.0),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF7A00)),
+                      ),
+                    ),
+                  ),
+                if (_searchController.text.isNotEmpty || _searchFocusNode.hasFocus)
+                  GestureDetector(
+                    onTap: () {
+                      if (_searchController.text.isNotEmpty) {
+                        _clearSearch();
+                      } else {
+                        _searchFocusNode.unfocus();
+                      }
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 10.0),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 20,
+                        color: Color(0xFF8C8797),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(vertical: 13),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecentSearchesView() {
+    const popularSuggestions = [
+      'Somnath Temple',
+      'Shree Krishna',
+      'Mahadev Aarti',
+      'Dwarkadhish Yatra',
+      'Lord Rama',
+      'Hanuman Chalisa',
+    ];
+
+    return ListView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+      children: [
+        if (_recentSearches.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.history_rounded, size: 18, color: Color(0xFFFF7A00)),
+                    const SizedBox(width: 8),
+                    Text(
+                      LocalizedApiHelper.parse('Recent Searches'),
+                      style: GoogleFonts.outfit(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF2E2A36),
+                      ),
                     ),
                   ],
-                  border: Border.all(
-                    color: const Color(0xFFEFE6DB),
-                    width: 1.0,
+                ),
+                GestureDetector(
+                  onTap: _clearAllRecentSearches,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+                    child: Text(
+                      LocalizedApiHelper.parse('Clear All'),
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFFFF7A00),
+                      ),
+                    ),
                   ),
                 ),
-                child: TextField(
-                  style: GoogleFonts.outfit(color: const Color(0xFF2E2A36)),
-                  decoration: InputDecoration(
-                    hintText: LocalizedApiHelper.parse('Search gods, temples, bhajans...'),
-                    hintStyle: GoogleFonts.outfit(
-                      color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
-                      fontSize: 14,
-                    ),
-                    prefixIcon: Icon(
-                      Icons.search_rounded,
-                      color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 13),
-                  ),
-                ),
-              ),
+              ],
             ),
+          ),
+          const SizedBox(height: 4),
+          ..._recentSearches.map((item) => _buildRecentSearchItem(item)),
+          const SizedBox(height: 20),
+        ],
 
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10.0),
-              child: SizedBox(
-                height: 353,
-                child: _buildHeroSection(),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: Row(
+            children: [
+              const Icon(Icons.trending_up_rounded, size: 18, color: Color(0xFFFF7A00)),
+              const SizedBox(width: 8),
+              Text(
+                LocalizedApiHelper.parse('Popular Searches'),
+                style: GoogleFonts.outfit(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF2E2A36),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 10,
+          children: popularSuggestions.map((suggestion) {
+            return GestureDetector(
+              onTap: () {
+                _searchController.text = suggestion;
+                _onSearchChanged(suggestion);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFEFE6DB)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.02),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.search_rounded, size: 15, color: Color(0xFF8C8797)),
+                    const SizedBox(width: 6),
+                    Text(
+                      suggestion,
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFF2E2A36),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecentSearchItem(String item) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () {
+            _searchController.text = item;
+            _onSearchChanged(item);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFEFE6DB), width: 0.8),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFFF4EB),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.history_rounded, size: 17, color: Color(0xFFFF7A00)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    item,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF2E2A36),
+                    ),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => _removeRecentSearch(item),
+                  child: const Padding(
+                    padding: EdgeInsets.all(4.0),
+                    child: Icon(Icons.close_rounded, size: 18, color: Color(0xFF8C8797)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchResultsView() {
+    if (_isSearching &&
+        _searchedDarshans.isEmpty &&
+        _searchedJaps.isEmpty &&
+        _searchedYatras.isEmpty &&
+        _searchedBhajans.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(
+              strokeWidth: 2.5,
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF7A00)),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              LocalizedApiHelper.parse('Searching temples, japs, yatras & bhajans...'),
+              style: GoogleFonts.outfit(
+                color: const Color(0xFF7A7266),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
               ),
             ),
+          ],
+        ),
+      );
+    }
+
+    if (!_isSearching &&
+        _searchedDarshans.isEmpty &&
+        _searchedJaps.isEmpty &&
+        _searchedYatras.isEmpty &&
+        _searchedBhajans.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFFF4EB),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.search_off_rounded,
+                  size: 36,
+                  color: Color(0xFFFF7A00),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '${LocalizedApiHelper.parse("No results found for")} "$_searchQuery"',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF2E2A36),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                LocalizedApiHelper.parse('Try searching with another temple, deity, jap, yatra, or bhajan.'),
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  color: const Color(0xFF8C8797),
+                ),
+              ),
+              const SizedBox(height: 20),
+              TextButton.icon(
+                onPressed: _clearSearch,
+                icon: const Icon(Icons.clear_rounded, size: 16, color: Color(0xFFFF7A00)),
+                label: Text(
+                  LocalizedApiHelper.parse('Clear Search'),
+                  style: GoogleFonts.outfit(
+                    color: const Color(0xFFFF7A00),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+      children: [
+        // 1. Temple Darshan Section
+        if (_searchedDarshans.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0, bottom: 12.0),
+            child: Row(
+              children: [
+                const Icon(Icons.temple_hindu_rounded, size: 18, color: Color(0xFFFF7A00)),
+                const SizedBox(width: 8),
+                Text(
+                  LocalizedApiHelper.parse('Temple Darshan'),
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF2E2A36),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF4EB),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${_searchedDarshans.length}',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFFFF7A00),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ..._searchedDarshans.map((d) => _buildSearchedDarshanCard(d)),
+          const SizedBox(height: 16),
+        ],
+
+        // 2. Jap Section
+        if (_searchedJaps.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0, bottom: 12.0),
+            child: Row(
+              children: [
+                const Icon(Icons.spa_rounded, size: 18, color: Color(0xFFFF7A00)),
+                const SizedBox(width: 8),
+                Text(
+                  LocalizedApiHelper.parse('Jap'),
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF2E2A36),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF4EB),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${_searchedJaps.length}',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFFFF7A00),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ..._searchedJaps.map((j) => _buildSearchedJapCard(j)),
+          const SizedBox(height: 16),
+        ],
+
+        // 3. Yatra Section
+        if (_searchedYatras.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0, bottom: 12.0),
+            child: Row(
+              children: [
+                const Icon(Icons.directions_walk_rounded, size: 18, color: Color(0xFFFF7A00)),
+                const SizedBox(width: 8),
+                Text(
+                  LocalizedApiHelper.parse('Yatra'),
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF2E2A36),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF4EB),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${_searchedYatras.length}',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFFFF7A00),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ..._searchedYatras.map((y) => _buildSearchedYatraCard(y)),
+          const SizedBox(height: 16),
+        ],
+
+        // 4. Bhajans Section
+        if (_searchedBhajans.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0, bottom: 12.0),
+            child: Row(
+              children: [
+                const Icon(Icons.music_note_rounded, size: 18, color: Color(0xFFFF7A00)),
+                const SizedBox(width: 8),
+                Text(
+                  LocalizedApiHelper.parse('Bhajans'),
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF2E2A36),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF4EB),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${_searchedBhajans.length}',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFFFF7A00),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ..._searchedBhajans.map((b) => _buildSearchedBhajanCard(b)),
+        ],
+
+        ValueListenableBuilder<BhajanTrackItem?>(
+          valueListenable: BhajanAudioService.instance.currentTrackNotifier,
+          builder: (context, activeTrack, _) {
+            final double bottomClearance = activeTrack != null ? 196.0 : 124.0;
+            return SizedBox(height: bottomClearance + MediaQuery.of(context).padding.bottom);
+          },
+        ),
+      ],
+    );
+  }
+
+  Future<void> _openJapFromSearch(JapThemeConfig theme) async {
+    final entry = JapConfig(
+      id: theme.id,
+      name: theme.name,
+      thumbnailUrl: theme.imageAsset,
+      darshanImageUrl: theme.imageAsset,
+      shlokText: theme.mantraText,
+      shlokAudioUrl: theme.audioAsset,
+      targetCount: 108,
+      progress: 0,
+      effectPack: EffectPack.resolve(name: theme.name),
+    );
+
+    final bool isCinematic = entry.name.toLowerCase().contains('ram') ||
+        entry.shlokText.toLowerCase().contains('राम') ||
+        entry.name.toLowerCase().contains('radha') ||
+        entry.shlokText.toLowerCase().contains('राधे') ||
+        entry.shlokText.toLowerCase().contains('राधा') ||
+        entry.name.toLowerCase().contains('krishna') ||
+        entry.shlokText.toLowerCase().contains('कृष्ण') ||
+        entry.name.toLowerCase().contains('shiv') ||
+        entry.shlokText.toLowerCase().contains('शिव') ||
+        entry.name.toLowerCase().contains('mahadev');
+
+    final Widget destination = isCinematic
+        ? CinematicJapScreen(entry: entry)
+        : JapDetailScreen(entry: entry);
+
+    final updatedProgress = await Navigator.push<int>(
+      context,
+      MaterialPageRoute(builder: (_) => destination),
+    );
+
+    if (updatedProgress != null) {
+      await JapOfflineRepository.saveProgress(
+        japId: entry.id,
+        count: updatedProgress % entry.targetCount,
+        completedMalas: updatedProgress ~/ entry.targetCount,
+        targetCount: entry.targetCount,
+      );
+    }
+    _loadHomeFourCardsProgress();
+  }
+
+  Future<void> _openYatraFromSearch(YatraModel yatra) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const YatraScreen(isTab: false),
+      ),
+    );
+    _loadHomeFourCardsProgress();
+  }
+
+  Widget _buildSearchedJapCard(JapThemeConfig theme) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        elevation: 0,
+        child: InkWell(
+          onTap: () => _openJapFromSearch(theme),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFEFE6DB), width: 1),
+            ),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox(
+                    width: 56,
+                    height: 56,
+                    child: Image.asset(
+                      theme.imageAsset,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Image.asset('assets/images/h2.jpg', fit: BoxFit.cover),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              theme.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.outfit(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF2E2A36),
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF4EB),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '108 Jap',
+                              style: GoogleFonts.outfit(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFFFF7A00),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Mantra: ${theme.mantraText}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFFFF7A00),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        theme.blessingSubtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          color: const Color(0xFF8C8797),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFFF4EB),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.spa_rounded,
+                      color: Color(0xFFFF7A00),
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchedYatraCard(YatraModel yatra) {
+    final image = yatra.image.isNotEmpty
+        ? yatra.image
+        : (yatra.bannerImage.isNotEmpty ? yatra.bannerImage : yatra.coverImage);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        elevation: 0,
+        child: InkWell(
+          onTap: () => _openYatraFromSearch(yatra),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFEFE6DB), width: 1),
+            ),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox(
+                    width: 56,
+                    height: 56,
+                    child: image.startsWith('http')
+                        ? Image.network(
+                            image,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Image.asset('assets/images/h1.jpg', fit: BoxFit.cover),
+                          )
+                        : Image.asset(
+                            image.isNotEmpty ? image : 'assets/images/h1.jpg',
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Image.asset('assets/images/h1.jpg', fit: BoxFit.cover),
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        yatra.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF2E2A36),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          if (yatra.distance.isNotEmpty) ...[
+                            Text(
+                              yatra.distance,
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFFFF7A00),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            const Text('•', style: TextStyle(color: Color(0xFF8C8797), fontSize: 12)),
+                            const SizedBox(width: 6),
+                          ],
+                          if (yatra.duration.isNotEmpty)
+                            Text(
+                              yatra.duration,
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                color: const Color(0xFF8C8797),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        yatra.steps.isNotEmpty ? '${yatra.steps} • Pilgrimage' : 'Sacred pilgrimage journey',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          color: const Color(0xFF8C8797),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFFF4EB),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.directions_walk_rounded,
+                      color: Color(0xFFFF7A00),
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchedDarshanCard(Map<String, dynamic> darshan) {
+    final title = (darshan['title'] ?? 'Sacred Darshan').toString();
+    final subtitle = (darshan['subtitle'] ?? darshan['desc'] ?? '').toString();
+    final image = (darshan['image'] ?? '').toString();
+    final bool isLive = darshan['isLive'] == true;
+    final String views = (darshan['views'] ?? '').toString();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        elevation: 0,
+        child: InkWell(
+          onTap: () => _openLiveDarshan(darshan),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFEFE6DB), width: 1),
+            ),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox(
+                    width: 64,
+                    height: 64,
+                    child: _buildHeroBannerImage(image, title: title, desc: subtitle),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF2E2A36),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          color: const Color(0xFF8C8797),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isLive ? const Color(0xFFFFEAEA) : const Color(0xFFF1EFF4),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.fiber_manual_record,
+                                  size: 8,
+                                  color: isLive ? const Color(0xFFE53935) : const Color(0xFF8C8797),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  isLive ? 'LIVE' : 'OFFLINE',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: isLive ? const Color(0xFFE53935) : const Color(0xFF8C8797),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (isLive && views.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            const Icon(Icons.visibility_outlined, size: 12, color: Color(0xFF8C8797)),
+                            const SizedBox(width: 3),
+                            Text(
+                              views,
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF8C8797),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: Color(0xFF8C8797),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchedBhajanCard(BhajanTrackItem track) {
+    final title = track.title.trim().isNotEmpty ? track.title : 'Devotional Bhajan';
+    final singer = track.singer.trim().isNotEmpty ? track.singer : 'Devotional Singer';
+    final image = track.imagePath.trim();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        elevation: 0,
+        child: InkWell(
+          onTap: () {
+            BhajanAudioService.instance.playTrack(track, queue: _searchedBhajans);
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => BhajanNowPlayingScreen(
+                  currentTrack: track,
+                  queue: _searchedBhajans,
+                ),
+              ),
+            );
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFEFE6DB), width: 1),
+            ),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox(
+                    width: 56,
+                    height: 56,
+                    child: image.startsWith('http')
+                        ? Image.network(
+                            image,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Image.asset('assets/images/h3.jpg', fit: BoxFit.cover),
+                          )
+                        : (image.isNotEmpty
+                            ? Image.asset(
+                                image,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Image.asset('assets/images/h3.jpg', fit: BoxFit.cover),
+                              )
+                            : Image.asset('assets/images/h3.jpg', fit: BoxFit.cover)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF2E2A36),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        singer,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          color: const Color(0xFF8C8797),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFFF4EB),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.play_arrow_rounded,
+                      color: Color(0xFFFF7A00),
+                      size: 22,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHomeTabBody() {
+    final Widget bodyContent;
+    if (_searchQuery.trim().isNotEmpty) {
+      bodyContent = _buildSearchResultsView();
+    } else if (_searchFocusNode.hasFocus) {
+      bodyContent = _buildRecentSearchesView();
+    } else {
+      bodyContent = RefreshIndicator(
+        color: const Color(0xFFFF7700),
+        backgroundColor: Colors.white,
+        onRefresh: _onRefreshHome,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10.0),
+                child: SizedBox(
+                  height: 353,
+                  child: _buildHeroSection(),
+                ),
+              ),
 
             // 4. Categories Section (Bhajan, Granth, Utsav Vibes)
             Padding(
@@ -1045,58 +2470,54 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            const SizedBox(height: 12),
+            if (_festivalCards.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              // 6. Festivals Horizontal Slider (Dynamic from Backend / Admin)
+              SizedBox(
+                height: 286,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  itemCount: _festivalCards.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (context, index) {
+                    final fest = _festivalCards[index];
+                    final title = (fest['title'] ?? fest['name'] ?? '').toString();
+                    final banner = (fest['imageUrl'] ?? fest['banner'] ?? fest['image'] ?? '').toString();
+                    final cardColor = fest['cardColor']?.toString();
+                    final startDate = (fest['date'] ?? fest['startDate'])?.toString();
+                    final dateText = fest['dateText']?.toString();
+                    final formattedDate = fest['formattedDate']?.toString();
 
-            // 6. Festivals Horizontal Slider (display-only, non-clickable)
-            SizedBox(
-              height: 286,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                children: [
-                  SizedBox(
-                    width: 208,
-                    child: _buildFestivalCard(
-                      title: 'Dhanterash',
-                      dateText: 'Nov 07\nSAT',
-                      imageUrl: 'assets/images/new_year_card.png',
-                      height: 286,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    width: 208,
-                    child: _buildFestivalCard(
-                      title: 'Diwali',
-                      dateText: 'Nov 08\nSUN',
-                      imageUrl: 'assets/images/diwali_card.png',
-                      height: 286,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    width: 208,
-                    child: _buildFestivalCard(
-                      title: 'Gujarati New Year',
-                      dateText: 'Nov 10\nTUE',
-                      imageUrl: 'assets/images/dhanteras_card.png',
-                      height: 286,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    width: 208,
-                    child: _buildFestivalCard(
-                      title: 'Bhaibeej',
-                      dateText: 'Nov 11\nWED',
-                      imageUrl: 'assets/images/bhaiduj_card.png',
-                      height: 286,
-                    ),
-                  ),
-                ],
+                    return SizedBox(
+                      width: 208,
+                      child: _buildFestivalCard(
+                        title: title.isNotEmpty ? title : 'Festival',
+                        dateText: dateText,
+                        rawDate: startDate,
+                        formattedDate: formattedDate,
+                        imageUrl: banner,
+                        cardColorHex: cardColor,
+                        height: 286,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => FestivalDetailScreen(
+                                festivalName: title,
+                                imageUrl: banner,
+                                festivalData: fest,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
+            ],
             ValueListenableBuilder<BhajanTrackItem?>(
               valueListenable: BhajanAudioService.instance.currentTrackNotifier,
               builder: (context, activeTrack, _) {
@@ -1106,6 +2527,19 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
+      ),
+    );
+    }
+
+    return SafeArea(
+      bottom: false,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildDynamicHeader(),
+          _buildSearchBar(),
+          Expanded(child: bodyContent),
+        ],
       ),
     );
   }
@@ -1368,44 +2802,62 @@ class _HomeScreenState extends State<HomeScreen> {
         tabBody = _buildHomeTabBody();
     }
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-        systemNavigationBarColor: Color(0xFFFFE8D6),
-        systemNavigationBarIconBrightness: Brightness.dark,
-      ),
-      child: Scaffold(
-        backgroundColor: const Color(0xFFFFE8D6), // Warm peach cream theme background matched to mockup
-        body: Stack(
-          children: [
-            tabBody,
-            // Solid opaque blocker background container for system navigation bar (3 buttons/gesture area)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: MediaQuery.of(context).padding.bottom,
-              child: Container(
-                color: const Color(0xFFFFE8D6),
+    final bool isSearchActive = _searchQuery.trim().isNotEmpty || _searchFocusNode.hasFocus;
+
+    return PopScope(
+      canPop: !isSearchActive && _currentTab == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (isSearchActive) {
+          _clearSearch();
+          return;
+        }
+        if (_currentTab != 0) {
+          setState(() {
+            _currentTab = 0;
+          });
+          return;
+        }
+      },
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+          statusBarBrightness: Brightness.light,
+          systemNavigationBarColor: Color(0xFFFFE8D6),
+          systemNavigationBarIconBrightness: Brightness.dark,
+        ),
+        child: Scaffold(
+          backgroundColor: const Color(0xFFFFE8D6), // Warm peach cream theme background matched to mockup
+          body: Stack(
+            children: [
+              tabBody,
+              // Solid opaque blocker background container for system navigation bar (3 buttons/gesture area)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: MediaQuery.of(context).padding.bottom,
+                child: Container(
+                  color: const Color(0xFFFFE8D6),
+                ),
               ),
-            ),
-            // Floating Bhajan Mini-Player (persistently visible across Home, Darshan, Jap, Yatra, Profile)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 108 + MediaQuery.of(context).padding.bottom,
-              child: const BhajanMiniPlayerWidget(bottomMargin: 0),
-            ),
-            // 7. Custom Floating Arched Bottom Navigation Bar
-            Positioned(
-              left: 20,
-              right: 20,
-              bottom: 20 + MediaQuery.of(context).padding.bottom,
-              child: _buildBottomNavigationBar(),
-            ),
-          ],
+              // Floating Bhajan Mini-Player (persistently visible across Home, Darshan, Jap, Yatra, Profile)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 108 + MediaQuery.of(context).padding.bottom,
+                child: const BhajanMiniPlayerWidget(bottomMargin: 0),
+              ),
+              // 7. Custom Floating Arched Bottom Navigation Bar
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: 20 + MediaQuery.of(context).padding.bottom,
+                child: _buildBottomNavigationBar(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2511,34 +3963,133 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Map<String, String> _parseFestivalDateParts({String? rawDate, String? dateText, String? formattedDate}) {
+    // 1. Try rawDate (e.g. "2026-11-07" or ISO string)
+    if (rawDate != null && rawDate.trim().isNotEmpty) {
+      try {
+        final parsed = DateTime.parse(rawDate.trim());
+        const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+        const weekdays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+        return {
+          'month': months[parsed.month - 1],
+          'date': parsed.day.toString().padLeft(2, '0'),
+          'day': weekdays[parsed.weekday - 1],
+        };
+      } catch (_) {}
+    }
+
+    // 2. Try dateText (e.g. "Nov 07\nSAT")
+    if (dateText != null && dateText.trim().isNotEmpty) {
+      final parts = dateText.trim().split(RegExp(r'[\s\n]+'));
+      if (parts.length >= 2) {
+        return {
+          'month': parts[0].toUpperCase(),
+          'date': parts[1],
+          'day': parts.length > 2 ? parts[2].toUpperCase() : 'DAY',
+        };
+      }
+    }
+
+    // 3. Try formattedDate (e.g. "11 Oct 2026 - 20 Oct 2026" or "11 Oct 2026")
+    if (formattedDate != null && formattedDate.trim().isNotEmpty) {
+      try {
+        final firstDate = formattedDate.split('-').first.trim();
+        final parts = firstDate.split(RegExp(r'\s+'));
+        if (parts.length >= 2) {
+          final d = parts[0].padLeft(2, '0');
+          final m = parts[1].toUpperCase();
+          return {'month': m, 'date': d, 'day': 'UTS'};
+        }
+      } catch (_) {}
+    }
+
+    return {'month': 'NOV', 'date': '07', 'day': 'SAT'};
+  }
+
+  Color _parseFestivalColor(String? colorHex, String title) {
+    if (colorHex != null && colorHex.trim().isNotEmpty) {
+      try {
+        String clean = colorHex.replaceAll('#', '').trim();
+        if (clean.length == 6) clean = 'FF$clean';
+        return Color(int.parse(clean, radix: 16));
+      } catch (_) {}
+    }
+
+    final lower = title.toLowerCase();
+    if (lower.contains('dhanteras')) return const Color(0xFFA22E85);
+    if (lower.contains('diwali')) return const Color(0xFF4C45A5);
+    if (lower.contains('new') || lower.contains('year') || lower.contains('gujarati')) return const Color(0xFF1E539E);
+    if (lower.contains('bhai') || lower.contains('beej') || lower.contains('duj')) return const Color(0xFF439CA3);
+    return const Color(0xFFFF7700);
+  }
+
+  Widget _buildFestivalImage(String imageUrl) {
+    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+      return Image.network(
+        imageUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Image.asset(
+          'assets/images/new_year_card.png',
+          fit: BoxFit.cover,
+        ),
+      );
+    } else if (imageUrl.startsWith('data:image')) {
+      try {
+        final commaIdx = imageUrl.indexOf(',');
+        final base64Str = commaIdx != -1 ? imageUrl.substring(commaIdx + 1) : imageUrl;
+        final bytes = base64Decode(base64Str);
+        return Image.memory(
+          bytes,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Image.asset(
+            'assets/images/new_year_card.png',
+            fit: BoxFit.cover,
+          ),
+        );
+      } catch (_) {
+        return Image.asset(
+          'assets/images/new_year_card.png',
+          fit: BoxFit.cover,
+        );
+      }
+    } else if (imageUrl.isNotEmpty) {
+      return Image.asset(
+        imageUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Image.asset(
+          'assets/images/new_year_card.png',
+          fit: BoxFit.cover,
+        ),
+      );
+    } else {
+      return Image.asset(
+        'assets/images/new_year_card.png',
+        fit: BoxFit.cover,
+      );
+    }
+  }
+
   // Helper: Festival Card
   Widget _buildFestivalCard({
     required String title,
-    required String dateText,
+    String? dateText,
+    String? rawDate,
+    String? formattedDate,
     required String imageUrl,
+    String? cardColorHex,
     VoidCallback? onTap,
     double height = 130,
   }) {
-    final dateParts = dateText.split(RegExp(r'[\s\n]+'));
-    final month = dateParts.isNotEmpty ? dateParts[0] : 'Nov';
-    final date = dateParts.length > 1 ? dateParts[1] : '07';
-    final day = dateParts.length > 2 ? dateParts[2] : 'SAT';
+    final dateParts = _parseFestivalDateParts(
+      rawDate: rawDate,
+      dateText: dateText,
+      formattedDate: formattedDate,
+    );
+    final month = dateParts['month'] ?? 'NOV';
+    final date = dateParts['date'] ?? '07';
+    final day = dateParts['day'] ?? 'SAT';
 
-    final String titleLower = title.toLowerCase();
-    final Color themeColor;
-    if (titleLower.contains('dhanteras')) {
-      themeColor = const Color(0xFFA22E85); // Berry Magenta
-    } else if (titleLower.contains('diwali')) {
-      themeColor = const Color(0xFF4C45A5); // Indigo Purple
-    } else if (titleLower.contains('new') || titleLower.contains('year') || titleLower.contains('gujarati')) {
-      themeColor = const Color(0xFF1E539E); // Dark Royal Blue
-    } else if (titleLower.contains('bhai') || titleLower.contains('beej') || titleLower.contains('duj')) {
-      themeColor = const Color(0xFF439CA3); // Teal Light Blue
-    } else {
-      themeColor = const Color(0xFFFF7700); // Saffron Orange fallback
-    }
-
-    final Color badgeHeaderColor = themeColor;
+    final Color themeColor = _parseFestivalColor(cardColorHex, title);
 
     final calendarBadge = Container(
       width: 21,
@@ -2603,32 +4154,31 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
 
-    return Container(
-      height: height,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFFEFE6DB),
-          width: 1.0,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: const Color(0xFFEFE6DB),
+            width: 1.0,
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
           child: Stack(
             children: [
               // Image
               Positioned.fill(
-                child: Image.asset(
-                  imageUrl,
-                  fit: BoxFit.cover,
-                ),
+                child: _buildFestivalImage(imageUrl),
               ),
               // Colored bottom overlay gradient matching design
               Positioned.fill(
@@ -2673,7 +4223,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-      );
+      ),
+    );
   }
 
   // Helper: Custom Floating Arched Bottom Navigation Bar
@@ -2701,7 +4252,10 @@ class _HomeScreenState extends State<HomeScreen> {
               iconAsset: 'assets/images/nav_home.svg',
               label: _getNavLabel(0),
               isActive: _currentTab == 0,
-              onTap: () => setState(() => _currentTab = 0),
+              onTap: () {
+                _clearSearch();
+                setState(() => _currentTab = 0);
+              },
             ),
           ),
           
@@ -2715,7 +4269,10 @@ class _HomeScreenState extends State<HomeScreen> {
               iconAsset: 'assets/images/nav_darshan.svg',
               label: _getNavLabel(1),
               isActive: _currentTab == 1,
-              onTap: () => setState(() => _currentTab = 1),
+              onTap: () {
+                _clearSearch();
+                setState(() => _currentTab = 1);
+              },
             ),
           ),
           
@@ -2726,7 +4283,10 @@ class _HomeScreenState extends State<HomeScreen> {
             width: 60,
             height: 60,
             child: GestureDetector(
-              onTap: () => setState(() => _currentTab = 2),
+              onTap: () {
+                _clearSearch();
+                setState(() => _currentTab = 2);
+              },
               child: Container(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
@@ -2786,7 +4346,10 @@ class _HomeScreenState extends State<HomeScreen> {
               iconAsset: 'assets/images/nav_yatra.svg',
               label: _getNavLabel(3),
               isActive: _currentTab == 3,
-              onTap: () => setState(() => _currentTab = 3),
+              onTap: () {
+                _clearSearch();
+                setState(() => _currentTab = 3);
+              },
             ),
           ),
           
@@ -2800,7 +4363,10 @@ class _HomeScreenState extends State<HomeScreen> {
               iconAsset: 'assets/images/nav_profile.svg',
               label: _getNavLabel(4),
               isActive: _currentTab == 4,
-              onTap: () => setState(() => _currentTab = 4),
+              onTap: () {
+                _clearSearch();
+                setState(() => _currentTab = 4);
+              },
             ),
           ),
         ],

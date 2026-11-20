@@ -15,8 +15,8 @@ class ApiService {
   static const bool isLive = false;
 
   // Local backend configuration:
-  // Active Wi-Fi IP = 192.168.29.227, Port = 3020
-  static const String _localIp = '192.168.29.227';
+  // Active Wi-Fi IP = 192.168.29.73, Port = 3020
+  static const String _localIp = '192.168.29.73';
   static const int _localPort = 3020;
 
   static String get baseUrl {
@@ -82,24 +82,32 @@ class ApiService {
       return trimmed;
     }
 
-    // Normalize any local IP / localhost / production host URLs to point to active baseUrl
-    trimmed = trimmed.replaceFirst(
-      RegExp(
-        r'^https?://(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|localhost|127\.0\.0\.1|api\.bharatpray\.com)(:\d+)?',
-        caseSensitive: false,
-      ),
-      baseUrl,
-    );
+    // Normalize port 3020 URLs (force http scheme and point to active baseUrl)
+    trimmed = trimmed.replaceAll('https://api.bharatpray.com', baseUrl);
+    trimmed = trimmed.replaceAll('http://api.bharatpray.com', baseUrl);
+    trimmed = trimmed.replaceAll('https://localhost:3021', baseUrl);
+    trimmed = trimmed.replaceAll('http://localhost:3021', baseUrl);
+    trimmed = trimmed.replaceAll('https://127.0.0.1:3021', baseUrl);
+    trimmed = trimmed.replaceAll('http://127.0.0.1:3021', baseUrl);
+    trimmed = trimmed.replaceAll('https://localhost:3020', baseUrl);
+    trimmed = trimmed.replaceAll('http://localhost:3020', baseUrl);
+    trimmed = trimmed.replaceAll('https://127.0.0.1:3020', baseUrl);
+    trimmed = trimmed.replaceAll('http://127.0.0.1:3020', baseUrl);
+    trimmed = trimmed.replaceAll('http://192.168.29.73:3020', baseUrl);
+    trimmed = trimmed.replaceAll('http://192.168.29.73:3021', baseUrl);
+    trimmed = trimmed.replaceAll('http://192.168.29.227:3020', baseUrl);
+    trimmed = trimmed.replaceAll('http://192.168.29.227:3021', baseUrl);
+    trimmed = trimmed.replaceAll('http://192.168.29.249:3020', baseUrl);
+    trimmed = trimmed.replaceAll('http://192.168.29.249:3021', baseUrl);
+    trimmed = trimmed.replaceAll('http://192.168.29.113:3021', baseUrl);
+    trimmed = trimmed.replaceAll('http://10.192.149.19:3021', baseUrl);
+    trimmed = trimmed.replaceAll('http://10.192.149.19:3020', baseUrl);
 
     // Clean up any double slashes in the path
     trimmed = trimmed.replaceAll('//uploads/', '/uploads/');
 
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       return trimmed;
-    }
-
-    if (trimmed.startsWith('/assets/')) {
-      return '$baseUrl$trimmed';
     }
 
     final isUploads = trimmed.contains('uploads/');
@@ -109,7 +117,7 @@ class ApiService {
 
   static final List<String> _fallbackHosts = isLive
       ? const ['api.bharatpray.com']
-      : const ['192.168.29.227', '192.168.29.74', '192.168.29.209', '127.0.0.1', '10.0.2.2', 'api.bharatpray.com'];
+      : const ['192.168.29.73', '192.168.29.74', '192.168.29.227', '192.168.29.209', '127.0.0.1', '10.0.2.2', 'api.bharatpray.com'];
 
   static Map<String, String> _withDefaultHeaders([Map<String, String>? headers]) {
     final langCode = LanguageManager.instance.currentLanguageCode;
@@ -751,7 +759,7 @@ class ApiService {
     String? search,
     String? categoryId,
     int page = 1,
-    int limit = 100,
+    int limit = 10,
   }) async {
     final queryParams = <String, String>{
       'page': page.toString(),
@@ -897,41 +905,36 @@ class ApiService {
     return _processResponse(response)['Data'];
   }
 
-  // POST /user/live-darshan/comment or fallback /live-darshan/comment
+  // POST /user/live-darshan/comment or /user/chat/live/comment
   static Future<Map<String, dynamic>> sendLiveComment(String token, String darshanId, String comment) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/user/live-darshan/comment'),
+        Uri.parse('$baseUrl/live-darshan/comment'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
         body: json.encode({
           'darshan_id': darshanId,
-          'darshanId': darshanId,
           'sessionId': darshanId,
           'comment': comment,
           'content': comment,
-          'message': comment,
         }),
       );
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return _processResponse(response)['Data'] ?? {};
-      }
-      throw Exception('Failed with status: ${response.statusCode}');
+      return _processResponse(response)['Data'] ?? {};
     } catch (e) {
       try {
         final response = await http.post(
-          Uri.parse('$baseUrl/live-darshan/comment'),
+          Uri.parse('$baseUrl/chat/live/comment'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
           },
           body: json.encode({
+            'sessionId': darshanId,
             'darshan_id': darshanId,
-            'darshanId': darshanId,
-            'comment': comment,
             'content': comment,
+            'comment': comment,
           }),
         );
         return _processResponse(response)['Data'] ?? {};
@@ -3251,6 +3254,35 @@ class ApiService {
       }),
     );
     return _processResponse(response)['Data'] ?? {};
+  }
+
+  // GET /api/festival-cards - Fetch home festival cards
+  static Future<List<Map<String, dynamic>>> getFestivalCards() async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/festival-cards');
+      final response = await http.get(uri).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['IsSuccess'] == true && data['Data'] is List) {
+          final list = (data['Data'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('cached_home_festival_cards', jsonEncode(list));
+          return list;
+        }
+      }
+    } catch (_) {}
+
+    // Fallback to cache ONLY if network request failed (offline)
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString('cached_home_festival_cards');
+      if (cached != null) {
+        final decoded = jsonDecode(cached) as List;
+        return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+    } catch (_) {}
+
+    return [];
   }
 }
 

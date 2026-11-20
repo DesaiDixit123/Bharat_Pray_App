@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../services/utsav_service.dart';
 import '../../core/localization/localized_api_helper.dart';
 import 'mandal_profile_screen.dart';
@@ -30,7 +31,10 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
   List<Map<String, dynamic>> _topThree = [];
   String? _userMandalName;
 
-  bool _hasActiveFestival = false;
+  List<Map<String, dynamic>> _activeFestivals = [];
+  List<Map<String, dynamic>> _completedFestivals = [];
+  String? _selectedFestivalId;
+
   bool _hasEndedFestival = false;
   Map<String, dynamic>? _completedFestival;
   final Map<String, bool> _likedMandals = {};
@@ -41,20 +45,36 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
     _loadLeaderboardData();
   }
 
-  Future<void> _loadLeaderboardData() async {
+  Future<void> _loadLeaderboardData({String? festivalId}) async {
     try {
       final myReg = await UtsavService.getMyMandalRegistration();
-      final data = await UtsavService.getLeaderboard();
       final allFestivals = await UtsavService.getFestivals(status: 'ALL');
-      final completedList = allFestivals
-          .where((f) => (f['status'] ?? '').toString().toLowerCase() == 'completed')
-          .toList();
       final activeList = allFestivals
           .where((f) => (f['status'] ?? '').toString().toLowerCase() == 'active')
           .toList();
+      final completedList = allFestivals
+          .where((f) => (f['status'] ?? '').toString().toLowerCase() == 'completed')
+          .toList();
+
+      final currentPool = _contestState == 0 ? activeList : completedList;
+      String? targetFestId = festivalId;
+
+      if (targetFestId == null || !currentPool.any((f) => (f['_id'] ?? f['customId'])?.toString() == targetFestId)) {
+        if (currentPool.isNotEmpty) {
+          targetFestId = (currentPool.first['_id'] ?? currentPool.first['customId'])?.toString();
+        } else if (allFestivals.isNotEmpty) {
+          targetFestId = (allFestivals.first['_id'] ?? allFestivals.first['customId'])?.toString();
+        }
+      }
+
+      final data = await UtsavService.getLeaderboard(festivalId: targetFestId);
 
       if (mounted) {
         setState(() {
+          _activeFestivals = activeList;
+          _completedFestivals = completedList;
+          _selectedFestivalId = targetFestId;
+
           _userMandalName = myReg?['mandalName'];
           if (data['festival'] != null && data['festival']['name'] != null) {
             _festivalName = LocalizedApiHelper.parse(data['festival']['name']);
@@ -75,14 +95,9 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
             }
           }
 
-          _hasActiveFestival = activeList.isNotEmpty;
           _hasEndedFestival = completedList.isNotEmpty;
           _completedFestival = completedList.isNotEmpty ? completedList.first : null;
-
-          // If no active festival is running, lock access directly to Winners View (_contestState = 1)
-          if (!_hasActiveFestival) {
-            _contestState = 1;
-          } else if (!_hasEndedFestival) {
+          if (!_hasEndedFestival) {
             _contestState = 0;
           }
           _isLoading = false;
@@ -173,8 +188,8 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
     return Column(
       children: [
         // ── State Selector (Contest Active / Contest Ended) ──────────────────
-        // Only visible when BOTH an active contest and a past ended contest exist!
-        if (_hasActiveFestival && _hasEndedFestival)
+        // Only visible when a festival contest has actually ended!
+        if (_hasEndedFestival)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
             child: Container(
@@ -193,19 +208,94 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
             ),
           ),
 
+        // ── Festival Dropdown (Only when > 1 festival exists for this state) ──
+        _buildFestivalSelector(),
+
         // ── Main Body ────────────────────────────────────────────────────────
         Expanded(
           child: RefreshIndicator(
             color: const Color(0xFFFF7700),
-            onRefresh: _loadLeaderboardData,
-            child: (!_hasActiveFestival)
+            onRefresh: () => _loadLeaderboardData(festivalId: _selectedFestivalId),
+            child: (_hasEndedFestival && _contestState == 1)
                 ? _buildWinnersView()
-                : (_hasEndedFestival && _contestState == 1)
-                    ? _buildWinnersView()
-                    : _buildLeaderboardView(),
+                : _buildLeaderboardView(),
           ),
         ),
       ],
+    );
+  }
+
+  // Dropdown shown ONLY when multiple festivals exist for the selected state
+  Widget _buildFestivalSelector() {
+    final currentList = _contestState == 0 ? _activeFestivals : _completedFestivals;
+    if (currentList.length <= 1) {
+      return const SizedBox.shrink(); // Don't show dropdown if only 1 festival!
+    }
+
+    // Ensure selected ID exists in current list
+    final validSelectedId = currentList.any((f) => (f['_id'] ?? f['customId'])?.toString() == _selectedFestivalId)
+        ? _selectedFestivalId
+        : (currentList.first['_id'] ?? currentList.first['customId'])?.toString();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 4.0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 2.0),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7EF),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFFF7700).withValues(alpha: 0.35)),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF8E5A2A).withValues(alpha: 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: validSelectedId,
+            isExpanded: true,
+            icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFFFF7700), size: 24),
+            dropdownColor: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            items: currentList.map((fest) {
+              final festId = (fest['_id'] ?? fest['customId'])?.toString() ?? '';
+              final festName = LocalizedApiHelper.parse(fest['name'] ?? '');
+              return DropdownMenuItem<String>(
+                value: festId,
+                child: Row(
+                  children: [
+                    const Icon(Icons.celebration_outlined, color: Color(0xFFFF7700), size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        festName,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF2E2A36),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+            onChanged: (newId) {
+              if (newId != null && newId != _selectedFestivalId) {
+                setState(() {
+                  _selectedFestivalId = newId;
+                  _isLoading = true;
+                });
+                _loadLeaderboardData(festivalId: newId);
+              }
+            },
+          ),
+        ),
+      ),
     );
   }
 
@@ -213,7 +303,17 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
     final active = _contestState == stateVal;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _contestState = stateVal),
+        onTap: () {
+          if (_contestState != stateVal) {
+            setState(() {
+              _contestState = stateVal;
+              final list = stateVal == 0 ? _activeFestivals : _completedFestivals;
+              _selectedFestivalId = list.isNotEmpty ? (list.first['_id'] ?? list.first['customId'])?.toString() : null;
+              _isLoading = true;
+            });
+            _loadLeaderboardData(festivalId: _selectedFestivalId);
+          }
+        },
         child: Container(
           decoration: BoxDecoration(
             color: active ? const Color(0xFFFF7700) : Colors.transparent,
@@ -398,9 +498,10 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
               final rank = index + 1;
               final name = (item['name'] ?? 'Mandal').toString();
               final likes = item['likes'] ?? '${item['votes'] ?? 0}';
-              final shares = item['shares'] ?? '1.2K';
+              final shares = item['shares'] ?? '0';
               final subtitle = "$likes Likes • $shares Shares";
-              final score = item['votes'] != null ? '${item['votes']}' : '0';
+              final totalScore = (int.tryParse('$likes') ?? 0) + (int.tryParse('$shares') ?? 0);
+              final score = '$totalScore';
               final isUserMandal = _userMandalName != null &&
                   _userMandalName!.trim().toLowerCase() == name.trim().toLowerCase();
 
@@ -621,6 +722,32 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
                     (_likedMandals[name] ?? false) ? Icons.favorite_rounded : Icons.favorite_border_rounded,
                     color: (_likedMandals[name] ?? false) ? Colors.redAccent : const Color(0xFFB59E83),
                     size: 21,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+
+            // Share Mandal Button
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: () async {
+                  await Share.share('🙏 Support $name in ${_festivalName.isNotEmpty ? _festivalName : "Festival"} on Bharat Pray app!\nhttps://bharatpray.com/mandal/${item?['_id'] ?? item?['customId'] ?? ''}');
+                  final updatedShares = await UtsavService.shareMandal(name);
+                  setState(() {
+                    if (item != null) {
+                      item['shares'] = '$updatedShares';
+                    }
+                  });
+                },
+                child: const Padding(
+                  padding: EdgeInsets.all(4.0),
+                  child: Icon(
+                    Icons.share_outlined,
+                    color: Color(0xFFB59E83),
+                    size: 20,
                   ),
                 ),
               ),
@@ -964,9 +1091,10 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
               final rank = idx + 1;
               final name = (item['name'] ?? 'Mandal').toString();
               final likes = item['likes'] ?? '${item['votes'] ?? 0}';
-              final shares = item['shares'] ?? '1.2K';
+              final shares = item['shares'] ?? '0';
               final subtitle = "$likes Likes • $shares Shares";
-              final score = item['votes'] != null ? '${item['votes']}' : '0';
+              final totalScore = (int.tryParse('$likes') ?? 0) + (int.tryParse('$shares') ?? 0);
+              final score = '$totalScore';
               final isUserMandal = _userMandalName != null &&
                   _userMandalName!.trim().toLowerCase() == name.trim().toLowerCase();
 
@@ -993,7 +1121,10 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
     required double height,
   }) {
     final name = (mandal?['name'] ?? 'Mandal').toString();
-    final votes = mandal?['votes'] != null ? '${mandal!['votes']}' : '0';
+    final int likes = int.tryParse('${mandal?['likes'] ?? 0}') ?? 0;
+    final int shares = int.tryParse('${mandal?['shares'] ?? 0}') ?? 0;
+    final int totalScore = likes + shares;
+    final scoreStr = totalScore > 0 ? '$totalScore' : (mandal?['votes'] != null ? '${mandal!['votes']}' : '0');
     final imageUrl = mandal?['imageUrl']?.toString();
 
     // Theme configurations according to rank
@@ -1212,11 +1343,11 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
               ),
               const Spacer(),
 
-              // Votes counter at bottom of pedestal
+              // Score counter at bottom of pedestal
               Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
                 child: Text(
-                  "$votes Votes",
+                  "$scoreStr Score",
                   style: GoogleFonts.outfit(
                     fontSize: rank == 1 ? 11 : 10,
                     fontWeight: FontWeight.bold,

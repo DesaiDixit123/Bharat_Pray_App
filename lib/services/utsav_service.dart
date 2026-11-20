@@ -255,10 +255,20 @@ class UtsavService {
     String? festivalStatus,
     String? festivalName,
   }) {
-    if (festivalStatus?.toLowerCase() == 'completed') {
+    if (festivalStatus != null && festivalStatus.toLowerCase() == 'completed') {
       return 'closed';
     }
-    // As per user specification, registrations can be made anytime for Upcoming & Active festivals
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final regEnd = _parseDate(regEndDateStr);
+    if (regEnd != null) {
+      final endDay = DateTime(regEnd.year, regEnd.month, regEnd.day);
+      if (today.isAfter(endDay)) return 'closed';
+    }
+
+    // User can register in both Upcoming and Active status without any restriction
     return 'open';
   }
 
@@ -594,10 +604,11 @@ class UtsavService {
 
   // ─── Leaderboard ───────────────────────────────────────────────────────────
 
-  static Future<Map<String, dynamic>> getLeaderboard() async {
+  static Future<Map<String, dynamic>> getLeaderboard({String? festivalId}) async {
     for (final host in _backendHosts) {
       try {
-        final uri = Uri.parse('$host/api/utsav/leaderboard');
+        final query = (festivalId != null && festivalId.isNotEmpty) ? '?festivalId=$festivalId' : '';
+        final uri = Uri.parse('$host/api/utsav/leaderboard$query');
         final response = await http.get(uri).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
@@ -612,22 +623,26 @@ class UtsavService {
       } catch (_) {}
     }
 
-    final activeFestivals = await getFestivals(status: 'Active');
-    Map<String, dynamic>? activeFest = activeFestivals.isNotEmpty ? activeFestivals.first : null;
-
-    if (activeFest == null) {
-      final allFestivals = await getFestivals(status: 'ALL');
+    final allFestivals = await getFestivals(status: 'ALL');
+    Map<String, dynamic>? activeFest;
+    if (festivalId != null && festivalId.isNotEmpty) {
       activeFest = allFestivals.firstWhere(
-        (f) => (f['name'] ?? '').toString().toLowerCase().contains('pre') && (f['name'] ?? '').toString().toLowerCase().contains('navratri'),
-        orElse: () => allFestivals.firstWhere(
-          (f) => (f['status'] ?? '').toString().toLowerCase() == 'active',
-          orElse: () => <String, dynamic>{},
-        ),
+        (f) => f['_id'] == festivalId || f['customId'] == festivalId,
+        orElse: () => <String, dynamic>{},
       );
       if (activeFest.isEmpty) activeFest = null;
     }
 
-    // If no festival is active right now, leaderboard is empty!
+    if (activeFest == null) {
+      final activeFestivals = allFestivals.where((f) => (f['status'] ?? '').toString().toLowerCase() == 'active').toList();
+      activeFest = activeFestivals.isNotEmpty ? activeFestivals.first : null;
+    }
+
+    if (activeFest == null && allFestivals.isNotEmpty) {
+      activeFest = allFestivals.first;
+    }
+
+    // If no festival found, leaderboard is empty!
     if (activeFest == null) {
       return {
         'festival': null,
@@ -637,13 +652,31 @@ class UtsavService {
     }
 
     final mandalsList = await getMandals();
-    final sorted = [...mandalsList]..sort((a, b) {
-      final vA = a['votes'] is num ? (a['votes'] as num).toInt() : int.tryParse(a['votes']?.toString() ?? '0') ?? 0;
-      final vB = b['votes'] is num ? (b['votes'] as num).toInt() : int.tryParse(b['votes']?.toString() ?? '0') ?? 0;
-      if (vB != vA) return vB.compareTo(vA);
+    final festId = activeFest['_id'] ?? activeFest['customId'];
+    final festName = (activeFest['name'] ?? '').toString().toLowerCase();
+
+    List<Map<String, dynamic>> matchingMandals = mandalsList.where((m) {
+      if (festId != null && (m['festivalId'] == festId || m['festivalId'] == activeFest?['customId'])) return true;
+      if (festName.isNotEmpty && (m['festival'] ?? m['festivalName'] ?? '').toString().toLowerCase().contains(festName)) return true;
+      return false;
+    }).toList();
+
+    if (matchingMandals.isEmpty) {
+      matchingMandals = mandalsList;
+    }
+
+    final sorted = [...matchingMandals]..sort((a, b) {
       final lA = int.tryParse(a['likes']?.toString() ?? '0') ?? 0;
+      final sA = int.tryParse(a['shares']?.toString() ?? '0') ?? 0;
+      final scoreA = lA + sA;
+
       final lB = int.tryParse(b['likes']?.toString() ?? '0') ?? 0;
-      return lB.compareTo(lA);
+      final sB = int.tryParse(b['shares']?.toString() ?? '0') ?? 0;
+      final scoreB = lB + sB;
+
+      if (scoreB != scoreA) return scoreB.compareTo(scoreA);
+      if (lB != lA) return lB.compareTo(lA);
+      return sB.compareTo(sA);
     });
 
     for (int i = 0; i < sorted.length; i++) {
@@ -905,19 +938,29 @@ class UtsavService {
     await updateMandalLikeCount(mandalName, delta: 1);
   }
 
-  static Future<void> shareMandal(String mandalName) async {
+  static Future<int> shareMandal(String mandalName) async {
     final prefs = await SharedPreferences.getInstance();
     final list = await getMandals();
+    int newSharesCount = 1;
     final updated = list.map((m) {
       if ((m['name'] ?? '').toString().trim() == mandalName.trim()) {
         final copy = Map<String, dynamic>.from(m);
         final s = int.tryParse(copy['shares']?.toString() ?? '0') ?? 0;
-        copy['shares'] = '${s + 1}';
+        newSharesCount = s + 1;
+        copy['shares'] = '$newSharesCount';
         return copy;
       }
       return m;
     }).toList();
     await prefs.setString('utsav_cached_mandals', jsonEncode(updated));
+
+    // Notify backend in MongoDB
+    try {
+      final body = {'mandalName': mandalName, 'change': 1};
+      _postToBackends('/api/utsav/mandal/share', body);
+    } catch (_) {}
+
+    return newSharesCount;
   }
 
   static Future<void> stopLiveMandal(String streamId) async {
@@ -942,6 +985,7 @@ class UtsavService {
       ? [ApiService.baseUrl]
       : [
           ApiService.baseUrl,
+          'http://192.168.29.73:3020',
           'http://192.168.29.74:3020',
           'http://192.168.29.227:3020',
           'http://192.168.29.209:3020',
