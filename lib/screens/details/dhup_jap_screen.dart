@@ -42,7 +42,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
   @override
   JapConfig get japEntry => widget.entry;
 
-  late final int _target = widget.entry.isCustom ? math.max(1, widget.entry.targetCount) : 108;
+  late final int _target = widget.entry.targetCount > 0 ? widget.entry.targetCount : 108;
   late int _count;
   int _completedMalas = 0;
   bool _isCompleted = false;
@@ -72,6 +72,39 @@ class _DhupJapScreenState extends State<DhupJapScreen>
   bool _isSoundEnabled = true;
 
   Timer? _syncDebounceTimer;
+
+  String _getLocalDhupDarshanVideoAsset() {
+    if (widget.entry.isCustom) return '';
+    final name = (widget.entry.displayName.isNotEmpty
+            ? widget.entry.displayName
+            : widget.entry.name)
+        .toLowerCase();
+    if (name.contains('ram')) return 'assets/videos/lord_shri_ram_live_darshan.mp4';
+    if (name.contains('radha')) return 'assets/videos/radha_live_darshan.mp4';
+    if (name.contains('krishna')) return 'assets/videos/krishna_live_darshan.mp4';
+    if (name.contains('shiva') || name.contains('shiv')) return 'assets/videos/shiva_live_darshan.mp4';
+    if (name.contains('ganesh') || name.contains('ganpati') || name.contains('ganesha')) {
+      return 'assets/videos/ganesh_live_darshan.mp4';
+    }
+    if (name.contains('durga')) return 'assets/videos/durga_live_darshan.mp4';
+    if (name.contains('lakshmi') || name.contains('laxmi')) {
+      return 'assets/videos/lakshmi_live_darshan.mp4';
+    }
+    if (name.contains('vishnu')) return 'assets/videos/vishnu_live_darshan.mp4';
+    if (name.contains('swaminarayan')) {
+      return 'assets/videos/swaminarayan_live_darshan.mp4';
+    }
+    if (name.contains('ambe') || name.contains('amba')) {
+      return 'assets/videos/ambe_live_darshan.mp4';
+    }
+    if (name.contains('khatu') || name.contains('shyam')) {
+      return 'assets/videos/khatu_live_darshan.mp4';
+    }
+    if (name.contains('hanuman') || name.contains('bajrang')) {
+      return 'assets/videos/hanuman_live_darshan.mp4';
+    }
+    return '';
+  }
 
   int get _totalProgress => (_completedMalas * _target) + _count;
 
@@ -370,7 +403,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
       start: startPoint,
       target: targetPoint,
       duration: streamDuration,
-      text: widget.entry.isCustom ? japMantraText : 'राम',
+      text: japMantraText,
       onArrived: () {
         if (!mounted) return;
 
@@ -563,7 +596,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
                     imageAsset: widget.entry.isCustom && widget.entry.darshanImageUrl.isNotEmpty
                         ? widget.entry.darshanImageUrl
                         : 'assets/images/lord_shri_ram_darshan.png',
-                    revealProgress: widget.entry.isCustom ? _count / _target : null,
+                    revealProgress: _target > 0 ? (_count / _target).clamp(0.0, 1.0) : 0.0,
                   );
                 },
               ),
@@ -626,9 +659,11 @@ class _DhupJapScreenState extends State<DhupJapScreen>
             // ── LAYER 6: Final 108 Darshan Climax ─────────────────────────────
             if (_isCompleted)
               DhupDarshanClimaxView(
-                title: widget.entry.isCustom ? '॥ $japMantraText ॥' : '॥ जय श्री राम ॥',
+                title: '॥ $japMantraText ॥',
                 target: _target,
-                videoUrl: japDarshanVideoUrl,
+                videoUrl: japDarshanVideoUrl.isNotEmpty
+                    ? japDarshanVideoUrl
+                    : _getLocalDhupDarshanVideoAsset(),
                 isSoundEnabled: _isSoundEnabled,
                 onNextMala: _startNextMala,
                 onExit: () {
@@ -677,9 +712,11 @@ class _DhupJapScreenState extends State<DhupJapScreen>
             ),
           ),
 
-          // Glowing Devanagari Title "राम"
+          // Glowing Devanagari / Display Title
           Text(
-            widget.entry.isCustom ? japMantraText : 'राम',
+            widget.entry.displayName.isNotEmpty
+                ? widget.entry.displayName
+                : (widget.entry.isCustom ? japMantraText : 'राम'),
             style: GoogleFonts.notoSerifDevanagari(
               fontSize: 22,
               fontWeight: FontWeight.bold,

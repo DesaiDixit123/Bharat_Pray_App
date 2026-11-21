@@ -20,11 +20,11 @@ mixin JapVoiceSelection<T extends StatefulWidget> on State<T> {
   JapConfig get japEntry;
 
   late final JapThemeConfig _japTheme = JapThemeConfig.resolveFromEntry(
-    name: japEntry.name,
-    shlokText: japEntry.shlokText,
+    name: japEntry.displayName.isNotEmpty ? japEntry.displayName : japEntry.name,
+    shlokText: japEntry.mantraText.isNotEmpty ? japEntry.mantraText : japEntry.shlokText,
   );
 
-  String get japMantraText => _japTheme.mantraText;
+  String get japMantraText => japEntry.mantraText.isNotEmpty ? japEntry.mantraText : _japTheme.mantraText;
 
   late String japDarshanVideoUrl = japEntry.darshanVideoUrl;
 
@@ -58,8 +58,24 @@ mixin JapVoiceSelection<T extends StatefulWidget> on State<T> {
 
   /// The selected voice's clip, or this mantra's bundled clip until it is ready.
   Source get japChantSource {
+    // 1. If the selected voice clip is ready, ALWAYS use it!
+    // This ensures whichever voice the user chooses (Charon, Fenrir, Puck, Kore, etc.) plays immediately
     final clip = japChantClipPath;
     if (clip != null) return DeviceFileSource(clip);
+
+    // 2. Custom / Server audio if present (local file, HTTP URL, or bundled asset)
+    if (japEntry.shlokAudioUrl != null && japEntry.shlokAudioUrl!.isNotEmpty) {
+      final audioPath = japEntry.shlokAudioUrl!;
+      if (audioPath.startsWith('http')) {
+        return UrlSource(audioPath);
+      } else if (audioPath.startsWith('assets/')) {
+        return AssetSource(audioPath.replaceFirst('assets/', ''));
+      } else {
+        return DeviceFileSource(audioPath);
+      }
+    }
+
+    // 3. Fallback to bundled studio asset while voice is loading or offline
     return AssetSource(_japTheme.audioAsset.replaceFirst('assets/', ''));
   }
 
@@ -71,8 +87,11 @@ mixin JapVoiceSelection<T extends StatefulWidget> on State<T> {
   }
 
   Future<void> _loadJapChantClip(String voiceId) async {
+    final textToSpeak = japEntry.voiceText.isNotEmpty
+        ? japEntry.voiceText
+        : japMantraText;
     final clip = await _japVoiceService.prepareChantClip(
-      _japTheme.mantraText,
+      textToSpeak,
       voiceId,
     );
     if (!mounted || voiceId != _japVoiceId) return;

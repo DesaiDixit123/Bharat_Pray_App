@@ -181,19 +181,19 @@ class PrakashProgressiveRevealPainter extends CustomPainter {
     final double t = (count / targetCount).clamp(0.0, 1.0);
 
     // A. Expanding Prakash Light-Cone from Heaven & Crown Center
-    // The central sacred light beam illuminates downward from halo
-    final double lightBeamRadius = dstRect.width * (0.22 + (0.65 * math.pow(t, 0.82)));
+    // The central sacred light beam illuminates downward from halo in graceful progressive stages
+    final double lightBeamRadius = dstRect.width * (0.12 + (0.32 * math.pow(t, 2.2)));
     RamPathCalculator.drawOrganicRevealMask(canvas, haloCenter, lightBeamRadius * 0.62, 7);
 
     // B. Multi-Region Revealed Nodes from RamPathCalculator
     // Guarantees every single tap reveals a tangible, distinct portion
-    final double expansion = 1.10 + (0.85 * math.pow(t, 1.5));
+    final double expansion = 1.0 + (0.35 * math.pow(t, 2.5));
     for (final node in revealedNodes) {
       final Offset nodeCenter = Offset(
         dstRect.left + (node.u * dstRect.width),
         dstRect.top + (node.v * dstRect.height),
       );
-      final double radius = node.radiusNorm * 1.30 * dstRect.width * expansion;
+      final double radius = node.radiusNorm * 0.95 * dstRect.width * expansion;
 
       RamPathCalculator.drawOrganicRevealMask(canvas, nodeCenter, radius * 0.60, node.step);
     }

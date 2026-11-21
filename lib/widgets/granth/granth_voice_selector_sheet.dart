@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -168,21 +169,53 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
   }
 
   Future<void> _previewJapVoice(TtsVoice voice) async {
-    setState(() => _japPreviewVoiceId = voice.id);
-    final url = await _japVoiceService.synthesizeMantra(
-      widget.japMantraText!,
-      voice.id,
-    );
-    if (!mounted) return;
-    if (url == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not load this voice. Please try again.'),
-        ),
-      );
+    // 1. If currently playing this voice, stop it on tap
+    if (_activePlayingUrl == voice.id) {
+      await _ttsService.stopPreview();
+      if (mounted) setState(() => _japPreviewVoiceId = null);
       return;
     }
-    _ttsService.playPreview(url);
+
+    setState(() => _japPreviewVoiceId = voice.id);
+
+    try {
+      // 2. Prepare the chant clip locally (cached device file ensures instant playback with zero buffer lag)
+      final clipPath = await _japVoiceService.prepareChantClip(
+        widget.japMantraText!,
+        voice.id,
+      );
+      if (!mounted) return;
+
+      if (clipPath != null && clipPath.isNotEmpty) {
+        await _ttsService.playPreviewSource(
+          DeviceFileSource(clipPath),
+          voice.id,
+        );
+      } else {
+        // Fallback to direct synthesis URL
+        final url = await _japVoiceService.synthesizeMantra(
+          widget.japMantraText!,
+          voice.id,
+        );
+        if (!mounted) return;
+        if (url == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not load this voice. Please try again.'),
+            ),
+          );
+          if (mounted) setState(() => _japPreviewVoiceId = null);
+          return;
+        }
+        await _ttsService.playPreviewSource(
+          UrlSource(url),
+          voice.id,
+        );
+      }
+    } catch (e) {
+      debugPrint('[GranthVoiceSelectorSheet] Preview error: $e');
+      if (mounted) setState(() => _japPreviewVoiceId = null);
+    }
   }
 
   // ignore: unused_element
@@ -711,7 +744,7 @@ class _GranthVoiceSelectorSheetState extends State<GranthVoiceSelectorSheet> {
         final isSelected = voice.id == selectedVoiceId;
         final isPlaying = _activePlayingUrl != null &&
             (_isJapMode
-                ? _japPreviewVoiceId == voice.id
+                ? (_japPreviewVoiceId == voice.id && _activePlayingUrl == voice.id)
                 : voice.previewUrl.isNotEmpty &&
                     (_activePlayingUrl!.contains(voice.previewUrl) ||
                         _activePlayingUrl!.contains(voice.id)));

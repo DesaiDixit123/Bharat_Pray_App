@@ -25,7 +25,8 @@ import '../../widgets/user_avatar.dart';
 
 class YatraScreen extends StatefulWidget {
   final bool isTab;
-  const YatraScreen({super.key, this.isTab = false});
+  final VoidCallback? onBack;
+  const YatraScreen({super.key, this.isTab = false, this.onBack});
 
   @override
   State<YatraScreen> createState() => _YatraScreenState();
@@ -363,7 +364,9 @@ class _YatraScreenState extends State<YatraScreen> {
           // Back button
           GestureDetector(
             onTap: () {
-              if (Navigator.canPop(context)) {
+              if (widget.onBack != null) {
+                widget.onBack!();
+              } else if (Navigator.canPop(context)) {
                 Navigator.pop(context);
               }
             },

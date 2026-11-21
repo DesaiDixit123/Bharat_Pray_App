@@ -6,6 +6,7 @@ import '../../services/saved_items_service.dart';
 import '../details/granth_chapter_list_screen.dart';
 import '../details/granth_chapter_reader_screen.dart';
 import '../details/mandal_profile_screen.dart';
+import '../details/jap_counter_screen.dart';
 
 class SavedItemsScreen extends StatefulWidget {
   final int initialTabIndex;
@@ -19,6 +20,7 @@ class _SavedItemsScreenState extends State<SavedItemsScreen> with SingleTickerPr
   late TabController _tabController;
   List<Map<String, dynamic>> _savedGranths = [];
   List<Map<String, dynamic>> _savedChapters = [];
+  List<Map<String, dynamic>> _savedJaps = [];
   List<Map<String, dynamic>> _savedPosts = [];
   List<Map<String, dynamic>> _savedReels = [];
   bool _isLoading = true;
@@ -26,7 +28,7 @@ class _SavedItemsScreenState extends State<SavedItemsScreen> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this, initialIndex: widget.initialTabIndex);
+    _tabController = TabController(length: 5, vsync: this, initialIndex: widget.initialTabIndex);
     _loadSavedData();
   }
 
@@ -34,6 +36,7 @@ class _SavedItemsScreenState extends State<SavedItemsScreen> with SingleTickerPr
     setState(() => _isLoading = true);
     final granths = await SavedItemsService.getSavedGranths();
     final chapters = await SavedItemsService.getSavedChapters();
+    final japs = await SavedItemsService.getSavedJaps();
     final posts = await SavedItemsService.getSavedPosts();
     final reels = await SavedItemsService.getSavedReels();
 
@@ -41,6 +44,7 @@ class _SavedItemsScreenState extends State<SavedItemsScreen> with SingleTickerPr
       setState(() {
         _savedGranths = granths;
         _savedChapters = chapters;
+        _savedJaps = japs;
         _savedPosts = posts;
         _savedReels = reels;
         _isLoading = false;
@@ -98,6 +102,7 @@ class _SavedItemsScreenState extends State<SavedItemsScreen> with SingleTickerPr
             tabs: [
               Tab(text: 'Granths (${_savedGranths.length})'),
               Tab(text: 'Chapters (${_savedChapters.length})'),
+              Tab(text: 'Japs (${_savedJaps.length})'),
               Tab(text: 'Posts (${_savedPosts.length})'),
               Tab(text: 'Reels (${_savedReels.length})'),
             ],
@@ -112,12 +117,99 @@ class _SavedItemsScreenState extends State<SavedItemsScreen> with SingleTickerPr
                   children: [
                     _buildGranthsTab(),
                     _buildChaptersTab(),
+                    _buildJapsTab(),
                     _buildPostsTab(),
                     _buildReelsTab(),
                   ],
                 ),
         ),
       ),
+    );
+  }
+
+  Widget _buildJapsTab() {
+    if (_savedJaps.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.bookmark_border_rounded, size: 54, color: Color(0xFFD9B89C)),
+            const SizedBox(height: 12),
+            Text(
+              'No saved Japs yet.',
+              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Tap the bookmark icon on any Jap to save it here.',
+              style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF2E2A36).withValues(alpha: 0.55)),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: _savedJaps.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final jap = _savedJaps[index];
+        final title = jap['title']?.toString() ?? 'Sacred Jap';
+        final subtitle = jap['subtitle']?.toString() ?? 'Sacred Jap';
+        final image = jap['image']?.toString() ?? '';
+
+        return InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const JapCounterScreen()));
+          },
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFEFE6DB)),
+            ),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    width: 52,
+                    height: 52,
+                    color: const Color(0xFFFFF4E6),
+                    child: image.startsWith('http')
+                        ? Image.network(image, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.self_improvement_rounded, color: Color(0xFFFF7700)))
+                        : (image.startsWith('assets/')
+                            ? Image.asset(image, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.self_improvement_rounded, color: Color(0xFFFF7700)))
+                            : const Icon(Icons.self_improvement_rounded, color: Color(0xFFFF7700))),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.w700, color: const Color(0xFF2E2A36))),
+                      const SizedBox(height: 2),
+                      Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF7B7066))),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.bookmark_remove_rounded, color: Color(0xFFFF7700)),
+                  onPressed: () async {
+                    await SavedItemsService.toggleSaveJap(jap);
+                    _loadSavedData();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -157,15 +157,27 @@ class _CinematicDarshanViewState extends State<CinematicDarshanView>
   }
 
   Future<void> _initVideoPlayer() async {
-    try {
-      VideoPlayerController? ctrl;
-      if (widget.videoUrl != null && widget.videoUrl!.isNotEmpty) {
-        ctrl = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl!));
-      } else if (widget.videoAsset != null && widget.videoAsset!.isNotEmpty) {
-        ctrl = VideoPlayerController.asset(widget.videoAsset!);
+    VideoPlayerController? ctrl;
+    if (widget.videoUrl != null && widget.videoUrl!.isNotEmpty) {
+      try {
+        final netCtrl = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl!));
+        await netCtrl.initialize();
+        ctrl = netCtrl;
+      } catch (e) {
+        debugPrint('[CinematicDarshanView] Network video initialization failed: $e, trying asset fallback');
       }
-      if (ctrl == null) return;
-      await ctrl.initialize();
+    }
+    if (ctrl == null && widget.videoAsset != null && widget.videoAsset!.isNotEmpty) {
+      try {
+        final assetCtrl = VideoPlayerController.asset(widget.videoAsset!);
+        await assetCtrl.initialize();
+        ctrl = assetCtrl;
+      } catch (e) {
+        debugPrint('[CinematicDarshanView] Asset video initialization failed: $e');
+      }
+    }
+    if (ctrl == null) return;
+    try {
       await ctrl.setLooping(true);
       await ctrl.setVolume(widget.isSoundEnabled ? 1.0 : 0.0);
       await ctrl.play();
@@ -176,7 +188,7 @@ class _CinematicDarshanViewState extends State<CinematicDarshanView>
         });
       }
     } catch (e) {
-      debugPrint('[CinematicDarshanView] Video player initialization: $e');
+      debugPrint('[CinematicDarshanView] Video playback setup error: $e');
     }
   }
 

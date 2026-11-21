@@ -37,7 +37,7 @@ class _PrakashJapScreenState extends State<PrakashJapScreen>
   @override
   JapConfig get japEntry => widget.entry;
 
-  static const int _target = 108;
+  late final int _target = widget.entry.targetCount > 0 ? widget.entry.targetCount : 108;
   late int _count;
   int _completedMalas = 0;
   bool _isCompleted = false;
@@ -140,7 +140,7 @@ class _PrakashJapScreenState extends State<PrakashJapScreen>
           _isCompleted = false;
 
           if (_count > 0) {
-            _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count);
+            _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count, target: _target);
             _newestNode = _revealedNodes.isNotEmpty ? _revealedNodes.last : null;
           } else {
             _revealedNodes = [];
@@ -286,7 +286,7 @@ class _PrakashJapScreenState extends State<PrakashJapScreen>
     final int nextCount = _count + 1;
     setState(() {
       _count = nextCount;
-      _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count);
+      _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count, target: _target);
       _newestNode = _revealedNodes.isNotEmpty ? _revealedNodes.last : null;
     });
 

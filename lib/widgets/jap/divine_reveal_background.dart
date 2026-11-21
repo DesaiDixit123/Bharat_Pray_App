@@ -120,7 +120,7 @@ class DivineRevealBackground extends StatelessWidget {
     }
   }
 
-  Widget _buildRevealedImage(BuildContext context, double p) {
+  Widget _buildRevealedImage(BuildContext context, double progress) {
     if (isCompleted) {
       // 100% Reveal: Full-Screen Devotional Living Darshan (AI video / Local breathing & radiant engine)
       return LiveDarshanView(
@@ -143,21 +143,20 @@ class DivineRevealBackground extends StatelessWidget {
 
     switch (revealStyle) {
       case JapRevealStyle.radialCenter:
-        // Radial mask expanding outward from deity's face (center 0.0, -0.15)
-        final double innerRadius = math.max(0.05, p * 0.9);
-        final double outerRadius = math.min(1.4, innerRadius + 0.35);
+        // Radial mask expanding outward from deity's center in strictly controlled progression
+        final double radius = isCompleted ? 1.4 : (0.10 + 0.85 * math.pow(progress, 1.3));
         return ShaderMask(
           blendMode: BlendMode.dstIn,
           shaderCallback: (bounds) {
             return RadialGradient(
               center: const Alignment(0.0, -0.12),
-              radius: outerRadius,
+              radius: radius,
               colors: [
-                Colors.white.withValues(alpha: math.min(1.0, p * 1.4)),
-                Colors.white.withValues(alpha: math.max(0.0, (p - 0.15) * 1.2)),
+                Colors.white.withValues(alpha: isCompleted ? 1.0 : (progress * 0.94)),
+                Colors.white.withValues(alpha: isCompleted ? 0.90 : math.max(0.0, (progress - 0.20) * 0.85)),
                 Colors.transparent,
               ],
-              stops: const [0.0, 0.7, 1.0],
+              stops: const [0.0, 0.70, 1.0],
             ).createShader(bounds);
           },
           child: imageWidget,
@@ -169,10 +168,10 @@ class DivineRevealBackground extends StatelessWidget {
           shaderCallback: (bounds) {
             return RadialGradient(
               center: const Alignment(0.0, -0.1),
-              radius: math.max(0.1, p * 1.3),
-              colors: const [
-                Colors.white,
-                Colors.white70,
+              radius: isCompleted ? 1.4 : (0.10 + 0.85 * math.pow(progress, 1.25)),
+              colors: [
+                Colors.white.withValues(alpha: isCompleted ? 1.0 : (progress * 0.95)),
+                Colors.white70.withValues(alpha: isCompleted ? 0.85 : math.max(0.0, (progress - 0.15) * 0.80)),
                 Colors.transparent,
               ],
               stops: const [0.0, 0.85, 1.0],
@@ -185,7 +184,7 @@ class DivineRevealBackground extends StatelessWidget {
         return ShaderMask(
           blendMode: BlendMode.dstIn,
           shaderCallback: (bounds) {
-            final double sweepY = -1.0 + (p * 2.2);
+            final double sweepY = -1.0 + (progress * 2.0);
             return LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -197,7 +196,7 @@ class DivineRevealBackground extends StatelessWidget {
               stops: [
                 0.0,
                 (sweepY.clamp(-1.0, 1.0) + 1.0) / 2.0,
-                math.min(1.0, ((sweepY + 0.4).clamp(-1.0, 1.0) + 1.0) / 2.0),
+                math.min(1.0, ((sweepY + 0.25).clamp(-1.0, 1.0) + 1.0) / 2.0),
               ],
             ).createShader(bounds);
           },
@@ -207,8 +206,8 @@ class DivineRevealBackground extends StatelessWidget {
       case JapRevealStyle.clarityBrightness:
       case JapRevealStyle.silhouetteDissolve:
       case JapRevealStyle.particleReveal:
-        // Smooth opacity & contrast transition
-        final double opacity = (p * 1.05).clamp(0.0, 1.0);
+        // Smooth opacity & contrast transition — stays slightly veiled until completion
+        final double opacity = isCompleted ? 1.0 : (0.05 + 0.88 * progress).clamp(0.0, 0.94);
         return Opacity(
           opacity: opacity,
           child: imageWidget,

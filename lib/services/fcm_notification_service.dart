@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
@@ -42,6 +43,17 @@ class FcmNotificationService {
 
   String? _cachedToken;
   String? get currentToken => _cachedToken;
+
+  /// Optional callback registered by UI layer to deep-link on notification tap.
+  void Function(Map<String, dynamic> data)? onNotificationTap;
+
+  /// Holds tap payload if notification arrived before UI mounted.
+  Map<String, dynamic>? pendingNotificationData;
+
+  /// Broadcast stream so NotificationScreen & bell badges refresh live on any incoming push.
+  final StreamController<Map<String, dynamic>> _incomingController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  Stream<Map<String, dynamic>> get onNotificationReceived => _incomingController.stream;
 
   static const String channelId = 'bharat_pray_notifications';
   static const String channelName = 'Bharat Pray Sacred Notifications';
@@ -148,6 +160,11 @@ class FcmNotificationService {
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         debugPrint('🔔 [FCM Foreground Message]: ${message.notification?.title}');
         _showForegroundNotification(message);
+        _incomingController.add({
+          'title': message.notification?.title ?? '',
+          'message': message.notification?.body ?? '',
+          ...message.data,
+        });
       });
 
       // 8. Background tap listener (App was in background)
@@ -234,7 +251,11 @@ class FcmNotificationService {
       final data = jsonDecode(payloadJson) as Map<String, dynamic>;
       final targetScreen = data['action_screen']?.toString() ?? data['screen']?.toString() ?? '';
       debugPrint('🎯 [FCM Notification Click Action Screen]: $targetScreen');
-      // Navigation handler callback can be attached from UI layer if needed
+      if (onNotificationTap != null) {
+        onNotificationTap!(data);
+      } else {
+        pendingNotificationData = data;
+      }
     } catch (e) {
       debugPrint('⚠️ [FCM Payload Decode Error]: $e');
     }

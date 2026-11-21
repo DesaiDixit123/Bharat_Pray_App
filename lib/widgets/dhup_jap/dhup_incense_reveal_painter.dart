@@ -177,17 +177,17 @@ class DhupIncenseRevealPainter extends CustomPainter {
 
     // Balanced progressive expansion:
     final double totalRatio = (revealProgress ?? revealedNodes.length / 108.0).clamp(0.0, 1.0);
-    final double expansion = 1.0 + (2.00 * math.pow(totalRatio, 2.2));
+    final double expansion = 1.0 + (1.20 * math.pow(totalRatio, 2.5));
 
     // ── A. Draw Non-Face Smoke Plumes ────────────────────────────────────
     for (final node in revealedNodes) {
-      if (node.step >= 102) continue; // Face climax nodes drawn in Step B!
+      if (node.step >= 96) continue; // Face climax nodes drawn in Step B!
 
       final center = Offset(
         dstRect.left + (node.u * dstRect.width),
         dstRect.top + (node.v * dstRect.height),
       );
-      final baseRadius = node.radiusNorm * 0.76 * dstRect.width * expansion;
+      final baseRadius = node.radiusNorm * dstRect.width * expansion;
 
       // Generate organic, billowing, vertically elongated incense smoke plume path
       final plumePath = RamPathCalculator.buildOrganicRevealPath(center, baseRadius, node.step);
@@ -199,15 +199,15 @@ class DhupIncenseRevealPainter extends CustomPainter {
       canvas.drawPath(plumePath, _maskPlumePaint);
     }
 
-    // ── B. Draw Sacred Face Climax Nodes (Japs 103..108) ──────────────────
+    // ── B. Draw Sacred Face Climax Nodes (Japs 97..108) ──────────────────
     for (final node in revealedNodes) {
-      if (node.step < 102) continue;
+      if (node.step < 96) continue;
 
       final center = Offset(
         dstRect.left + (node.u * dstRect.width),
         dstRect.top + (node.v * dstRect.height),
       );
-      final baseRadius = node.radiusNorm * 0.80 * dstRect.width;
+      final baseRadius = node.radiusNorm * dstRect.width * (node.step == 107 ? (1.25 * expansion) : 1.10);
 
       final plumePath = RamPathCalculator.buildOrganicRevealPath(center, baseRadius, node.step);
       _maskPlumePaint.color = Colors.white;

@@ -1,9 +1,9 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../../models/jap_animation_effect.dart';
 import '../progressive_ram_reveal_painter.dart';
 import '../ram_path_calculator.dart';
+import '../reveal_image_loader.dart';
 import 'golden_aura_reveal_painter.dart';
 import 'lotus_bloom_reveal_painter.dart';
 import 'dhoop_smoke_reveal_painter.dart';
@@ -19,6 +19,7 @@ class MultiEffectRamRevealWidget extends StatefulWidget {
   final bool isCompleted;
   final double completionGlowProgress;
   final String imageAsset;
+  final double? revealProgress;
 
   const MultiEffectRamRevealWidget({
     super.key,
@@ -29,6 +30,7 @@ class MultiEffectRamRevealWidget extends StatefulWidget {
     required this.isCompleted,
     required this.completionGlowProgress,
     this.imageAsset = 'assets/images/lord_shri_ram_darshan.png',
+    this.revealProgress,
   });
 
   @override
@@ -55,8 +57,8 @@ class _MultiEffectRamRevealWidgetState extends State<MultiEffectRamRevealWidget>
 
   Future<void> _loadImage() async {
     try {
-      final ByteData data = await rootBundle.load(widget.imageAsset);
-      final ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+      final bytes = await loadRevealImageBytes(widget.imageAsset);
+      final ui.Codec codec = await ui.instantiateImageCodec(bytes);
       final ui.FrameInfo frameInfo = await codec.getNextFrame();
       if (mounted) {
         setState(() {
@@ -89,6 +91,7 @@ class _MultiEffectRamRevealWidgetState extends State<MultiEffectRamRevealWidget>
           shimmerProgress: widget.shimmerProgress,
           isCompleted: widget.isCompleted,
           completionGlowProgress: widget.completionGlowProgress,
+          revealProgress: widget.revealProgress,
         );
         break;
 
@@ -100,6 +103,7 @@ class _MultiEffectRamRevealWidgetState extends State<MultiEffectRamRevealWidget>
           shimmerProgress: widget.shimmerProgress,
           isCompleted: widget.isCompleted,
           completionGlowProgress: widget.completionGlowProgress,
+          revealProgress: widget.revealProgress,
         );
         break;
 
@@ -111,6 +115,7 @@ class _MultiEffectRamRevealWidgetState extends State<MultiEffectRamRevealWidget>
           shimmerProgress: widget.shimmerProgress,
           isCompleted: widget.isCompleted,
           completionGlowProgress: widget.completionGlowProgress,
+          revealProgress: widget.revealProgress,
         );
         break;
 
@@ -122,6 +127,7 @@ class _MultiEffectRamRevealWidgetState extends State<MultiEffectRamRevealWidget>
           shimmerProgress: widget.shimmerProgress,
           isCompleted: widget.isCompleted,
           completionGlowProgress: widget.completionGlowProgress,
+          revealProgress: widget.revealProgress,
         );
         break;
 
@@ -134,6 +140,7 @@ class _MultiEffectRamRevealWidgetState extends State<MultiEffectRamRevealWidget>
           shimmerProgress: widget.shimmerProgress,
           isCompleted: widget.isCompleted,
           completionGlowProgress: widget.completionGlowProgress,
+          revealProgress: widget.revealProgress,
         );
         break;
     }

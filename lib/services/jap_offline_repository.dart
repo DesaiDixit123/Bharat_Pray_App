@@ -273,6 +273,42 @@ class JapOfflineRepository {
     }
   }
 
+  /// Ensures daily Jap progress resets automatically when a new calendar day starts.
+  /// Returns true if a new-day reset was performed.
+  static Future<bool> ensureDailyReset() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final now = DateTime.now();
+      final todayKey =
+          '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final lastDate = prefs.getString('jap_daily_reset_date');
+
+      if (lastDate == null) {
+        await prefs.setString('jap_daily_reset_date', todayKey);
+        return false;
+      }
+
+      if (lastDate != todayKey) {
+        final keysToRemove = prefs.getKeys().where((k) =>
+            k.startsWith(_prefixSession) ||
+            k.startsWith(_prefixCount) ||
+            k.startsWith(_prefixMalas) ||
+            k.startsWith(_prefixDirty)).toList();
+
+        for (final key in keysToRemove) {
+          await prefs.remove(key);
+        }
+        await prefs.setString('jap_daily_reset_date', todayKey);
+        debugPrint('[JapOfflineRepository] Automatic daily Jap reset completed for $todayKey (${keysToRemove.length} keys cleared)');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('[JapOfflineRepository] Error during daily reset check: $e');
+      return false;
+    }
+  }
+
   /// Retrieve locally cached progress map
   static Future<Map<String, int>> getProgress(
     String japId, {

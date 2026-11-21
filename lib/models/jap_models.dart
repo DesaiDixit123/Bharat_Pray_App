@@ -241,66 +241,186 @@ class EffectPack {
 }
 
 class JapConfig {
-  final String id; final String name; final String? godCategoryId; final String? templeId;
-  final String thumbnailUrl; final String darshanImageUrl; final String shlokText;
-  final String? shlokAudioUrl; final int targetCount; int progress; final EffectPack effectPack;
-  final String? particleShape; final bool isCustom; final String darshanVideoUrl;
-  JapConfig({required this.id, required this.name, this.godCategoryId, this.templeId,
-    required this.thumbnailUrl, required this.darshanImageUrl, required this.shlokText,
-    this.shlokAudioUrl, this.targetCount = 108, this.progress = 0, required this.effectPack,
-    this.particleShape, this.isCustom = false, this.darshanVideoUrl = ''});
-  static String defaultDeityImage(String name) {
-    final n = name.toLowerCase();
-    if (n.contains('shiv') || n.contains('mahadev') || n.contains('shankar') || n.contains('bhole')) {
-      return 'assets/images/lord_shiva_darshan.jpg';
-    } else if (n.contains('radha') && !n.contains('krishna')) {
-      return 'assets/images/shri_radha_darshan.jpg';
-    } else if (n.contains('krishna') || n.contains('kanha')) {
-      return 'assets/images/shri_krishna_darshan.jpg';
-    } else if (n.contains('ganesh') || n.contains('ganpati') || n.contains('ganapati')) {
-      return 'assets/images/deity_ganesha.png';
-    } else if (n.contains('hanuman') || n.contains('bajrang') || n.contains('maruti')) {
-      return 'assets/images/deity_hanuman.png';
-    } else if (n.contains('ram') || n.contains('raghav') || n.contains('sita')) {
-      return 'assets/images/lord_shri_ram_darshan.png';
-    } else if (n.contains('amba') || n.contains('durga') || n.contains('mata') || n.contains('kali')) {
-      return 'assets/images/deity_amba.png';
-    }
-    return 'assets/images/somnath_temple.png';
+  final String id;
+  final String name;
+  final String displayName;
+  final String fullName;
+  final String mantraText;
+  final String voiceText;
+  final String? godCategoryId;
+  final String? templeId;
+  final String thumbnailUrl;
+  final String darshanImageUrl;
+  final String? backgroundMusic;
+  final String shlokText;
+  final String? shlokAudioUrl;
+  final int targetCount;
+  int progress;
+  final EffectPack effectPack;
+  final String? particleShape;
+  final bool isCustom;
+  final String darshanVideoUrl;
+  final bool voiceEnabled;
+  final bool musicEnabled;
+  final bool isActive;
+  final int displayOrder;
+
+  JapConfig({
+    required this.id,
+    required this.name,
+    String? displayName,
+    String? fullName,
+    String? mantraText,
+    String? voiceText,
+    this.godCategoryId,
+    this.templeId,
+    required this.thumbnailUrl,
+    required this.darshanImageUrl,
+    this.backgroundMusic,
+    required this.shlokText,
+    this.shlokAudioUrl,
+    this.targetCount = 108,
+    this.progress = 0,
+    required this.effectPack,
+    this.particleShape,
+    this.isCustom = false,
+    this.darshanVideoUrl = '',
+    this.voiceEnabled = true,
+    this.musicEnabled = true,
+    this.isActive = true,
+    this.displayOrder = 0,
+  })  : displayName = displayName ?? _resolveDisplayName(name),
+        fullName = fullName ?? _resolveFullName(name),
+        mantraText = mantraText ?? shlokText,
+        voiceText = voiceText ?? mantraText ?? shlokText;
+
+  static String _resolveDisplayName(String raw) {
+    final lower = raw.trim().toLowerCase();
+    if (lower.contains('swaminarayan')) return 'SWAMINARAYAN';
+    if (lower.contains('khatu') || lower.contains('shyam')) return 'KHATU';
+    if (lower.contains('lakshmi') || lower.contains('laxmi')) return 'LAKSHMI';
+    if (lower.contains('durga')) return 'DURGA';
+    if (lower.contains('vishnu') || lower.contains('narayan')) return 'VISHNU';
+    if (lower.contains('hanuman') || lower.contains('bajrang')) return 'HANUMAN';
+    if (lower.contains('ganesh') || lower.contains('ganpati') || lower.contains('vinayak')) return 'GANESH';
+    if (lower.contains('radha') && !lower.contains('krishna')) return 'RADHA';
+    if (lower.contains('krishna') || lower.contains('kanha')) return 'KRISHNA';
+    if (lower.contains('shiv') || lower.contains('mahadev') || lower.contains('bhole')) return 'SHIVA';
+    if (lower.contains('ram') || lower.contains('raghav')) return 'RAM';
+    if (lower.contains('amba') || lower.contains('ambe')) return 'AMBE';
+    final parts = raw.trim().split(RegExp(r'\s+'));
+    return parts.isNotEmpty ? parts.first.toUpperCase() : 'JAP';
   }
 
+  static String _resolveFullName(String raw) {
+    final lower = raw.trim().toLowerCase();
+    if (lower.contains('swaminarayan')) return 'Bhagwan Swaminarayan';
+    if (lower.contains('khatu') || lower.contains('shyam')) return 'Shri Khatu Shyam';
+    if (lower.contains('lakshmi') || lower.contains('laxmi')) return 'Maa Lakshmi';
+    if (lower.contains('durga')) return 'Maa Durga';
+    if (lower.contains('vishnu') || lower.contains('narayan')) return 'Shri Vishnu';
+    if (lower.contains('hanuman') || lower.contains('bajrang')) return 'Shri Hanuman';
+    if (lower.contains('ganesh') || lower.contains('ganpati')) return 'Shri Ganesh';
+    if (lower.contains('radha') && !lower.contains('krishna')) return 'Shri Radha';
+    if (lower.contains('krishna') || lower.contains('kanha')) return 'Shri Krishna';
+    if (lower.contains('shiv') || lower.contains('mahadev')) return 'Lord Shiva';
+    if (lower.contains('ram') || lower.contains('raghav')) return 'Shri Ram';
+    if (lower.contains('amba') || lower.contains('ambe')) return 'Ambe Maa';
+    return raw;
+  }
+
+  static String defaultDeityThumbnail(String name) {
+    final n = name.toLowerCase();
+    if (n.contains('swaminarayan')) return 'assets/images/jap/swaminarayan_thumbnail.webp';
+    if (n.contains('khatu') || n.contains('shyam')) return 'assets/images/jap/khatu_thumbnail.webp';
+    if (n.contains('lakshmi') || n.contains('laxmi')) return 'assets/images/jap/lakshmi_thumbnail.webp';
+    if (n.contains('durga')) return 'assets/images/jap/durga_thumbnail.webp';
+    if (n.contains('vishnu') || n.contains('narayan')) return 'assets/images/jap/vishnu_thumbnail.webp';
+    if (n.contains('hanuman') || n.contains('bajrang')) return 'assets/images/jap/hanuman_thumbnail.webp';
+    if (n.contains('ganesh') || n.contains('ganpati')) return 'assets/images/jap/ganesh_thumbnail.webp';
+    if (n.contains('shiv') || n.contains('mahadev') || n.contains('shankar')) return 'assets/images/jap/shiva_thumbnail.webp';
+    if (n.contains('radha') && !n.contains('krishna')) return 'assets/images/jap/radha_thumbnail.webp';
+    if (n.contains('krishna') || n.contains('kanha')) return 'assets/images/jap/krishna_thumbnail.webp';
+    if (n.contains('ram') || n.contains('raghav')) return 'assets/images/jap/ram_thumbnail.webp';
+    if (n.contains('amba') || n.contains('ambe')) return 'assets/images/jap/ambe_thumbnail.webp';
+    return 'assets/images/jap/ram_thumbnail.webp';
+  }
+
+  static String defaultDeityCover(String name) {
+    final n = name.toLowerCase();
+    if (n.contains('swaminarayan')) return 'assets/images/jap/swaminarayan_cover.webp';
+    if (n.contains('khatu') || n.contains('shyam')) return 'assets/images/jap/khatu_cover.webp';
+    if (n.contains('lakshmi') || n.contains('laxmi')) return 'assets/images/jap/lakshmi_cover.webp';
+    if (n.contains('durga')) return 'assets/images/jap/durga_cover.webp';
+    if (n.contains('vishnu') || n.contains('narayan')) return 'assets/images/jap/vishnu_cover.webp';
+    if (n.contains('hanuman') || n.contains('bajrang')) return 'assets/images/jap/hanuman_cover.webp';
+    if (n.contains('ganesh') || n.contains('ganpati')) return 'assets/images/jap/ganesh_cover.webp';
+    if (n.contains('shiv') || n.contains('mahadev') || n.contains('shankar')) return 'assets/images/jap/shiva_cover.webp';
+    if (n.contains('radha') && !n.contains('krishna')) return 'assets/images/jap/radha_cover.webp';
+    if (n.contains('krishna') || n.contains('kanha')) return 'assets/images/jap/krishna_cover.webp';
+    if (n.contains('ram') || n.contains('raghav')) return 'assets/images/jap/ram_cover.webp';
+    if (n.contains('amba') || n.contains('ambe')) return 'assets/images/jap/ambe_cover.webp';
+    return 'assets/images/jap/ram_cover.webp';
+  }
+
+  static String defaultDeityImage(String name) => defaultDeityThumbnail(name);
+
   static String _sanitizeUrl(String? url) => ApiService.resolveImageUrl(url);
+
   factory JapConfig.fromJson(Map<String, dynamic> json) {
-    final name = LocalizedApiHelper.parse(json['name']);
-    final defaultImg = defaultDeityImage(name);
+    final rawName = LocalizedApiHelper.parse(json['name']);
+    final dispName = json['displayName']?.toString() ?? json['display_name']?.toString() ?? _resolveDisplayName(rawName);
+    final fName = json['fullName']?.toString() ?? json['full_name']?.toString() ?? _resolveFullName(rawName);
     final pShape = json['particleShape']?.toString() ?? json['particleEffect']?.toString();
+
     EffectPack effectPack;
     if (json['effectPack'] is Map<String, dynamic>) {
       effectPack = EffectPack.fromJson(json['effectPack'] as Map<String, dynamic>);
     } else {
-      effectPack = EffectPack.resolve(name: name, particleShape: pShape,
-          customTitle: json['blessingTitle'], customSubtitle: json['blessingSubtitle']);
+      effectPack = EffectPack.resolve(
+        name: fName.isNotEmpty ? fName : rawName,
+        particleShape: pShape,
+        customTitle: json['blessingTitle'],
+        customSubtitle: json['blessingSubtitle'],
+      );
     }
 
-    final rawThumb = _sanitizeUrl(json['thumbnail'] ?? '');
-    final rawDarshan = _sanitizeUrl(json['darshanImage'] ?? json['thumbnail'] ?? '');
-    final thumb = rawThumb.isNotEmpty ? rawThumb : defaultImg;
-    final darshan = rawDarshan.isNotEmpty ? rawDarshan : thumb;
+    final defaultThumb = defaultDeityThumbnail(dispName);
+    final defaultCover = defaultDeityCover(dispName);
+
+    final rawThumb = _sanitizeUrl(json['thumbnail'] ?? json['thumbnail_image'] ?? json['thumbnailUrl'] ?? '');
+    final rawDarshan = _sanitizeUrl(json['darshanImage'] ?? json['cover_image'] ?? json['darshanImageUrl'] ?? '');
+    final thumb = rawThumb.isNotEmpty ? rawThumb : defaultThumb;
+    final darshan = rawDarshan.isNotEmpty ? rawDarshan : defaultCover;
+
+    final rawMantra = LocalizedApiHelper.parse(json['mantraText'] ?? json['mantra_text'] ?? json['shlokText'] ?? '');
+    final rawVoice = json['voiceText']?.toString() ?? json['voice_text']?.toString() ?? rawMantra;
+    final rawMusic = _sanitizeUrl(json['backgroundMusic']?.toString() ?? json['background_music']?.toString() ?? '');
 
     return JapConfig(
-      id: json['_id'] ?? json['id'] ?? '', name: name,
+      id: json['_id'] ?? json['id'] ?? '',
+      name: dispName,
+      displayName: dispName,
+      fullName: fName,
+      mantraText: rawMantra,
+      voiceText: rawVoice,
       godCategoryId: json['godCategory'] is Map ? json['godCategory']['_id']?.toString() : json['godCategory']?.toString(),
       templeId: json['temple'] is Map ? json['temple']['_id']?.toString() : json['temple']?.toString(),
       thumbnailUrl: thumb,
       darshanImageUrl: darshan,
-      shlokText: LocalizedApiHelper.parse(json['shlokText']),
-      shlokAudioUrl: _sanitizeUrl(json['shlokAudio'] ?? ''),
-      targetCount: (json['targetCount'] is num) ? (json['targetCount'] as num).toInt() : 108,
-      progress: (json['progress'] is num) ? (json['progress'] as num).toInt() : 0,
+      backgroundMusic: rawMusic.isNotEmpty ? rawMusic : null,
+      shlokText: rawMantra,
+      shlokAudioUrl: _sanitizeUrl(json['shlokAudio'] ?? json['shlokAudioUrl'] ?? ''),
+      targetCount: (json['targetCount'] is num) ? (json['targetCount'] as num).toInt() : (json['target_count'] is num ? (json['target_count'] as num).toInt() : 108),
+      progress: (json['progress'] is num) ? (json['progress'] as num).toInt() : (json['chanting_count'] is num ? (json['chanting_count'] as num).toInt() : 0),
       effectPack: effectPack,
       particleShape: pShape,
-      isCustom: json['isCustom'] == true || (json['_id'] ?? json['id'] ?? '').toString().startsWith('custom_'),
+      isCustom: json['isCustom'] == true || json['is_custom'] == true || (json['_id'] ?? json['id'] ?? '').toString().startsWith('custom_'),
       darshanVideoUrl: _sanitizeUrl(json['darshanVideo'] ?? ''),
+      voiceEnabled: json['voiceEnabled'] ?? json['voice_enabled'] ?? true,
+      musicEnabled: json['musicEnabled'] ?? json['music_enabled'] ?? true,
+      isActive: json['isActive'] ?? json['is_active'] ?? json['status'] ?? true,
+      displayOrder: (json['displayOrder'] is num) ? (json['displayOrder'] as num).toInt() : (json['display_order'] is num ? (json['display_order'] as num).toInt() : 0),
     );
   }
 }

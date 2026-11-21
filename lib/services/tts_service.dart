@@ -10,11 +10,38 @@ import 'api_service.dart';
 class TtsService {
   static final TtsService _instance = TtsService._internal();
   factory TtsService() => _instance;
-  TtsService._internal();
+  TtsService._internal() {
+    _initPreviewPlayer();
+  }
 
   final AudioPlayer _previewPlayer = AudioPlayer();
   String? _currentlyPlayingPreviewUrl;
   bool _isPlayingPreview = false;
+
+  void _initPreviewPlayer() {
+    try {
+      _previewPlayer.setAudioContext(
+        AudioContext(
+          android: const AudioContextAndroid(
+            isSpeakerphoneOn: false,
+            stayAwake: false,
+            contentType: AndroidContentType.music,
+            usageType: AndroidUsageType.media,
+            audioFocus: AndroidAudioFocus.none,
+          ),
+          iOS: AudioContextIOS(
+            category: AVAudioSessionCategory.playback,
+            options: const {AVAudioSessionOptions.mixWithOthers},
+          ),
+        ),
+      );
+    } catch (_) {}
+    _previewPlayer.onPlayerComplete.listen((_) {
+      _isPlayingPreview = false;
+      _currentlyPlayingPreviewUrl = null;
+      _previewStateController.add(false);
+    });
+  }
 
   final StreamController<bool> _previewStateController =
       StreamController<bool>.broadcast();
@@ -434,6 +461,28 @@ class TtsService {
       await _previewPlayer.play(UrlSource(fullUrl));
     } catch (e) {
       debugPrint('[TtsService] Error playing preview: $e');
+      _isPlayingPreview = false;
+      _currentlyPlayingPreviewUrl = null;
+      _previewStateController.add(false);
+    }
+  }
+
+  /// Play audio preview from any source (DeviceFileSource, AssetSource, UrlSource)
+  Future<void> playPreviewSource(Source source, String identifier) async {
+    if (_isPlayingPreview && _currentlyPlayingPreviewUrl == identifier) {
+      await stopPreview();
+      return;
+    }
+
+    try {
+      await _previewPlayer.stop();
+      _currentlyPlayingPreviewUrl = identifier;
+      _isPlayingPreview = true;
+      _previewStateController.add(true);
+      await _previewPlayer.setVolume(1.0);
+      await _previewPlayer.play(source);
+    } catch (e) {
+      debugPrint('[TtsService] Error playing preview source: $e');
       _isPlayingPreview = false;
       _currentlyPlayingPreviewUrl = null;
       _previewStateController.add(false);

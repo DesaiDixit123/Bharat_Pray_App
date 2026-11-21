@@ -1,12 +1,15 @@
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 
 import '../../services/api_service.dart';
+import '../../services/jap_voice_service.dart';
 import '../../services/yatra_personal_chat_service.dart';
 import '../../widgets/jap/custom_jap_preview_sheet.dart';
 import 'notification_screen.dart';
@@ -29,11 +32,50 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
 
   // Text controllers
   final _nameController = TextEditingController();
+  final _displayNameController = TextEditingController();
+  final _mantraController = TextEditingController();
   final _chantCountController = TextEditingController(text: '108');
 
-  // Audio file
+  // Audio toggles & Background Dhun selection
+  bool _voiceEnabled = true;
+  bool _musicEnabled = true;
+  String _selectedBackgroundDhun = 'audio/temple_peaceful_dhun.wav';
+  final AudioPlayer _dhunPreviewPlayer = AudioPlayer();
+
+  static const List<Map<String, String>> _templeDhunOptions = [
+    {
+      'path': 'audio/temple_peaceful_dhun.wav',
+      'label': 'Sacred Temple Bells',
+      'description': 'Resonant temple bells & calm sacred ambience',
+    },
+    {
+      'path': 'audio/ram_mandir_dhun.wav',
+      'label': 'Singing Bowl Serenity',
+      'description': 'Warm 432 Hz brass singing bowl resonance',
+    },
+    {
+      'path': 'audio/krishna_flute_dhun.wav',
+      'label': 'Vedic Tanpura Drone',
+      'description': 'Traditional meditative Tanpura harmonic cycle',
+    },
+    {
+      'path': 'audio/shiva_meditative_dhun.wav',
+      'label': 'Deep Om Resonance',
+      'description': 'Deep 136.1 Hz grounding Om meditation hum',
+    },
+  ];
+
+  String get _selectedDhunLabel {
+    final match = _templeDhunOptions.where((d) => d['path'] == _selectedBackgroundDhun);
+    return match.isNotEmpty ? match.first['label']! : 'Sacred Temple Bells';
+  }
+
+  // Audio file & Auto-Generate Voice
   String? _audioFileName;
   String? _audioFilePath;
+  bool _isGeneratingAudio = false;
+  bool _isPlayingAudioPreview = false;
+  final AudioPlayer _chantPreviewPlayer = AudioPlayer();
 
   // Dropdowns
   String? _selectedCategory;
@@ -41,8 +83,13 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
 
   final ImagePicker _picker = ImagePicker();
 
-  // Guard flag — prevents setState after widget is disposed
+  // Guard flags — prevents setState after dispose & concurrent image picker calls
   bool _isActive = true;
+  bool _isPickingImage = false;
+
+  static const String _prefDraftCover = 'draft_custom_jap_cover_path';
+  static const String _prefDraftGod = 'draft_custom_jap_god_path';
+  static const String _prefPendingIsCover = 'draft_custom_jap_pending_is_cover';
 
   // God categories (loaded dynamically from backend API)
   List<Map<String, String>> _categories = [];
@@ -111,19 +158,86 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
     }
   }
 
+  Future<File> _persistPickedImage(String sourcePath, {required bool isCover}) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final draftDir = Directory('${dir.path}/custom_jap_drafts');
+      if (!await draftDir.exists()) {
+        await draftDir.create(recursive: true);
+      }
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final destPath = '${draftDir.path}/${isCover ? "cover" : "god"}_$ts.jpg';
+      final copied = await File(sourcePath).copy(destPath);
+      return copied;
+    } catch (_) {
+      return File(sourcePath);
+    }
+  }
+
+  Future<void> _saveDraftPaths({bool? pendingIsCover}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_coverImage != null) {
+        await prefs.setString(_prefDraftCover, _coverImage!.path);
+      } else {
+        await prefs.remove(_prefDraftCover);
+      }
+      if (_godImage != null) {
+        await prefs.setString(_prefDraftGod, _godImage!.path);
+      } else {
+        await prefs.remove(_prefDraftGod);
+      }
+      if (pendingIsCover != null) {
+        await prefs.setBool(_prefPendingIsCover, pendingIsCover);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _clearDraftPaths() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_prefDraftCover);
+      await prefs.remove(_prefDraftGod);
+      await prefs.remove(_prefPendingIsCover);
+    } catch (_) {}
+  }
+
   Future<void> _retrieveLostData() async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedCover = prefs.getString(_prefDraftCover);
+      final savedGod = prefs.getString(_prefDraftGod);
+      final pendingIsCover = prefs.getBool(_prefPendingIsCover);
+
       final LostDataResponse response = await _picker.retrieveLostData();
-      if (response.isEmpty || response.file == null || !mounted || !_isActive) {
-        return;
+      if (!mounted || !_isActive) return;
+
+      // Only restore draft images if the OS actually recreated the Activity during a pick
+      if (!response.isEmpty && response.file != null) {
+        final bool targetIsCover = pendingIsCover ?? (savedCover == null);
+        final persisted = await _persistPickedImage(
+          response.file!.path,
+          isCover: targetIsCover,
+        );
+        if (!mounted || !_isActive) return;
+        setState(() {
+          if (savedCover != null && File(savedCover).existsSync()) {
+            _coverImage = File(savedCover);
+          }
+          if (savedGod != null && File(savedGod).existsSync()) {
+            _godImage = File(savedGod);
+          }
+          if (targetIsCover) {
+            _coverImage = persisted;
+          } else {
+            _godImage = persisted;
+          }
+        });
+        await _saveDraftPaths();
+      } else {
+        // Fresh screen open — clear any stale draft paths
+        await _clearDraftPaths();
       }
-      setState(() {
-        if (_coverImage == null) {
-          _coverImage = File(response.file!.path);
-        } else if (_godImage == null) {
-          _godImage = File(response.file!.path);
-        }
-      });
     } catch (_) {}
   }
 
@@ -132,12 +246,19 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
     YatraPersonalChatService().unreadMessageCount.removeListener(_onUnreadMessagesChanged);
     _isActive = false;
     _nameController.dispose();
+    _displayNameController.dispose();
+    _mantraController.dispose();
     _chantCountController.dispose();
+    _dhunPreviewPlayer.stop();
+    _dhunPreviewPlayer.dispose();
+    _chantPreviewPlayer.stop();
+    _chantPreviewPlayer.dispose();
     super.dispose();
   }
 
   // ─── Pick image with source choice popup ─────────────────────────────────
   Future<void> _showImagePickerPopup({required bool isCover}) async {
+    if (_isPickingImage || !_isActive || !mounted) return;
     final ImageSource? source = await showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -244,25 +365,40 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
   }
 
   Future<void> _pickImage(ImageSource source, {required bool isCover}) async {
-    if (!_isActive || !mounted) return;
+    if (!_isActive || !mounted || _isPickingImage) return;
+    _isPickingImage = true;
 
     try {
+      // Save current draft & free decoded image cache RAM before launching heavy native Camera/Gallery
+      await _saveDraftPaths(pendingIsCover: isCover);
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+
+      // Brief delay to allow modal bottom sheet dismissal to finish cleanly on Android
+      await Future.delayed(const Duration(milliseconds: 120));
+      if (!_isActive || !mounted) return;
+
       final XFile? image = await _picker.pickImage(
         source: source,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 80,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 75,
         requestFullMetadata: false,
       );
       // User pressed back without picking — silently return
       if (!_isActive || !mounted || image == null) return;
+
+      final persistedFile = await _persistPickedImage(image.path, isCover: isCover);
+      if (!_isActive || !mounted) return;
+
       setState(() {
         if (isCover) {
-          _coverImage = File(image.path);
+          _coverImage = persistedFile;
         } else {
-          _godImage = File(image.path);
+          _godImage = persistedFile;
         }
       });
+      await _saveDraftPaths();
     } on PlatformException catch (e) {
       if (!_isActive || !mounted) return;
       // Ignore permission/cancel codes silently
@@ -284,6 +420,83 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
       }
     } catch (_) {
       // Back gesture / any other cancel — silently ignore, no crash
+    } finally {
+      _isPickingImage = false;
+    }
+  }
+
+  Future<void> _generateAutoAudio() async {
+    final text = _mantraController.text.trim().isNotEmpty
+        ? _mantraController.text.trim()
+        : _nameController.text.trim();
+    if (text.isEmpty) {
+      _showError('Please enter Mantra / Chant Text first');
+      return;
+    }
+    if (_isGeneratingAudio) return;
+
+    setState(() => _isGeneratingAudio = true);
+    try {
+      final voiceService = JapVoiceService();
+      final voiceId = await voiceService.loadSelectedVoiceId();
+      final clipPath = await voiceService.prepareChantClip(text, voiceId);
+      if (!mounted || !_isActive) return;
+
+      if (clipPath != null && File(clipPath).existsSync()) {
+        await _chantPreviewPlayer.stop();
+        setState(() {
+          _audioFilePath = clipPath;
+          _audioFileName = 'Auto Audio • $text.mp3';
+          _isPlayingAudioPreview = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF2E7D32),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            content: Text(
+              'Auto Audio ready for "$text"',
+              style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+          ),
+        );
+      } else {
+        _showError('Could not generate audio. Check internet connection.');
+      }
+    } catch (e) {
+      if (mounted && _isActive) {
+        _showError('Audio generation failed. Please try again.');
+      }
+    } finally {
+      if (mounted && _isActive) {
+        setState(() => _isGeneratingAudio = false);
+      }
+    }
+  }
+
+  Future<void> _toggleChantAudioPreview() async {
+    final path = _audioFilePath;
+    if (path == null || path.isEmpty) return;
+    try {
+      if (_isPlayingAudioPreview) {
+        await _chantPreviewPlayer.stop();
+        if (mounted) setState(() => _isPlayingAudioPreview = false);
+      } else {
+        await _dhunPreviewPlayer.stop();
+        await _chantPreviewPlayer.stop();
+        _chantPreviewPlayer.onPlayerComplete.listen((_) {
+          if (mounted) setState(() => _isPlayingAudioPreview = false);
+        });
+        if (path.startsWith('http')) {
+          await _chantPreviewPlayer.play(UrlSource(path));
+        } else {
+          await _chantPreviewPlayer.play(DeviceFileSource(path));
+        }
+        if (mounted) setState(() => _isPlayingAudioPreview = true);
+      }
+    } catch (e) {
+      debugPrint('[UploadGodPhoto] Chant audio preview error: $e');
+      if (mounted) setState(() => _isPlayingAudioPreview = false);
     }
   }
 
@@ -418,6 +631,142 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
     );
   }
 
+  // ─── Background Temple Dhun sheet with live audio preview ────────────────
+  Future<void> _showDhunPickerSheet() async {
+    String? playingPath;
+
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            Future<void> togglePreview(String path) async {
+              try {
+                if (playingPath == path) {
+                  await _dhunPreviewPlayer.stop();
+                  setSheetState(() => playingPath = null);
+                } else {
+                  await _dhunPreviewPlayer.stop();
+                  await _dhunPreviewPlayer.setVolume(0.75);
+                  await _dhunPreviewPlayer.play(AssetSource(path));
+                  setSheetState(() => playingPath = path);
+                }
+              } catch (e) {
+                debugPrint('[UploadGodPhoto] Dhun preview error: $e');
+              }
+            }
+
+            return Container(
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF0E6),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFFEFE6DB)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 10),
+                  Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFC8A882).withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Select Background Dhun',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: const Color(0xFF2E2A36),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final dhun in _templeDhunOptions)
+                    InkWell(
+                      onTap: () {
+                        _dhunPreviewPlayer.stop();
+                        Navigator.pop(sheetContext);
+                        setState(() => _selectedBackgroundDhun = dhun['path']!);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    dhun['label']!,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: _selectedBackgroundDhun == dhun['path']
+                                          ? const Color(0xFFFF7700)
+                                          : const Color(0xFF2E2A36),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    dhun['description']!,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      color: const Color(0xFF2E2A36).withValues(alpha: 0.55),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            OutlinedButton.icon(
+                              onPressed: () => togglePreview(dhun['path']!),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: playingPath == dhun['path']
+                                    ? Colors.white
+                                    : const Color(0xFFFF7700),
+                                backgroundColor: playingPath == dhun['path']
+                                    ? const Color(0xFFFF7700)
+                                    : Colors.transparent,
+                                side: const BorderSide(color: Color(0xFFFF9933)),
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                              ),
+                              icon: Icon(
+                                playingPath == dhun['path']
+                                    ? Icons.stop_rounded
+                                    : Icons.play_arrow_rounded,
+                                size: 18,
+                              ),
+                              label: Text(
+                                playingPath == dhun['path'] ? 'Stop' : 'Preview',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    // Always stop preview audio when bottom sheet closes
+    await _dhunPreviewPlayer.stop();
+  }
+
   // ─── Jap effect sheet with previews ───────────────────────────────────────
   String? get _selectedJapEffectLabel {
     final match = CustomJapEffect.all.where((e) => e.value == _selectedParticleEffect);
@@ -521,6 +870,16 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
       _showError('Please enter Jap name');
       return;
     }
+    final displayName = _displayNameController.text.trim();
+    if (displayName.isEmpty) {
+      _showError('Please enter Display Name');
+      return;
+    }
+    final mantraText = _mantraController.text.trim();
+    if (mantraText.isEmpty) {
+      _showError('Please enter Mantra / Chant Text');
+      return;
+    }
     if (_coverImage == null) {
       _showError('Please upload Cover Image');
       return;
@@ -543,12 +902,20 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
       return;
     }
 
+    _clearDraftPaths();
+
     Navigator.pop(
       context,
       CustomJapDetails(
         coverImagePath: _coverImage!.path,
         godImagePath: _godImage!.path,
         name: name,
+        displayName: displayName,
+        mantraText: mantraText,
+        voiceText: mantraText,
+        backgroundMusic: _musicEnabled ? _selectedBackgroundDhun : '',
+        voiceEnabled: _voiceEnabled,
+        musicEnabled: _musicEnabled,
         audioFileName: _audioFileName ?? '',
         audioFilePath: _audioFilePath ?? '',
         chantCount: chantCount,
@@ -614,12 +981,186 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
                       const SizedBox(height: 16),
 
                       // 3. Jap Name
-                      _sectionLabel('Jap Name'),
+                      _sectionLabel('Jap Name', isRequired: true),
                       const SizedBox(height: 8),
                       _buildTextField(
                         controller: _nameController,
-                        hint: 'e.g. Om Namah Shivaya',
+                        hint: 'e.g. Shri Ram / Om Namah Shivaya',
                         icon: Icons.auto_awesome_outlined,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 3a. Display Name (shown during chanting top bar)
+                      _sectionLabel('Display Name', isRequired: true),
+                      const SizedBox(height: 8),
+                      _buildTextField(
+                        controller: _displayNameController,
+                        hint: 'e.g. RAM / SHIVA / RADHA',
+                        icon: Icons.badge_outlined,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 3b. Mantra / Chanting Text + Auto Audio Generator Button
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _sectionLabel('Mantra / Chant Text', isRequired: true),
+                          GestureDetector(
+                            onTap: _isGeneratingAudio ? null : _generateAutoAudio,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFF3E0),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: const Color(0xFFFF9900)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_isGeneratingAudio)
+                                    const SizedBox(
+                                      width: 12,
+                                      height: 12,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Color(0xFFFF7700),
+                                      ),
+                                    )
+                                  else
+                                    const Icon(
+                                      Icons.auto_awesome_rounded,
+                                      size: 13,
+                                      color: Color(0xFFFF7700),
+                                    ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _isGeneratingAudio ? 'Generating...' : 'Auto Audio 🎙️',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFFFF7700),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildTextField(
+                        controller: _mantraController,
+                        hint: 'e.g. રામ / ॐ नमः शिवाय',
+                        icon: Icons.record_voice_over_outlined,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 3c. Chant Audio Box (Auto-Generated or Custom MP3/WAV)
+                      _sectionLabel('Chant Audio (Auto or Upload)'),
+                      const SizedBox(height: 8),
+                      _buildAudioBox(),
+                      const SizedBox(height: 16),
+
+                      // 3c. Voice & Background Dhun Toggles
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFEFE6DB)),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.volume_up_rounded, color: Color(0xFFFF7700), size: 18),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      'Voice Chant',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF2E2A36),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Switch.adaptive(
+                                  value: _voiceEnabled,
+                                  activeThumbColor: const Color(0xFFFF7700),
+                                  activeTrackColor: const Color(0xFFFF9933).withValues(alpha: 0.35),
+                                  onChanged: (v) => setState(() => _voiceEnabled = v),
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 1, color: Color(0xFFEFE6DB)),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.music_note_rounded, color: Color(0xFFFF7700), size: 18),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      'Background Temple Dhun',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF2E2A36),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Switch.adaptive(
+                                  value: _musicEnabled,
+                                  activeThumbColor: const Color(0xFFFF7700),
+                                  activeTrackColor: const Color(0xFFFF9933).withValues(alpha: 0.35),
+                                  onChanged: (v) => setState(() => _musicEnabled = v),
+                                ),
+                              ],
+                            ),
+                            if (_musicEnabled) ...[
+                              const Divider(height: 1, color: Color(0xFFEFE6DB)),
+                              InkWell(
+                                onTap: _showDhunPickerSheet,
+                                borderRadius: BorderRadius.circular(10),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.library_music_outlined, color: Color(0xFFFF7700), size: 17),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          _selectedDhunLabel,
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: const Color(0xFFE65100),
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Change / Preview',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFF8C6239),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFFC8A882), size: 18),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 16),
 
@@ -630,7 +1171,7 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
                       // const SizedBox(height: 16),
 
                       // 4. Chant Count
-                      _sectionLabel('Chant Count'),
+                      _sectionLabel('Chant Count', isRequired: true),
                       const SizedBox(height: 8),
                       _buildTextField(
                         controller: _chantCountController,
@@ -641,7 +1182,7 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
                       const SizedBox(height: 16),
 
                       // 5. God Category dropdown
-                      _sectionLabel('God Category'),
+                      _sectionLabel('God Category', isRequired: true),
                       const SizedBox(height: 8),
                       _buildDropdownTile(
                         hint: 'Select God Category',
@@ -667,7 +1208,7 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
                       const SizedBox(height: 16),
 
                       // 6. Jap effect dropdown
-                      _sectionLabel('Select Jap *'),
+                      _sectionLabel('Select Jap', isRequired: true),
                       const SizedBox(height: 8),
                       _buildDropdownTile(
                         hint: 'Select Jap',
@@ -801,11 +1342,12 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
     required File? image,
     required VoidCallback onTap,
     required VoidCallback onClear,
+    bool isRequired = true,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionLabel(label),
+        _sectionLabel(label, isRequired: isRequired),
         const SizedBox(height: 8),
         GestureDetector(
           onTap: onTap,
@@ -834,7 +1376,19 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(18),
-                        child: Image.file(image, fit: BoxFit.cover),
+                        child: Image.file(
+                          image,
+                          fit: BoxFit.cover,
+                          cacheWidth: 600,
+                          filterQuality: FilterQuality.medium,
+                          errorBuilder: (_, __, ___) => const Center(
+                            child: Icon(
+                              Icons.broken_image_outlined,
+                              color: Color(0xFFFF7700),
+                              size: 36,
+                            ),
+                          ),
+                        ),
                       ),
                       Positioned(
                         top: 6,
@@ -920,14 +1474,28 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
   }
 
   // ─── Section label ─────────────────────────────────────────────────────────
-  Widget _sectionLabel(String text) {
-    return Text(
-      text,
-      style: GoogleFonts.outfit(
-        fontSize: 12,
-        fontWeight: FontWeight.bold,
-        color: const Color(0xFF2E2A36).withValues(alpha: 0.55),
-        letterSpacing: 0.4,
+  Widget _sectionLabel(String text, {bool isRequired = false}) {
+    return Text.rich(
+      TextSpan(
+        text: text,
+        style: GoogleFonts.outfit(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: const Color(0xFF2E2A36).withValues(alpha: 0.55),
+          letterSpacing: 0.4,
+        ),
+        children: isRequired
+            ? [
+                TextSpan(
+                  text: ' *',
+                  style: GoogleFonts.outfit(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFFE53935),
+                  ),
+                ),
+              ]
+            : null,
       ),
     );
   }
@@ -1041,13 +1609,57 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
                           textAlign: TextAlign.center,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Tap to change',
-                          style: GoogleFonts.outfit(
-                            fontSize: 11,
-                            color: const Color(0xFFFF7700),
-                          ),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            GestureDetector(
+                              onTap: _toggleChantAudioPreview,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: _isPlayingAudioPreview
+                                      ? const Color(0xFFFF7700)
+                                      : const Color(0xFFFFF3E0),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: const Color(0xFFFF9900)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      _isPlayingAudioPreview
+                                          ? Icons.stop_rounded
+                                          : Icons.play_arrow_rounded,
+                                      size: 15,
+                                      color: _isPlayingAudioPreview
+                                          ? Colors.white
+                                          : const Color(0xFFFF7700),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      _isPlayingAudioPreview ? 'Stop' : 'Preview',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: _isPlayingAudioPreview
+                                            ? Colors.white
+                                            : const Color(0xFFFF7700),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Tap card to upload',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                color: const Color(0xFF8C6239),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -1057,7 +1669,14 @@ class _UploadGodPhotoScreenState extends State<UploadGodPhotoScreen> {
                     top: 8,
                     right: 8,
                     child: GestureDetector(
-                      onTap: () => setState(() { _audioFileName = null; _audioFilePath = null; }),
+                      onTap: () {
+                        _chantPreviewPlayer.stop();
+                        setState(() {
+                          _audioFileName = null;
+                          _audioFilePath = null;
+                          _isPlayingAudioPreview = false;
+                        });
+                      },
                       child: Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
@@ -1214,6 +1833,12 @@ class CustomJapDetails {
   final String coverImagePath;
   final String godImagePath;
   final String name;
+  final String displayName;
+  final String mantraText;
+  final String voiceText;
+  final String backgroundMusic;
+  final bool voiceEnabled;
+  final bool musicEnabled;
   final String audioFileName;
   final String audioFilePath;
   final int chantCount;
@@ -1224,6 +1849,12 @@ class CustomJapDetails {
     required this.coverImagePath,
     required this.godImagePath,
     required this.name,
+    this.displayName = '',
+    this.mantraText = '',
+    this.voiceText = '',
+    this.backgroundMusic = '',
+    this.voiceEnabled = true,
+    this.musicEnabled = true,
     required this.audioFileName,
     required this.audioFilePath,
     required this.chantCount,

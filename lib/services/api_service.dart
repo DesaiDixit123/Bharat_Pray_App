@@ -15,8 +15,8 @@ class ApiService {
   static const bool isLive = false;
 
   // Local backend configuration:
-  // Active Wi-Fi IP = 192.168.29.73, Port = 3020
-  static const String _localIp = '192.168.29.73';
+  // Active Wi-Fi IP = 192.168.29.209, Port = 3020
+  static const String _localIp = '192.168.29.209';
   static const int _localPort = 3020;
 
   static String get baseUrl {
@@ -117,7 +117,7 @@ class ApiService {
 
   static final List<String> _fallbackHosts = isLive
       ? const ['api.bharatpray.com']
-      : const ['192.168.29.73', '192.168.29.74', '192.168.29.227', '192.168.29.209', '127.0.0.1', '10.0.2.2', 'api.bharatpray.com'];
+      : const ['192.168.29.209', '192.168.29.73', '192.168.29.227', '192.168.29.74', '127.0.0.1', '10.0.2.2', 'api.bharatpray.com'];
 
   static Map<String, String> _withDefaultHeaders([Map<String, String>? headers]) {
     final langCode = LanguageManager.instance.currentLanguageCode;
@@ -638,17 +638,39 @@ class ApiService {
     return _processResponse(response)['Data'] ?? {};
   }
 
+  // POST /user/jap/reset-progress
+  static Future<Map<String, dynamic>> resetJapProgress(
+    String token,
+    String japId,
+  ) async {
+    final response = await _safePost(
+      Uri.parse('$baseUrl/user/jap/reset-progress'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({'japId': japId}),
+    );
+    return _processResponse(response)['Data'] ?? {};
+  }
+
   // POST /user/jap/create-custom
   static Future<Map<String, dynamic>> createCustomJap(
     String token, {
     required String name,
+    String? displayName,
     required File coverImageFile,
     required File godImageFile,
     File? audioFile,
     int targetCount = 108,
     String? particleShape,
+    String? revealEffect,
     String? godCategory,
     String? shlokText,
+    String? voiceText,
+    String? backgroundMusic,
+    bool voiceEnabled = true,
+    bool musicEnabled = true,
   }) async {
     try {
       final uri = Uri.parse('$baseUrl/user/jap/create-custom');
@@ -656,15 +678,29 @@ class ApiService {
 
       request.headers['Authorization'] = 'Bearer $token';
       request.fields['name'] = name;
+      request.fields['displayName'] =
+          (displayName != null && displayName.trim().isNotEmpty) ? displayName.trim() : name;
+      request.fields['fullName'] = name;
       request.fields['targetCount'] = targetCount.toString();
+      request.fields['voiceEnabled'] = voiceEnabled.toString();
+      request.fields['musicEnabled'] = musicEnabled.toString();
+      if (backgroundMusic != null && backgroundMusic.isNotEmpty) {
+        request.fields['backgroundMusic'] = backgroundMusic;
+      }
       if (particleShape != null && particleShape.isNotEmpty) {
         request.fields['particleShape'] = particleShape;
+      }
+      if (revealEffect != null && revealEffect.isNotEmpty) {
+        request.fields['revealEffect'] = revealEffect;
       }
       if (godCategory != null && godCategory.isNotEmpty) {
         request.fields['godCategory'] = godCategory;
       }
       if (shlokText != null && shlokText.isNotEmpty) {
         request.fields['shlokText'] = shlokText;
+      }
+      if (voiceText != null && voiceText.isNotEmpty) {
+        request.fields['voiceText'] = voiceText;
       }
 
       // Cover image
@@ -3283,6 +3319,172 @@ class ApiService {
     } catch (_) {}
 
     return [];
+  }
+
+  // GET /user/notifications/preferences
+  static Future<Map<String, bool>> getNotificationPreferences(String token) async {
+    final response = await _safeGet(
+      Uri.parse('$baseUrl/user/notifications/preferences'),
+      headers: _jsonHeaders(token: token),
+    );
+    final raw = _processResponse(response)['Data'];
+    if (raw is Map) {
+      return raw.map((k, v) => MapEntry(k.toString(), v == true));
+    }
+    return {};
+  }
+
+  // POST /user/notifications/preferences
+  static Future<Map<String, bool>> updateNotificationPreferences(
+    String token,
+    Map<String, bool> preferences,
+  ) async {
+    final response = await _safePost(
+      Uri.parse('$baseUrl/user/notifications/preferences'),
+      headers: _jsonHeaders(token: token),
+      body: jsonEncode(preferences),
+    );
+    final raw = _processResponse(response)['Data'];
+    if (raw is Map) {
+      return raw.map((k, v) => MapEntry(k.toString(), v == true));
+    }
+    return preferences;
+  }
+
+  // GET /user/cms/:slug (Dynamic Legal & Help CMS pages)
+  static Future<Map<String, dynamic>> getCmsPage(String slug) async {
+    final response = await _safeGet(
+      Uri.parse('$baseUrl/user/cms/$slug'),
+      headers: _jsonHeaders(),
+    );
+    final raw = _processResponse(response)['Data'];
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return {};
+  }
+
+  // POST /user/delete-account (Google Play Store Account Deletion)
+  static Future<Map<String, dynamic>> deleteUserAccount(
+    String token, {
+    String reason = '',
+  }) async {
+    final response = await _safePost(
+      Uri.parse('$baseUrl/user/delete-account'),
+      headers: _jsonHeaders(token: token),
+      body: jsonEncode({'reason': reason}),
+    );
+    return _processResponse(response);
+  }
+
+  // GET /user/profile-stats (Real Dynamic Total Jap, Unique Bhajans, Granths, Yatras)
+  static Future<Map<String, dynamic>> getUserProfileStats(String token) async {
+    final response = await _safeGet(
+      Uri.parse('$baseUrl/user/profile-stats'),
+      headers: _jsonHeaders(token: token),
+    );
+    final raw = _processResponse(response)['Data'];
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return {};
+  }
+
+  // GET /user/jap-dashboard (Date-wise Jap Records + 7-Day Graph)
+  static Future<Map<String, dynamic>> getJapDashboard(String token) async {
+    final response = await _safeGet(
+      Uri.parse('$baseUrl/user/jap-dashboard'),
+      headers: _jsonHeaders(token: token),
+    );
+    final raw = _processResponse(response)['Data'];
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return {};
+  }
+
+  // GET /user/bhajan-history (Unique Listened Bhajans)
+  static Future<Map<String, dynamic>> getUserBhajanListeningHistory(String token) async {
+    final response = await _safeGet(
+      Uri.parse('$baseUrl/user/bhajan-history'),
+      headers: _jsonHeaders(token: token),
+    );
+    final raw = _processResponse(response)['Data'];
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return {};
+  }
+
+  // GET /user/yatra-dashboard (Yatra Summary + Graph + User Yatras List)
+  static Future<Map<String, dynamic>> getYatraDashboard(String token) async {
+    final response = await _safeGet(
+      Uri.parse('$baseUrl/user/yatra-dashboard'),
+      headers: _jsonHeaders(token: token),
+    );
+    final raw = _processResponse(response)['Data'];
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return {};
+  }
+
+  // GET /user/granth-dashboard (Daily Granth Opens Graph + Date-wise Records)
+  static Future<Map<String, dynamic>> getGranthDashboard(String token) async {
+    final response = await _safeGet(
+      Uri.parse('$baseUrl/user/granth-dashboard'),
+      headers: _jsonHeaders(token: token),
+    );
+    final raw = _processResponse(response)['Data'];
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return {};
+  }
+
+  // POST /user/granth-log-open (Logs daily Granth open on backend)
+  static Future<void> logGranthOpen(
+    String token, {
+    required String granthId,
+    required String title,
+    String image = '',
+  }) async {
+    if (token.isEmpty || granthId.isEmpty) return;
+    try {
+      await _safePost(
+        Uri.parse('$baseUrl/user/granth-log-open'),
+        headers: _jsonHeaders(token: token),
+        body: jsonEncode({
+          'granthId': granthId,
+          'title': title,
+          'image': image,
+        }),
+      );
+    } catch (_) {}
+  }
+
+  // GET /user/favourites-all (Unified Liked/Favourite Granth, Darshan, Bhajan, Jap, Utsav)
+  static Future<Map<String, List<Map<String, dynamic>>>> getAllUserFavourites(
+    String token,
+  ) async {
+    final response = await _safeGet(
+      Uri.parse('$baseUrl/user/favourites-all'),
+      headers: _jsonHeaders(token: token),
+    );
+    final raw = _processResponse(response)['Data'];
+    final result = <String, List<Map<String, dynamic>>>{
+      'granth': [],
+      'darshan': [],
+      'bhajan': [],
+      'jap': [],
+      'utsav': [],
+    };
+    if (raw is Map) {
+      for (final key in result.keys) {
+        final list = raw[key];
+        if (list is List) {
+          result[key] = list
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        }
+      }
+    }
+    return result;
   }
 }
 

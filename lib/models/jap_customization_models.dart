@@ -59,6 +59,7 @@ enum MalaBeadStyle {
   crystalQuartz('sphatik', 'Sphatik (Crystal Quartz)', 'Luminous transparent quartz beads with icy white sheen', Color(0xFFE8F4FC), Color(0xFF90CAF9)),
   lotusSeeds('kamal_gatta', 'Kamal Gatta (Lotus Seed)', 'Glossy dark devotional seeds beloved to Maa Lakshmi', Color(0xFF3E2723), Color(0xFF795548)),
   sandalwood('sandalwood', 'Chandan (Sandalwood)', 'Fragrant soothing sandalwood prayer beads', Color(0xFFD7A15C), Color(0xFF8D5B28)),
+  tulsi('tulsi', 'Sacred Tulsi Beads', 'Traditional holy basil wood beads sacred to Lord Vishnu and Krishna', Color(0xFF8D6E63), Color(0xFFD7CCC8)),
   glowingAura('glowing_aura', 'Celestial Halo Glow', 'Ethereal neon light beads radiating spiritual energy', Color(0xFFFF5722), Color(0xFFFFEB3B));
 
   final String id;
@@ -125,7 +126,7 @@ class JapCustomizationPreferences {
     this.chantIntervalMs = 2000,
     this.soundEnabled = true,
     this.backgroundDhunEnabled = true,
-    this.backgroundDhunVolume = 0.60,
+    this.backgroundDhunVolume = 0.22,
     this.bellAtCompletion = true,
     this.hapticsEnabled = true,
     this.mantraTextVisible = true,
@@ -153,7 +154,7 @@ class JapCustomizationPreferences {
           backgroundDhunEnabled: data['backgroundDhunEnabled'] as bool? ?? true,
           backgroundDhunVolume: () {
             final val = (data['backgroundDhunVolume'] as num?)?.toDouble();
-            if (val == null || val < 0.40) return 0.60;
+            if (val == null || val > 0.40) return 0.22;
             return val;
           }(),
           bellAtCompletion: data['bellAtCompletion'] as bool? ?? true,
@@ -205,7 +206,7 @@ class JapCustomizationPreferences {
     chantIntervalMs = 2000;
     soundEnabled = true;
     backgroundDhunEnabled = true;
-    backgroundDhunVolume = 0.60;
+    backgroundDhunVolume = 0.22;
     bellAtCompletion = true;
     hapticsEnabled = true;
     mantraTextVisible = true;

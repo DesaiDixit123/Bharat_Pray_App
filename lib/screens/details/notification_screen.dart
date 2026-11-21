@@ -1,12 +1,16 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/notification_model.dart';
 import '../../services/api_service.dart';
+import '../../services/fcm_notification_service.dart';
+import '../../services/socket_service.dart';
 import 'jap_counter_screen.dart';
 import 'live_darshan_screen.dart';
 import 'yatra_screen.dart';
 import 'granth_screen.dart';
+import '../profile/notification_settings_screen.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -25,16 +29,40 @@ class _NotificationScreenState extends State<NotificationScreen> {
   final List<String> _categories = [
     'All',
     'Unread',
-    'Darshan',
     'Jap',
+    'Darshan',
     'Yatra',
-    'Temple',
+    'Utsav',
+    'Granth',
+    'Bhajan',
+    'Social',
+    'Chat',
+    'Panchang',
   ];
+
+  StreamSubscription<Map<String, dynamic>>? _fcmSub;
 
   @override
   void initState() {
     super.initState();
     _fetchNotifications();
+    // Auto-refresh whenever a live FCM push arrives
+    _fcmSub = FcmNotificationService.instance.onNotificationReceived.listen((_) {
+      if (mounted) _fetchNotifications();
+    });
+    // Auto-refresh whenever Socket.IO emits notification_received
+    GlobalSocketService.instance.socket?.on('notification_received', _onSocketNotification);
+  }
+
+  void _onSocketNotification(dynamic _) {
+    if (mounted) _fetchNotifications();
+  }
+
+  @override
+  void dispose() {
+    _fcmSub?.cancel();
+    GlobalSocketService.instance.socket?.off('notification_received', _onSocketNotification);
+    super.dispose();
   }
 
   Future<void> _fetchNotifications() async {
@@ -234,6 +262,18 @@ class _NotificationScreenState extends State<NotificationScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Notification Settings',
+            icon: const Icon(Icons.tune_rounded, color: Color(0xFF2E2A36)),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const NotificationSettingsScreen(),
+                ),
+              );
+            },
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert_rounded, color: Color(0xFF2E2A36)),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

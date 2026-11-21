@@ -27,7 +27,9 @@ class _CustomJapDarshanVideoState extends State<CustomJapDarshanVideo> {
   }
 
   Future<void> _initialize() async {
-    final controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    final controller = widget.url.startsWith('assets/')
+        ? VideoPlayerController.asset(widget.url)
+        : VideoPlayerController.networkUrl(Uri.parse(widget.url));
     try {
       await controller.initialize();
       await controller.setLooping(true);

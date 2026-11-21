@@ -42,6 +42,11 @@ class _GranthChapterListScreenState extends State<GranthChapterListScreen> {
       final prefs = await SharedPreferences.getInstance();
       final title = (widget.granth['name'] ?? widget.granth['title'] ?? '').toString().trim();
       final rawImg = (widget.granth['coverImage'] ?? widget.granth['image'] ?? '').toString().trim();
+      final granthId = (widget.granth['_id'] ?? widget.granth['id'] ?? title).toString().trim();
+      final token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
+      if (token.isNotEmpty && granthId.isNotEmpty) {
+        ApiService.logGranthOpen(token, granthId: granthId, title: title.isNotEmpty ? title : 'Sacred Granth', image: rawImg);
+      }
       if (title.isNotEmpty) {
         await prefs.setString('recent_granth_title', title);
       }

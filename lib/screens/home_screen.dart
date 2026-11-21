@@ -60,6 +60,30 @@ class _HomeScreenState extends State<HomeScreen> {
   String _profileName = 'User';
   String _profilePic = '';
   int _currentTab = 0;
+  final List<int> _tabHistory = [];
+
+  void _switchTab(int newIndex) {
+    if (newIndex == _currentTab) return;
+    setState(() {
+      _tabHistory.add(_currentTab);
+      if (_tabHistory.length > 20) {
+        _tabHistory.removeAt(0);
+      }
+      _currentTab = newIndex;
+    });
+  }
+
+  void _handleTabBack() {
+    if (_tabHistory.isNotEmpty) {
+      setState(() {
+        _currentTab = _tabHistory.removeLast();
+      });
+    } else if (_currentTab != 0) {
+      setState(() {
+        _currentTab = 0;
+      });
+    }
+  }
   int _notificationCount = 2;
   int _messageCount = 0;
 
@@ -2768,9 +2792,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: DarshanTabContent(
               onTabChanged: (index) {
-                setState(() {
-                  _currentTab = index;
-                });
+                _switchTab(index);
               },
             ),
           ),
@@ -2790,13 +2812,13 @@ class _HomeScreenState extends State<HomeScreen> {
         tabBody = _buildDarshanTabBody();
         break;
       case 2:
-        tabBody = const JapCounterScreen(isTab: true);
+        tabBody = JapCounterScreen(isTab: true, onBack: _handleTabBack);
         break;
       case 3:
-        tabBody = const YatraScreen(isTab: true);
+        tabBody = YatraScreen(isTab: true, onBack: _handleTabBack);
         break;
       case 4:
-        tabBody = const ProfileScreen(isTab: true);
+        tabBody = ProfileScreen(isTab: true, onBack: _handleTabBack);
         break;
       default:
         tabBody = _buildHomeTabBody();
@@ -2805,19 +2827,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final bool isSearchActive = _searchQuery.trim().isNotEmpty || _searchFocusNode.hasFocus;
 
     return PopScope(
-      canPop: !isSearchActive && _currentTab == 0,
+      canPop: !isSearchActive && _tabHistory.isEmpty && _currentTab == 0,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (isSearchActive) {
           _clearSearch();
           return;
         }
-        if (_currentTab != 0) {
-          setState(() {
-            _currentTab = 0;
-          });
-          return;
-        }
+        _handleTabBack();
       },
       child: AnnotatedRegion<SystemUiOverlayStyle>(
         value: const SystemUiOverlayStyle(
@@ -3171,7 +3188,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                               onPressed: () {
-                                setState(() => _currentTab = 1);
+                                _switchTab(1);
                               },
                             ),
                           ),
@@ -4254,7 +4271,7 @@ class _HomeScreenState extends State<HomeScreen> {
               isActive: _currentTab == 0,
               onTap: () {
                 _clearSearch();
-                setState(() => _currentTab = 0);
+                _switchTab(0);
               },
             ),
           ),
@@ -4271,7 +4288,7 @@ class _HomeScreenState extends State<HomeScreen> {
               isActive: _currentTab == 1,
               onTap: () {
                 _clearSearch();
-                setState(() => _currentTab = 1);
+                _switchTab(1);
               },
             ),
           ),
@@ -4285,7 +4302,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: GestureDetector(
               onTap: () {
                 _clearSearch();
-                setState(() => _currentTab = 2);
+                _switchTab(2);
               },
               child: Container(
                 decoration: BoxDecoration(
@@ -4348,7 +4365,7 @@ class _HomeScreenState extends State<HomeScreen> {
               isActive: _currentTab == 3,
               onTap: () {
                 _clearSearch();
-                setState(() => _currentTab = 3);
+                _switchTab(3);
               },
             ),
           ),
@@ -4365,7 +4382,7 @@ class _HomeScreenState extends State<HomeScreen> {
               isActive: _currentTab == 4,
               onTap: () {
                 _clearSearch();
-                setState(() => _currentTab = 4);
+                _switchTab(4);
               },
             ),
           ),

@@ -11,8 +11,10 @@ import 'upload_god_photo_screen.dart';
 import 'notification_screen.dart';
 import 'messages_screen.dart';
 import '../../services/yatra_personal_chat_service.dart';
+import '../../services/saved_items_service.dart';
 import '../../widgets/user_avatar.dart';
 import '../../models/jap_theme_config.dart';
+import '../../models/jap_animation_effect.dart';
 import '../../widgets/cinematic_jap/effects/jap_effect_selector_sheet.dart';
 import 'jap_detail_screen.dart';
 import 'cinematic_jap_screen.dart';
@@ -32,7 +34,8 @@ export 'pushp_varsha_jap_screen.dart';
 // ─────────────────────────────────────────────
 class JapCounterScreen extends StatefulWidget {
   final bool isTab;
-  const JapCounterScreen({super.key, this.isTab = false});
+  final VoidCallback? onBack;
+  const JapCounterScreen({super.key, this.isTab = false, this.onBack});
 
   @override
   State<JapCounterScreen> createState() => _JapCounterScreenState();
@@ -45,12 +48,79 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
   bool _isLoading = true;
   String _token = '';
   List<JapConfig> _allJaps = [];
+  int _selectedTab = 0; // 0 = Admin Jap, 1 = Your Custom Jap
+
+  int get _adminJapCount => _allJaps.where((j) => !j.isCustom).length;
+  int get _customJapCount => _allJaps.where((j) => j.isCustom).length;
 
   // Dynamic user profile fields matching HomeScreen
   String _profileName = 'Devotee';
   String _profilePic = '';
   int _notificationCount = 2;
   int _messageCount = 0;
+  Set<String> _favJapIds = {};
+  Set<String> _savedJapIds = {};
+
+  Future<void> _loadJapFavAndSaved() async {
+    final favs = await SavedItemsService.getFavouriteJaps();
+    final saved = await SavedItemsService.getSavedJaps();
+    if (mounted) {
+      setState(() {
+        _favJapIds = favs.map((e) => (e['id'] ?? '').toString()).toSet();
+        _savedJapIds = saved.map((e) => (e['id'] ?? '').toString()).toSet();
+      });
+    }
+  }
+
+  Future<void> _toggleCardFav(JapConfig jap) async {
+    final nowFav = await SavedItemsService.toggleFavouriteJap({
+      'id': jap.id,
+      'title': jap.name.isNotEmpty ? jap.name : jap.displayName,
+      'subtitle': jap.mantraText.isNotEmpty ? jap.mantraText : jap.shlokText,
+      'image': jap.thumbnailUrl.isNotEmpty ? jap.thumbnailUrl : jap.darshanImageUrl,
+      'targetCount': jap.targetCount,
+    });
+    if (!mounted) return;
+    setState(() {
+      if (nowFav) {
+        _favJapIds.add(jap.id);
+      } else {
+        _favJapIds.remove(jap.id);
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(nowFav ? 'Added to Your Favourites ❤️' : 'Removed from Your Favourites'),
+        backgroundColor: const Color(0xFFFF7700),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
+  Future<void> _toggleCardSaved(JapConfig jap) async {
+    final nowSaved = await SavedItemsService.toggleSaveJap({
+      'id': jap.id,
+      'title': jap.name.isNotEmpty ? jap.name : jap.displayName,
+      'subtitle': jap.mantraText.isNotEmpty ? jap.mantraText : jap.shlokText,
+      'image': jap.thumbnailUrl.isNotEmpty ? jap.thumbnailUrl : jap.darshanImageUrl,
+      'targetCount': jap.targetCount,
+    });
+    if (!mounted) return;
+    setState(() {
+      if (nowSaved) {
+        _savedJapIds.add(jap.id);
+      } else {
+        _savedJapIds.remove(jap.id);
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(nowSaved ? 'Saved to Saved Library 🔖' : 'Removed from Saved Library'),
+        backgroundColor: const Color(0xFFFF7700),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -58,6 +128,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
     _messageCount = YatraPersonalChatService().unreadMessageCount.value;
     YatraPersonalChatService().unreadMessageCount.addListener(_onUnreadMessagesChanged);
     YatraPersonalChatService().refreshUnreadCount();
+    _loadJapFavAndSaved();
     _fetchJaps();
   }
 
@@ -138,14 +209,8 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       debugPrint('[JapCounterScreen] Error loading custom japs: $e');
     }
 
-    // 4. Combine remote admin japs and user custom japs
-    List<JapConfig> combined = [
-      ...remoteJaps,
-      ...customJaps.where((c) => !remoteJaps.any((r) => r.id == c.id)),
-    ];
-
     // Filter out test entries (dixit, shivji's jap, bike)
-    combined.removeWhere((j) {
+    remoteJaps.removeWhere((j) {
       final n = j.name.toLowerCase();
       return n == 'dixit' ||
           n.contains('bike') ||
@@ -155,23 +220,21 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
           j.id == '6aca2e1cfd3149164af9088f';
     });
 
-    if (combined.isEmpty) {
-      combined = _getDefaultPresets();
+    // Dynamic Admin Japs directly from Database / Admin Panel (with offline presets fallback)
+    final List<JapConfig> adminJaps;
+    if (remoteJaps.isNotEmpty) {
+      remoteJaps.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+      adminJaps = remoteJaps;
     } else {
-      final hasRam = combined.any((j) => j.name.toLowerCase().contains('ram'));
-      if (!hasRam) {
-        combined.insert(0, _createRamPreset());
-      }
-      for (final p in _getDefaultPresets()) {
-        final exists = combined.any((j) =>
-            j.id == p.id ||
-            j.name.toLowerCase() == p.name.toLowerCase());
-        if (!exists) {
-          combined.add(p);
-        }
-      }
+      adminJaps = _getDefaultPresets();
     }
+
+    List<JapConfig> combined = [
+      ...adminJaps,
+      ...customJaps,
+    ];
     try {
+      await JapOfflineRepository.ensureDailyReset();
       final prefs = await SharedPreferences.getInstance();
       final hasResetRamV6 = prefs.getBool('has_reset_ram_v6') ?? false;
       if (!hasResetRamV6) {
@@ -224,12 +287,11 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
           jap.id,
           defaultTarget: jap.targetCount,
         );
-        if (cached['count']! > 0 || cached['completedMalas']! > 0) {
-          final totalCached =
-              (cached['completedMalas']! * jap.targetCount) + cached['count']!;
-          if (totalCached > jap.progress) {
-            jap.progress = totalCached;
-          }
+        final int safeTarget = jap.targetCount > 0 ? jap.targetCount : 108;
+        final int cachedCount = (cached['count'] ?? 0).clamp(0, safeTarget);
+        jap.progress = jap.progress.clamp(0, safeTarget);
+        if (cachedCount > jap.progress) {
+          jap.progress = cachedCount;
         }
       }
     } catch (e) {
@@ -262,14 +324,21 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
     return JapThemeConfig.allThemes.map((theme) {
       return JapConfig(
         id: theme.id,
-        name: theme.name,
-        thumbnailUrl: theme.imageAsset,
-        darshanImageUrl: theme.imageAsset,
+        name: theme.displayName,
+        displayName: theme.displayName,
+        fullName: theme.fullName,
+        mantraText: theme.mantraText,
+        voiceText: theme.voiceText,
+        thumbnailUrl: theme.thumbnailAsset,
+        darshanImageUrl: theme.coverAsset,
+        backgroundMusic: theme.backgroundMusicAsset,
         shlokText: theme.mantraText,
         shlokAudioUrl: theme.audioAsset,
         targetCount: 108,
         progress: 0,
-        effectPack: EffectPack.resolve(name: theme.name),
+        effectPack: EffectPack.resolve(name: theme.fullName),
+        isCustom: false,
+        displayOrder: theme.displayOrder,
       );
     }).toList();
   }
@@ -315,12 +384,23 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
 
 
   List<JapConfig> get _filteredJaps {
-    if (_searchQuery.isEmpty) return _allJaps;
+    final baseList = _allJaps.where((j) {
+      if (_selectedTab == 0) {
+        return !j.isCustom;
+      } else {
+        return j.isCustom;
+      }
+    }).toList();
+
+    if (_searchQuery.isEmpty) return baseList;
     final q = _searchQuery.toLowerCase();
-    return _allJaps
+    return baseList
         .where(
           (j) =>
+              j.displayName.toLowerCase().contains(q) ||
+              j.fullName.toLowerCase().contains(q) ||
               j.name.toLowerCase().contains(q) ||
+              j.mantraText.toLowerCase().contains(q) ||
               j.shlokText.toLowerCase().contains(q),
         )
         .toList();
@@ -333,8 +413,203 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
     super.dispose();
   }
 
+  Future<void> _performJapReset(JapConfig entry) async {
+    final int safeTarget = entry.targetCount > 0 ? entry.targetCount : 108;
+    setState(() {
+      entry.progress = 0;
+    });
+
+    await JapOfflineRepository.resetProgress(entry.id);
+    await JapOfflineRepository.resetProgress('${entry.id}_jal');
+    await JapOfflineRepository.resetProgress('${entry.id}_dhup');
+    await JapOfflineRepository.resetProgress('${entry.id}_prakash');
+    await JapOfflineRepository.resetProgress('${entry.id}_pushp');
+
+    if (_token.isEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
+    }
+    if (_token.isNotEmpty && entry.id.isNotEmpty && entry.id.length == 24) {
+      try {
+        await ApiService.resetJapProgress(_token, entry.id);
+      } catch (e) {
+        debugPrint('[JapCounterScreen] Remote reset error: $e');
+      }
+    }
+
+    if (mounted) {
+      final label = entry.displayName.isNotEmpty ? entry.displayName : entry.name;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '$label Jap reset to 0 / $safeTarget',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+          ),
+          backgroundColor: const Color(0xFFFF7700),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showResetJapDialog(JapConfig entry) async {
+    final int safeTarget = entry.targetCount > 0 ? entry.targetCount : 108;
+    final int currentCount = entry.progress.clamp(0, safeTarget);
+    final String label = entry.displayName.isNotEmpty ? entry.displayName : entry.name;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: const Color(0xFFFFFBF5),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF7700).withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.restart_alt_rounded,
+                color: Color(0xFFFF7700),
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                "Reset Today's Jap?",
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: const Color(0xFF2E2A36),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Do you want to reset $label progress ($currentCount / $safeTarget) back to 0 so you can chant again?',
+          style: GoogleFonts.outfit(
+            fontSize: 14,
+            color: const Color(0xFF6B5B4D),
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.outfit(
+                color: const Color(0xFF8C6239),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF7700),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Reset',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _performJapReset(entry);
+    }
+  }
+
   void _openJapDetail(JapConfig entry) async {
+    final int safeTarget = entry.targetCount > 0 ? entry.targetCount : 108;
+    if (entry.progress >= safeTarget) {
+      final String label = entry.displayName.isNotEmpty ? entry.displayName : entry.name;
+      final action = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          backgroundColor: const Color(0xFFFFFBF5),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2E7D32).withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  color: Color(0xFF2E7D32),
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  "Today's Jap Completed!",
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 17,
+                    color: const Color(0xFF2E2A36),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'You have completed $safeTarget / $safeTarget chants of $label today. Would you like to reset and chant again?',
+            style: GoogleFonts.outfit(
+              fontSize: 14,
+              color: const Color(0xFF6B5B4D),
+              height: 1.4,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'view'),
+              child: Text(
+                'View Darshan Video',
+                style: GoogleFonts.outfit(
+                  color: const Color(0xFF8C6239),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF7700),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              onPressed: () => Navigator.pop(ctx, 'reset'),
+              child: Text(
+                'Reset & Chant',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (action == null) return;
+      if (action == 'reset') {
+        await _performJapReset(entry);
+      }
+    }
+
     try {
+      await JapOfflineRepository.ensureDailyReset();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('last_active_jap_id', entry.id);
       await prefs.setString('last_jap_id', entry.id);
@@ -350,28 +625,18 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       await prefs.setBool('last_jap_custom', entry.isCustom);
     } catch (_) {}
 
-    final bool isCinematic = entry.name.toLowerCase().contains('ram') ||
-        entry.shlokText.toLowerCase().contains('राम') ||
-        entry.name.toLowerCase().contains('radha') ||
-        entry.shlokText.toLowerCase().contains('राधे') ||
-        entry.shlokText.toLowerCase().contains('राधा') ||
-        entry.name.toLowerCase().contains('krishna') ||
-        entry.shlokText.toLowerCase().contains('कृष्ण') ||
-        entry.name.toLowerCase().contains('shiv') ||
-        entry.shlokText.toLowerCase().contains('शिव') ||
-        entry.name.toLowerCase().contains('mahadev');
-
-    if (entry.progress >= entry.targetCount || entry.progress % entry.targetCount == 0) {
-      entry.progress = 0;
-    }
-
     final Widget destination;
-    if (entry.isCustom && entry.particleShape == 'dhup') {
+    final selectedShape = (entry.particleShape ?? '').toLowerCase();
+    if (selectedShape == 'dhup' || selectedShape == 'dhoop_smoke_reveal') {
       destination = DhupJapScreen(entry: entry);
-    } else if (isCinematic || (entry.isCustom && entry.particleShape == 'ram')) {
-      destination = CinematicJapScreen(entry: entry);
+    } else if (selectedShape == 'jal') {
+      destination = JalJapScreen(entry: entry);
+    } else if (selectedShape == 'prakash') {
+      destination = PrakashJapScreen(entry: entry);
+    } else if (selectedShape == 'pushp') {
+      destination = PushpVarshaJapScreen(entry: entry);
     } else {
-      destination = JapDetailScreen(entry: entry);
+      destination = CinematicJapScreen(entry: entry);
     }
 
     final updatedProgress = await Navigator.push<int>(
@@ -379,35 +644,53 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       MaterialPageRoute(builder: (_) => destination),
     );
 
+    // Sync Favourite & Saved icons immediately on return from Jap detail screen
+    await _loadJapFavAndSaved();
+
+    // Always resolve latest progress (even when user exited via system back gesture)
+    int resolvedCount;
     if (updatedProgress != null) {
-      setState(() {
-        entry.progress = updatedProgress;
-      });
-
-      // Save locally
-      await JapOfflineRepository.saveProgress(
-        japId: entry.id,
-        count: updatedProgress % entry.targetCount,
-        completedMalas: updatedProgress ~/ entry.targetCount,
+      resolvedCount = updatedProgress.clamp(0, safeTarget);
+    } else {
+      final cached = await JapOfflineRepository.getProgress(
+        entry.id,
+        defaultTarget: safeTarget,
       );
+      resolvedCount = (cached['count'] ?? entry.progress).clamp(0, safeTarget);
+    }
 
-      // Trigger cloud sync if remote
-      if (_token.isEmpty) {
-        final prefs = await SharedPreferences.getInstance();
-        _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
-      }
-      if (_token.isNotEmpty && entry.id.isNotEmpty && entry.id.length == 24) {
-        try {
-          await ApiService.syncJapProgress(
-            _token,
-            entry.id,
-            updatedProgress % entry.targetCount,
-            completedMalas: updatedProgress ~/ entry.targetCount,
-          );
-          await JapOfflineRepository.markSynced(entry.id);
-        } catch (e) {
-          debugPrint('[JapCounterScreen] Background sync error: $e');
-        }
+    if (mounted) {
+      setState(() {
+        entry.progress = resolvedCount;
+      });
+    }
+
+    final int malas = resolvedCount >= safeTarget ? 1 : 0;
+
+    // Save locally
+    await JapOfflineRepository.saveProgress(
+      japId: entry.id,
+      count: resolvedCount,
+      completedMalas: malas,
+      targetCount: safeTarget,
+    );
+
+    // Trigger cloud sync if remote
+    if (_token.isEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
+    }
+    if (_token.isNotEmpty && entry.id.isNotEmpty && entry.id.length == 24) {
+      try {
+        await ApiService.syncJapProgress(
+          _token,
+          entry.id,
+          resolvedCount,
+          completedMalas: malas,
+        );
+        await JapOfflineRepository.markSynced(entry.id);
+      } catch (e) {
+        debugPrint('[JapCounterScreen] Background sync error: $e');
       }
     }
   }
@@ -477,6 +760,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
           final serverRes = await ApiService.createCustomJap(
             _token,
             name: result.name,
+            displayName: result.displayName,
             coverImageFile: File(result.coverImagePath),
             godImageFile: File(result.godImagePath),
             audioFile: result.audioFilePath.isNotEmpty && File(result.audioFilePath).existsSync()
@@ -484,7 +768,13 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                 : null,
             targetCount: result.chantCount,
             particleShape: result.particleEffect,
+            revealEffect: result.particleEffect,
             godCategory: result.category,
+            shlokText: result.mantraText,
+            voiceText: result.voiceText,
+            backgroundMusic: result.backgroundMusic,
+            voiceEnabled: result.voiceEnabled,
+            musicEnabled: result.musicEnabled,
           );
 
           final serverId = (serverRes['_id'] ?? serverRes['id'])?.toString();
@@ -512,9 +802,16 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       final newCustomConfig = JapConfig(
         id: assignedId,
         name: result.name,
+        displayName: result.displayName.isNotEmpty ? result.displayName : result.name,
+        fullName: result.name,
+        mantraText: result.mantraText,
+        voiceText: result.voiceText,
+        backgroundMusic: result.backgroundMusic,
+        voiceEnabled: result.voiceEnabled,
+        musicEnabled: result.musicEnabled,
         thumbnailUrl: resolvedThumbnail,
         darshanImageUrl: resolvedDarshan,
-        shlokText: '',
+        shlokText: result.mantraText,
         shlokAudioUrl: resolvedAudio,
         targetCount: result.chantCount,
         progress: 0,
@@ -530,9 +827,15 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
         '_id': newCustomConfig.id,
         'id': newCustomConfig.id,
         'name': newCustomConfig.name,
+        'displayName': newCustomConfig.displayName,
+        'fullName': newCustomConfig.fullName,
         'thumbnail': newCustomConfig.thumbnailUrl,
         'darshanImage': newCustomConfig.darshanImageUrl,
         'shlokText': newCustomConfig.shlokText,
+        'voiceText': newCustomConfig.voiceText,
+        'backgroundMusic': newCustomConfig.backgroundMusic ?? '',
+        'voiceEnabled': newCustomConfig.voiceEnabled,
+        'musicEnabled': newCustomConfig.musicEnabled,
         'shlokAudio': newCustomConfig.shlokAudioUrl,
         'targetCount': newCustomConfig.targetCount,
         'particleShape': result.particleEffect,
@@ -543,6 +846,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
       if (!mounted) return;
       setState(() {
         _allJaps.insert(0, newCustomConfig);
+        _selectedTab = 1; // Auto switch to Your Custom Jap tab
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -656,7 +960,9 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                 children: [
                   GestureDetector(
                     onTap: () {
-                      if (Navigator.canPop(context)) {
+                      if (widget.onBack != null) {
+                        widget.onBack!();
+                      } else if (Navigator.canPop(context)) {
                         Navigator.pop(context);
                       }
                     },
@@ -760,6 +1066,13 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                       colors: [Color(0xFFFF9933), Color(0xFFFF6600)],
                     ),
                     borderRadius: BorderRadius.circular(9999),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFF7700).withValues(alpha: 0.28),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -784,7 +1097,139 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
               ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+
+            // ── 2 Toggle Buttons: Admin Jap & Your Custom Jap ─────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFFFFE0B2),
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFF9933).withValues(alpha: 0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    // Button 1: Admin Jap
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          if (_selectedTab != 0) {
+                            setState(() => _selectedTab = 0);
+                          }
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 9),
+                          decoration: BoxDecoration(
+                            gradient: _selectedTab == 0
+                                ? const LinearGradient(
+                                    colors: [Color(0xFFFF9933), Color(0xFFFF6600)],
+                                  )
+                                : null,
+                            color: _selectedTab == 0 ? null : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: _selectedTab == 0
+                                ? [
+                                    BoxShadow(
+                                      color: const Color(0xFFFF6600).withValues(alpha: 0.28),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.shield_rounded,
+                                size: 16,
+                                color: _selectedTab == 0 ? Colors.white : const Color(0xFF8C6239),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Admin Jap ($_adminJapCount)',
+                                style: GoogleFonts.outfit(
+                                  color: _selectedTab == 0 ? Colors.white : const Color(0xFF6B4226),
+                                  fontWeight: _selectedTab == 0 ? FontWeight.bold : FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    // Button 2: Your Custom Jap
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          if (_selectedTab != 1) {
+                            setState(() => _selectedTab = 1);
+                          }
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 9),
+                          decoration: BoxDecoration(
+                            gradient: _selectedTab == 1
+                                ? const LinearGradient(
+                                    colors: [Color(0xFFFF9933), Color(0xFFFF6600)],
+                                  )
+                                : null,
+                            color: _selectedTab == 1 ? null : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: _selectedTab == 1
+                                ? [
+                                    BoxShadow(
+                                      color: const Color(0xFFFF6600).withValues(alpha: 0.28),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.person_rounded,
+                                size: 16,
+                                color: _selectedTab == 1 ? Colors.white : const Color(0xFF8C6239),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Your Custom Jap ($_customJapCount)',
+                                style: GoogleFonts.outfit(
+                                  color: _selectedTab == 1 ? Colors.white : const Color(0xFF6B4226),
+                                  fontWeight: _selectedTab == 1 ? FontWeight.bold : FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 14),
 
             // ── Card List ────────────────────────────
             Expanded(
@@ -801,18 +1246,48 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                     ? ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
                         children: [
-                          SizedBox(
-                            height: 300,
-                            child: Center(
-                              child: Text(
-                                'No results found',
-                                style: GoogleFonts.outfit(
-                                  color: const Color(
-                                    0xFF2E2A36,
-                                  ).withValues(alpha: 0.4),
-                                  fontSize: 15,
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 64,
+                                  height: 64,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFF9933).withValues(alpha: 0.12),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    _selectedTab == 1 ? Icons.person_rounded : Icons.search_off_rounded,
+                                    size: 32,
+                                    color: const Color(0xFFFF7700),
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  _selectedTab == 1
+                                      ? 'No Custom Jap Yet'
+                                      : (_searchQuery.isEmpty ? 'No Admin Jap Available' : 'No matching results'),
+                                  style: GoogleFonts.outfit(
+                                    color: const Color(0xFF2E2A36),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 17,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _selectedTab == 1
+                                      ? 'Tap "Create Custom Jap" above to add your own deity photo, mantra & chanting target.'
+                                      : 'No chanting entries found matching your query.',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.outfit(
+                                    color: const Color(0xFF7A6451),
+                                    fontSize: 13,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -834,9 +1309,15 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                             const SizedBox(height: 14),
                         itemBuilder: (context, index) {
                           final jap = filtered[index];
+                          final int safeTarget = jap.targetCount > 0 ? jap.targetCount : 108;
                           return _JapCard(
                             entry: jap,
                             onTap: () => _openJapDetail(jap),
+                            isFavourite: _favJapIds.contains(jap.id),
+                            isSaved: _savedJapIds.contains(jap.id),
+                            onFavouriteTap: () => _toggleCardFav(jap),
+                            onSavedTap: () => _toggleCardSaved(jap),
+                            onResetTap: () => _showResetJapDialog(jap),
                             onDhupTap: () async {
                               final updated = await Navigator.push<int>(
                                 context,
@@ -844,13 +1325,47 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                                   builder: (_) => DhupJapScreen(entry: jap),
                                 ),
                               );
-                              if (updated != null && mounted) {
-                                setState(() => jap.progress = updated);
-                                await JapOfflineRepository.saveProgress(
-                                  japId: jap.id,
-                                  count: updated % jap.targetCount,
-                                  completedMalas: updated ~/ jap.targetCount,
+                              int resolvedCount;
+                              if (updated != null) {
+                                resolvedCount = updated.clamp(0, safeTarget);
+                              } else {
+                                final cached = await JapOfflineRepository.getProgress(
+                                  '${jap.id}_dhup',
+                                  defaultTarget: safeTarget,
                                 );
+                                final cachedBase = await JapOfflineRepository.getProgress(
+                                  jap.id,
+                                  defaultTarget: safeTarget,
+                                );
+                                resolvedCount = [
+                                  cached['count'] ?? 0,
+                                  cachedBase['count'] ?? 0,
+                                  jap.progress,
+                                ].reduce((a, b) => a > b ? a : b).clamp(0, safeTarget);
+                              }
+                              if (mounted) {
+                                setState(() => jap.progress = resolvedCount);
+                              }
+                              final int malas = resolvedCount >= safeTarget ? 1 : 0;
+                              await JapOfflineRepository.saveProgress(
+                                japId: jap.id,
+                                count: resolvedCount,
+                                completedMalas: malas,
+                                targetCount: safeTarget,
+                              );
+                              if (_token.isEmpty) {
+                                final prefs = await SharedPreferences.getInstance();
+                                _token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
+                              }
+                              if (_token.isNotEmpty && jap.id.isNotEmpty && jap.id.length == 24) {
+                                try {
+                                  await ApiService.syncJapProgress(
+                                    _token,
+                                    jap.id,
+                                    resolvedCount,
+                                    completedMalas: malas,
+                                  );
+                                } catch (_) {}
                               }
                             },
                             onJalTap: () async {
@@ -861,11 +1376,13 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                                 ),
                               );
                               if (updated != null && mounted) {
-                                setState(() => jap.progress = updated);
+                                final clamped = updated.clamp(0, safeTarget);
+                                setState(() => jap.progress = clamped);
                                 await JapOfflineRepository.saveProgress(
                                   japId: jap.id,
-                                  count: updated % jap.targetCount,
-                                  completedMalas: updated ~/ jap.targetCount,
+                                  count: clamped,
+                                  completedMalas: clamped >= safeTarget ? 1 : 0,
+                                  targetCount: safeTarget,
                                 );
                               }
                             },
@@ -877,11 +1394,13 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                                 ),
                               );
                               if (updated != null && mounted) {
-                                setState(() => jap.progress = updated);
+                                final clamped = updated.clamp(0, safeTarget);
+                                setState(() => jap.progress = clamped);
                                 await JapOfflineRepository.saveProgress(
                                   japId: jap.id,
-                                  count: updated % jap.targetCount,
-                                  completedMalas: updated ~/ jap.targetCount,
+                                  count: clamped,
+                                  completedMalas: clamped >= safeTarget ? 1 : 0,
+                                  targetCount: safeTarget,
                                 );
                               }
                             },
@@ -893,11 +1412,13 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                                 ),
                               );
                               if (updated != null && mounted) {
-                                setState(() => jap.progress = updated);
+                                final clamped = updated.clamp(0, safeTarget);
+                                setState(() => jap.progress = clamped);
                                 await JapOfflineRepository.saveProgress(
                                   japId: jap.id,
-                                  count: updated % jap.targetCount,
-                                  completedMalas: updated ~/ jap.targetCount,
+                                  count: clamped,
+                                  completedMalas: clamped >= safeTarget ? 1 : 0,
+                                  targetCount: safeTarget,
                                 );
                               }
                             },
@@ -921,26 +1442,36 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
 class _JapCard extends StatelessWidget {
   final JapConfig entry;
   final VoidCallback onTap;
+  final VoidCallback? onResetTap;
   final VoidCallback? onDhupTap;
   final VoidCallback? onJalTap;
   final VoidCallback? onPrakashTap;
   final VoidCallback? onPushpTap;
+  final bool isFavourite;
+  final bool isSaved;
+  final VoidCallback? onFavouriteTap;
+  final VoidCallback? onSavedTap;
 
   const _JapCard({
     required this.entry,
     required this.onTap,
+    this.onResetTap,
     this.onDhupTap,
     this.onJalTap,
     this.onPrakashTap,
     this.onPushpTap,
+    this.isFavourite = false,
+    this.isSaved = false,
+    this.onFavouriteTap,
+    this.onSavedTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final progress = entry.progress;
-    final target = entry.targetCount;
-    final currentCount = progress % target;
-    final progressRatio = (currentCount / target).clamp(0.0, 1.0);
+    final int target = entry.targetCount > 0 ? entry.targetCount : 108;
+    final int currentCount = entry.progress.clamp(0, target);
+    final bool isCompletedToday = currentCount >= target;
+    final double progressRatio = (currentCount / target).clamp(0.0, 1.0);
 
     return GestureDetector(
       onTap: onTap,
@@ -988,30 +1519,115 @@ class _JapCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      entry.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.outfit(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 17,
-                        color: const Color(0xFF2E2A36),
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            entry.name.isNotEmpty
+                                ? entry.name
+                                : (entry.fullName.isNotEmpty ? entry.fullName : entry.displayName),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16.5,
+                              height: 1.15,
+                              color: const Color(0xFF2E2A36),
+                            ),
+                          ),
+                        ),
+                        if (onSavedTap != null)
+                          InkWell(
+                            onTap: onSavedTap,
+                            borderRadius: BorderRadius.circular(14),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(
+                                isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                                size: 19,
+                                color: isSaved ? const Color(0xFFFF7700) : const Color(0xFF9E8A78),
+                              ),
+                            ),
+                          ),
+                        if (onFavouriteTap != null)
+                          InkWell(
+                            onTap: onFavouriteTap,
+                            borderRadius: BorderRadius.circular(14),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(
+                                isFavourite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                                size: 19,
+                                color: isFavourite ? const Color(0xFFE53935) : const Color(0xFF9E8A78),
+                              ),
+                            ),
+                          ),
+                        if (currentCount > 0 && onResetTap != null) ...[
+                          const SizedBox(width: 4),
+                          SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: PopupMenuButton<String>(
+                              padding: EdgeInsets.zero,
+                              icon: Icon(
+                                Icons.more_vert_rounded,
+                                size: 20,
+                                color: isCompletedToday
+                                    ? const Color(0xFF2E7D32)
+                                    : const Color(0xFF8C6239),
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              color: const Color(0xFFFFFBF5),
+                              onSelected: (value) {
+                                if (value == 'reset') {
+                                  onResetTap?.call();
+                                }
+                              },
+                              itemBuilder: (ctx) => [
+                                PopupMenuItem<String>(
+                                  value: 'reset',
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.restart_alt_rounded,
+                                        size: 18,
+                                        color: Color(0xFFFF7700),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        "Reset Today's Jap",
+                                        style: GoogleFonts.outfit(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13.5,
+                                          color: const Color(0xFF2E2A36),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      entry.shlokText,
+                      entry.mantraText.isNotEmpty ? entry.mantraText : entry.shlokText,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.notoSerifDevanagari(
+                      style: GoogleFonts.notoSerifGujarati(
                         fontSize: 12,
-                        color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
+                        color: const Color(0xFF2E2A36).withValues(alpha: 0.75),
                         height: 1.3,
                       ),
                     ),
                     const Spacer(),
 
-                    // Progress Bar (Always Orange)
+                    // Proper Daily Progress Bar (Orange in-progress, Green when completed)
                     Row(
                       children: [
                         Expanded(
@@ -1019,236 +1635,56 @@ class _JapCard extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                             child: LinearProgressIndicator(
                               value: progressRatio,
-                              backgroundColor: const Color(0xFFFFF0E6),
-                              valueColor: const AlwaysStoppedAnimation<Color>(
-                                Color(0xFFFF7700),
+                              backgroundColor: isCompletedToday
+                                  ? const Color(0xFFE8F5E9)
+                                  : const Color(0xFFFFF0E6),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                isCompletedToday
+                                    ? const Color(0xFF2E7D32)
+                                    : const Color(0xFFFF7700),
                               ),
-                              minHeight: 6,
+                              minHeight: 7,
                             ),
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          '$currentCount / $target',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                            color: const Color(0xFFFF7700),
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (isCompletedToday) ...[
+                              const Icon(
+                                Icons.check_circle_rounded,
+                                size: 13,
+                                color: Color(0xFF2E7D32),
+                              ),
+                              const SizedBox(width: 3),
+                            ],
+                            Text(
+                              '$currentCount / $target',
+                              style: GoogleFonts.outfit(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11.5,
+                                color: isCompletedToday
+                                    ? const Color(0xFF2E7D32)
+                                    : const Color(0xFFFF7700),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
 
-                    // Actions: [Dhup 🪔] & [Effects ✨] (if Ram) & [Chant 📿]
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          if (entry.name.toLowerCase().contains('ram') ||
-                              entry.shlokText.toLowerCase().contains('राम')) ...[
-                            GestureDetector(
-                              onTap: onDhupTap,
-                              child: Container(
-                                margin: const EdgeInsets.only(right: 5),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF1E140F),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: const Color(0xFFFFB300),
-                                    width: 1.0,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.waves_rounded,
-                                      size: 12,
-                                      color: Color(0xFFFFD54F),
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      'Dhup 🪔',
-                                      style: GoogleFonts.outfit(
-                                        color: const Color(0xFFFFD54F),
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: onJalTap,
-                              child: Container(
-                                margin: const EdgeInsets.only(right: 5),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF0A1C24),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: const Color(0xFF80DEEA),
-                                    width: 1.0,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.water_drop_rounded,
-                                      size: 12,
-                                      color: Color(0xFF80DEEA),
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      'Jal Darshan 🌊',
-                                      style: GoogleFonts.outfit(
-                                        color: const Color(0xFF80DEEA),
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: onPrakashTap,
-                              child: Container(
-                                margin: const EdgeInsets.only(right: 5),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF1E130B),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: const Color(0xFFFFD54F),
-                                    width: 1.0,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.auto_awesome_rounded,
-                                      size: 12,
-                                      color: Color(0xFFFFD54F),
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      'Prakash ✨',
-                                      style: GoogleFonts.outfit(
-                                        color: const Color(0xFFFFD54F),
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: onPushpTap,
-                              child: Container(
-                                margin: const EdgeInsets.only(right: 5),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF261217),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: const Color(0xFFFF80AB),
-                                    width: 1.0,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.spa_rounded,
-                                      size: 12,
-                                      color: Color(0xFFFF80AB),
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      'Pushp 🌸',
-                                      style: GoogleFonts.outfit(
-                                        color: const Color(0xFFFF80AB),
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: () async {
-                                final currentEffect = await JapEffectSelectorSheet.loadSelectedEffect();
-                                if (!context.mounted) return;
-                                JapEffectSelectorSheet.show(
-                                  context,
-                                  entry: entry,
-                                  currentEffect: currentEffect,
-                                  onEffectSelected: (newEffect) {},
-                                );
-                              },
-                              child: Container(
-                                margin: const EdgeInsets.only(right: 6),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFFF3E0),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: const Color(0xFFFF9900),
-                                    width: 1.0,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.auto_awesome_rounded,
-                                      size: 12,
-                                      color: Color(0xFFFF7700),
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      'Effects',
-                                      style: GoogleFonts.outfit(
-                                        color: const Color(0xFFFF7700),
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                          // Chant CTA Button (Always Orange)
-                          Container(
+                    // Actions: ONLY [Chant 📿] and [✨ Effect]
+                    Row(
+                      children: [
+                        // Chant CTA Button (Always Orange)
+                        GestureDetector(
+                          onTap: onTap,
+                          child: Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 11,
-                              vertical: 5,
+                              horizontal: 14,
+                              vertical: 6,
                             ),
                             decoration: BoxDecoration(
                               gradient: const LinearGradient(
@@ -1270,13 +1706,51 @@ class _JapCard extends StatelessWidget {
                               'Chant 📿',
                               style: GoogleFonts.outfit(
                                 color: Colors.white,
-                                fontSize: 11,
+                                fontSize: 11.5,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Effect Picker Button
+                        GestureDetector(
+                          onTap: () => _showEffectPickerSheet(context),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF3E0),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: const Color(0xFFFF9900),
+                                width: 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.auto_awesome_rounded,
+                                  size: 13,
+                                  color: Color(0xFFFF7700),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Effect',
+                                  style: GoogleFonts.outfit(
+                                    color: const Color(0xFFFF7700),
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -1285,6 +1759,179 @@ class _JapCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  void _showEffectPickerSheet(BuildContext context) {
+    final String deityLabel = entry.displayName.isNotEmpty ? entry.displayName : entry.name;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetCtx) {
+        Widget buildEffectTile({
+          required IconData icon,
+          required Color iconColor,
+          required Color bgColor,
+          required String title,
+          required String subtitle,
+          required VoidCallback? onSelect,
+        }) {
+          return InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () {
+              Navigator.pop(sheetCtx);
+              onSelect?.call();
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: const Color(0xFFC8A882).withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: bgColor,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(icon, color: iconColor, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: const Color(0xFF2E2A36),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: const Color(0xFF7B6B5D),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 15,
+                    color: Color(0xFFFF7700),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return Container(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          decoration: const BoxDecoration(
+            color: Color(0xFFFFFBF5),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD9C5B2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF7700).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.auto_awesome_rounded,
+                        color: Color(0xFFFF7700),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Select Jap Effect',
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: const Color(0xFF2E2A36),
+                            ),
+                          ),
+                          Text(
+                            'Choose an effect to begin $deityLabel Jap',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12.5,
+                              color: const Color(0xFF8C6239),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(sheetCtx),
+                      icon: const Icon(Icons.close_rounded, color: Color(0xFF8C6239)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                buildEffectTile(
+                  icon: Icons.waves_rounded,
+                  iconColor: const Color(0xFFFFB300),
+                  bgColor: const Color(0xFF1E140F),
+                  title: 'Dhoop Smoke Reveal 🪔',
+                  subtitle: 'With every chant, incense smoke rises from the dhoop and unveils the deity',
+                  onSelect: onDhupTap,
+                ),
+                const SizedBox(height: 10),
+                buildEffectTile(
+                  icon: Icons.auto_awesome_rounded,
+                  iconColor: const Color(0xFFFF7700),
+                  bgColor: const Color(0xFFFFF3E0),
+                  title: 'Divine Reveal 🕉️',
+                  subtitle: 'Classic cinematic progressive darshan',
+                  onSelect: () async {
+                    await JapEffectSelectorSheet.saveSelectedEffect(
+                      JapRevealEffectType.divineVerticalReveal,
+                    );
+                    onTap();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

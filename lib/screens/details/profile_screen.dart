@@ -17,6 +17,13 @@ import '../profile/change_password_screen.dart';
 import '../profile/edit_profile_screen.dart';
 import '../../widgets/user_avatar.dart';
 import '../profile/help_support_screen.dart';
+import '../profile/delete_account_screen.dart';
+import '../profile/your_favourites_screen.dart';
+import '../profile/jap_dashboard_screen.dart';
+import '../profile/bhajan_history_screen.dart';
+import '../profile/yatra_dashboard_screen.dart';
+import '../profile/granth_dashboard_screen.dart';
+import 'granth_screen.dart';
 import '../profile/privacy_policy_screen.dart';
 import '../profile/saved_items_screen.dart';
 import '../profile/terms_conditions_screen.dart';
@@ -32,7 +39,8 @@ import 'mandal_status_tab_content.dart';
 
 class ProfileScreen extends StatefulWidget {
   final bool isTab;
-  const ProfileScreen({super.key, this.isTab = false});
+  final VoidCallback? onBack;
+  const ProfileScreen({super.key, this.isTab = false, this.onBack});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -293,10 +301,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _profilePic = rawPic;
         _userPhone = formattedPhone;
 
-        _totalJapCount = totalJaps;
-        _streakDays = streak;
-        _favouriteBhajanCount = favBhajans;
-        _completedYatrasCount = totalYatras;
+        _totalJapCount = 0;
+        _streakDays = 0;
+        _favouriteBhajanCount = 0;
+        _completedYatrasCount = 0;
       });
 
       if (reg != null && reg['status']?.toString().toLowerCase() == 'deleted' && !_deletedDialogShown) {
@@ -312,6 +320,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // Refresh live profile data
       try {
         final userModel = await ApiService.getProfile(token);
+        if (userModel.name.isNotEmpty) {
+          await prefs.setString('user_name', userModel.name);
+        }
+        if (userModel.email != null && userModel.email!.isNotEmpty) {
+          await prefs.setString('user_email', userModel.email!);
+        }
+        if (userModel.mobile != null && userModel.mobile!.isNotEmpty) {
+          await prefs.setString('user_phone', userModel.mobile!);
+        }
+        if (userModel.profilePic.isNotEmpty) {
+          await prefs.setString('profile_pic', userModel.profilePic);
+        }
         if (mounted) {
           setState(() {
             if (userModel.name.isNotEmpty) _userName = userModel.name;
@@ -333,78 +353,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
         debugPrint('[ProfileScreen] Background profile refresh error: $e');
       }
 
-      // Refresh real favourite bhajans count
+      // Live Dynamic Spiritual Stats — SINGLE SOURCE OF TRUTH (Total Jap, Unique Bhajans, Unique Granths, Total Yatras)
       try {
-        final rawList = await ApiService.getFavouriteBhajans(token);
-        favBhajans = rawList.length;
-        await prefs.setInt('favourite_bhajans_count', favBhajans);
-        if (mounted) {
-          setState(() => _favouriteBhajanCount = favBhajans);
+        final stats = await ApiService.getUserProfileStats(token);
+        if (mounted && stats.isNotEmpty) {
+          final srvJap = (stats['totalJap'] as num?)?.toInt() ?? 0;
+          final srvBhajans = (stats['bhajansCount'] as num?)?.toInt() ?? 0;
+          final srvGranths = (stats['granthsCount'] as num?)?.toInt() ?? 0;
+          final srvYatras = (stats['yatrasCount'] as num?)?.toInt() ?? 0;
+
+          await prefs.setInt('jap_stat_lifetime', srvJap);
+          await prefs.setInt('favourite_bhajans_count', srvBhajans);
+          await prefs.setInt('granths_read_count', srvGranths);
+          await prefs.setInt('total_yatras_count', srvYatras);
+
+          setState(() {
+            _totalJapCount = srvJap;
+            _favouriteBhajanCount = srvBhajans;
+            _streakDays = srvGranths;
+            _completedYatrasCount = srvYatras;
+          });
         }
       } catch (e) {
-        debugPrint('[ProfileScreen] Error fetching favourite bhajans count: $e');
-      }
-
-      // Refresh real yatras count (Completed + Continue / In-Progress + Groups)
-      try {
-        final activeSet = <String>{};
-        activeSet.addAll(prefs.getStringList('active_yatra_ids') ?? []);
-
-        // A. Continue Yatra API (/user/yatra/journey/current)
-        final continueRes = await ApiService.getContinueYatra(token: token, forceRefresh: true);
-        if (continueRes.data != null) {
-          final cid = continueRes.data!.journeyId.isNotEmpty
-              ? continueRes.data!.journeyId
-              : continueRes.data!.routeId;
-          if (cid.isNotEmpty) {
-            activeSet.add(cid);
-          } else {
-            activeSet.add('continue_active_journey');
-          }
-          await prefs.setBool('has_continue_yatra', true);
-        }
-
-        // B. User Yatra Groups
-        final myGroups = await ApiService.getMyYatraGroups(token);
-        if (myGroups is List) {
-          for (final g in myGroups) {
-            final gid = (g['_id'] ?? g['id'] ?? g['groupId'])?.toString();
-            if (gid != null && gid.isNotEmpty) activeSet.add(gid);
-          }
-        } else if (myGroups is Map && myGroups['groups'] is List) {
-          for (final g in (myGroups['groups'] as List)) {
-            final gid = (g['_id'] ?? g['id'] ?? g['groupId'])?.toString();
-            if (gid != null && gid.isNotEmpty) activeSet.add(gid);
-          }
-        }
-
-        // C. Journey Timeline (Completed Journeys)
-        final timeline = await ApiService.getJourneyTimeline(token);
-        int completedRemote = 0;
-        if (timeline.isNotEmpty) {
-          completedRemote = timeline.length;
-          for (final t in timeline) {
-            final tid = (t['_id'] ?? t['journeyId'] ?? t['id'])?.toString();
-            if (tid != null && tid.isNotEmpty) activeSet.add(tid);
-          }
-        }
-
-        final combinedYatras = math.max(
-          activeSet.length,
-          math.max(completedYatras + (continueRes.data != null ? 1 : 0), completedRemote),
-        );
-
-        if (combinedYatras > totalYatras) {
-          totalYatras = combinedYatras;
-        }
-
-        await prefs.setStringList('active_yatra_ids', activeSet.toList());
-        await prefs.setInt('total_yatras_count', totalYatras);
-        if (mounted) {
-          setState(() => _completedYatrasCount = totalYatras);
-        }
-      } catch (e) {
-        debugPrint('[ProfileScreen] Error fetching yatra count: $e');
+        debugPrint('[ProfileScreen] Live profile-stats error: $e');
       }
     }
   }
@@ -649,11 +620,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
           backgroundColor: Colors.transparent,
           elevation: 0,
         automaticallyImplyLeading: !isTab,
-        leading: isTab
+        leading: (isTab && widget.onBack == null)
             ? null
             : IconButton(
                 icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF2E2A36)),
-                onPressed: () => Navigator.pop(context),
+                onPressed: () {
+                  if (widget.onBack != null) {
+                    widget.onBack!();
+                  } else if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
+                },
               ),
         title: Text(
           LocalizedApiHelper.parse('My Profile'),
@@ -729,12 +706,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         color: const Color(0xFF2E2A36),
                       ),
                     ),
-                    if (_userPhone.isNotEmpty || _userEmail.isNotEmpty) ...[
+                    if (_userPhone.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
-                        _userPhone.isNotEmpty && _userEmail.isNotEmpty
-                            ? '$_userPhone • $_userEmail'
-                            : (_userPhone.isNotEmpty ? _userPhone : _userEmail),
+                        _userPhone,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF2E2A36).withValues(alpha: 0.72),
+                        ),
+                      ),
+                    ],
+                    if (_userEmail.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        _userEmail,
                         style: GoogleFonts.outfit(
                           fontSize: 13,
                           color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
@@ -747,7 +733,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
               const SizedBox(height: 24),
 
-              // Devotional Real Stats Row
+              // Devotional Real Stats Row (100% Dynamic Dashboards)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
@@ -758,7 +744,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onTap: () async {
                       await Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const JapCounterScreen()),
+                        MaterialPageRoute(builder: (context) => const JapDashboardScreen()),
                       );
                       _loadProfileData();
                     },
@@ -770,45 +756,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onTap: () async {
                       await Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const FavouriteBhajansScreen()),
+                        MaterialPageRoute(builder: (context) => const BhajanHistoryScreen()),
                       );
                       _loadProfileData();
                     },
                   ),
                   _buildStatItem(
-                    "$_streakDays ${LocalizedApiHelper.parse(_streakDays == 1 ? 'Day' : 'Days')}",
-                    LocalizedApiHelper.parse("Streak"),
-                    "🔥",
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          behavior: SnackBarBehavior.floating,
-                          backgroundColor: const Color(0xFF2E2A36),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          content: Row(
-                            children: [
-                              const Text("🔥", style: TextStyle(fontSize: 22)),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  "You are on a $_streakDays-day devotional streak! Keep praying daily.",
-                                  style: GoogleFonts.outfit(color: Colors.white, fontSize: 13),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                    "$_streakDays",
+                    LocalizedApiHelper.parse("Granths"),
+                    "📖",
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const GranthDashboardScreen()),
                       );
+                      _loadProfileData();
                     },
                   ),
                   _buildStatItem(
-                    "$_completedYatrasCount ${LocalizedApiHelper.parse(_completedYatrasCount == 1 ? 'Tour' : 'Tours')}",
+                    "$_completedYatrasCount",
                     LocalizedApiHelper.parse("Yatras"),
                     "⛰️",
                     onTap: () async {
                       await Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const YatraScreen()),
+                        MaterialPageRoute(builder: (context) => const YatraDashboardScreen()),
                       );
                       _loadProfileData();
                     },
@@ -1057,6 +1029,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const Divider(color: Color(0xFFEFE6DB), height: 1),
                     _buildNavTile(
+                      icon: Icons.favorite_outline_rounded,
+                      title: LocalizedApiHelper.parse("Your Favourites"),
+                      subtitle: LocalizedApiHelper.parse("Granth • Darshan • Bhajan • Jap • Utsav"),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const YourFavouritesScreen()),
+                        );
+                      },
+                    ),
+                    const Divider(color: Color(0xFFEFE6DB), height: 1),
+                    _buildNavTile(
                       icon: Icons.bookmark_outline_rounded,
                       title: LocalizedApiHelper.parse("Saved Library & Items"),
                       subtitle: LocalizedApiHelper.parse("View bookmarked Granths & Chapters"),
@@ -1209,6 +1193,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(builder: (context) => const HelpSupportScreen()),
+                        );
+                      },
+                    ),
+                    const Divider(color: Color(0xFFEFE6DB), height: 1),
+                    _buildNavTile(
+                      icon: Icons.delete_forever_outlined,
+                      title: LocalizedApiHelper.parse("Delete Account"),
+                      subtitle: LocalizedApiHelper.parse("Account & personal data removal"),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const DeleteAccountScreen()),
                         );
                       },
                     ),

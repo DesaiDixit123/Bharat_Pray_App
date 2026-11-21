@@ -169,16 +169,18 @@ class ProgressiveRamRevealPainter extends CustomPainter {
     canvas.saveLayer(screenRect, Paint());
 
     // Balanced progressive expansion:
-    // Count 1..25: Compact, refined reveal circles (~80px radius)
-    // Count 56: Exactly ~50% of the portrait gracefully revealed, face stays pure & protected!
-    // Count 85..107: Smoothly merges neighboring ornaments as count approaches completion
+    // Count 1..25: Compact, refined reveal regions
+    // Count 56: Exactly ~50% of background & attire revealed, face stays pure & veiled!
+    // Count 77: Proportional attire/pedestal/bow revealed (~70%), sacred face remains completely veiled!
+    // Count 96..107: Sacred face features unveil one by one (Tilak, Compassionate Eyes, Nose, Smiling Lips)
+    // Count 107: Climax reaches 99% — final apex darshan remains anticipated
     // Count 108: Full 100% complete darshan!
     final double totalRatio = (revealProgress ?? revealedNodes.length / 108.0).clamp(0.0, 1.0);
-    final double expansion = 1.0 + (2.00 * math.pow(totalRatio, 2.2));
+    final double expansion = 1.0 + (1.20 * math.pow(totalRatio, 2.5));
 
     // ── A. Draw Non-Face Nodes with Organic Feathered Radial Gradients ──
     for (final node in revealedNodes) {
-      if (node.step >= 102) continue; // Face climax nodes drawn in Step B!
+      if (node.step >= 96) continue; // Face climax nodes drawn in Step B!
 
       final center = Offset(
         dstRect.left + (node.u * dstRect.width),
@@ -186,22 +188,22 @@ class ProgressiveRamRevealPainter extends CustomPainter {
       );
       final radius = node.radiusNorm * dstRect.width * expansion;
 
-      // Soft feathered smoke-like gradient falloff with vibrant luminous core (ZERO hard black cutout hole)
-      RamPathCalculator.drawOrganicRevealMask(canvas, center, radius * 0.76, node.step);
+      // Soft feathered smoke-like gradient falloff with vibrant luminous core
+      RamPathCalculator.drawOrganicRevealMask(canvas, center, radius, node.step);
     }
 
-    // ── B. Draw Sacred Face Climax Nodes (Japs 103..108) ──────────────────
-    // Unmasks Tilak, Left Eye, Right Eye, Nose, Lips, and Full Climax!
+    // ── B. Draw Sacred Face Climax Nodes (Japs 97..108) ──────────────────
+    // Unmasks Mukut base, Tilak, Left Eye, Right Eye, Nose, Lips, and Full Climax!
     for (final node in revealedNodes) {
-      if (node.step < 102) continue;
+      if (node.step < 96) continue;
 
       final center = Offset(
         dstRect.left + (node.u * dstRect.width),
         dstRect.top + (node.v * dstRect.height),
       );
-      final radius = node.radiusNorm * dstRect.width * (node.step == 107 ? (1.30 * expansion) : 1.15);
+      final radius = node.radiusNorm * dstRect.width * (node.step == 107 ? (1.25 * expansion) : 1.10);
 
-      RamPathCalculator.drawOrganicRevealMask(canvas, center, radius * 0.70, node.step);
+      RamPathCalculator.drawOrganicRevealMask(canvas, center, radius, node.step);
     }
 
     // C. Draw portrait using BlendMode.srcIn: paints portrait pixels ONLY where mask blobs exist

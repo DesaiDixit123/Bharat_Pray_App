@@ -79,6 +79,7 @@ flutter:
   assets:
     - assets/images/
     - assets/images/devotional/
+    - assets/images/jap/
     - assets/videos/
     - assets/audio/
   # To add assets to your application, add an assets section, like this:

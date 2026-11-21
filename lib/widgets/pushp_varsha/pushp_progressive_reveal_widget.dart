@@ -188,8 +188,8 @@ class PushpProgressiveRevealPainter extends CustomPainter {
     // 2. Composite Layer: Unmask locations where flower petals have arrived
     canvas.saveLayer(dstRect, Paint());
 
-    // Merge expansion factor near the end (Japs 75..108)
-    final double mergeExpansion = 1.0 + (0.50 * math.max(0.0, (count - 75) / 33.0));
+    // Progressive merge expansion factor strictly controlled up to chant 108
+    final double mergeExpansion = 1.0 + (0.35 * math.pow(count / targetCount, 2.5));
 
     // Draw all previously completed nodes
     for (final node in revealedNodes) {
@@ -201,7 +201,7 @@ class PushpProgressiveRevealPainter extends CustomPainter {
         dstRect.top + (node.v * dstRect.height),
       );
 
-      final double radius = node.radiusNorm * 1.15 * dstRect.width * mergeExpansion;
+      final double radius = node.radiusNorm * 0.90 * dstRect.width * mergeExpansion;
 
       RamPathCalculator.drawOrganicRevealMask(canvas, nodeCenter, radius * 0.65, node.step);
     }

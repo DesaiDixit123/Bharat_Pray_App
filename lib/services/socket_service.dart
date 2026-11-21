@@ -9,6 +9,7 @@ class GlobalSocketService {
   static final GlobalSocketService instance = GlobalSocketService._privateConstructor();
 
   IO.Socket? _socket;
+  IO.Socket? get socket => _socket;
   bool _isConnected = false;
   bool get isConnected => _isConnected;
 

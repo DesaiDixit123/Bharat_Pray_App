@@ -157,8 +157,8 @@ class JalProgressiveWaterRevealPainter extends CustomPainter {
     // completely clear of all bottom controls!
     final double finalTopY = waterlineY - (deityH * 0.68);
 
-    // Smooth upward ascension curve
-    final double currentTopY = startTopY - ((startTopY - finalTopY) * math.pow(t, 0.88));
+    // Smooth upward ascension curve - strictly progressive so full darshan completes on 108
+    final double currentTopY = startTopY - ((startTopY - finalTopY) * math.pow(t, 1.15));
     final Rect dstRect = Rect.fromLTWH(deityLeft, currentTopY, deityW, deityH);
     final Rect srcRect = Rect.fromLTWH(0, 0, imgW, imgH);
 
@@ -190,7 +190,7 @@ class JalProgressiveWaterRevealPainter extends CustomPainter {
       canvas.clipRect(Rect.fromLTRB(0, effectiveWaterline, size.width, size.height));
 
       // 1. Underwater Golden Light Emanating from the Deity
-      final double underwaterAlpha = (0.24 + (0.28 * t)).clamp(0.15, 0.52);
+      final double underwaterAlpha = (0.16 + (0.20 * t)).clamp(0.12, 0.36);
       _underwaterGlowPaint.shader = ui.Gradient.radial(
         Offset(centerX, effectiveWaterline + 45),
         deityW * 0.65,
@@ -203,8 +203,8 @@ class JalProgressiveWaterRevealPainter extends CustomPainter {
       );
       canvas.drawCircle(Offset(centerX, effectiveWaterline + 45), deityW * 0.65, _underwaterGlowPaint);
 
-      // 2. Submerged Deity Form with sacred water tint & refraction
-      final double refractionAlpha = (0.30 + (0.15 * (1.0 - t))).clamp(0.18, 0.45);
+      // 2. Submerged Deity Form with sacred water tint & subtle ethereal refraction
+      final double refractionAlpha = isCompleted ? 0.0 : (0.06 + (0.06 * (1.0 - t))).clamp(0.04, 0.12);
       _imagePaint.color = Colors.white.withValues(alpha: refractionAlpha);
 
       canvas.save();

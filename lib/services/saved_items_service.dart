@@ -6,6 +6,8 @@ class SavedItemsService {
   static const String _keySavedChapters = 'saved_chapters_list';
   static const String _keySavedPosts = 'saved_posts_list';
   static const String _keySavedReels = 'saved_reels_list';
+  static const String _keySavedJaps = 'saved_japs_list';
+  static const String _keyFavouriteJaps = 'favourite_japs_list';
 
   // --- GRANTHS ---
   static Future<List<Map<String, dynamic>>> getSavedGranths() async {
@@ -203,5 +205,99 @@ class SavedItemsService {
 
     await prefs.setString(_keySavedReels, jsonEncode(list));
     return isNowSaved;
+  }
+
+  // --- SAVED JAPS ---
+  static Future<List<Map<String, dynamic>>> getSavedJaps() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? jsonStr = prefs.getString(_keySavedJaps);
+      if (jsonStr == null || jsonStr.isEmpty) return [];
+      final List<dynamic> decoded = jsonDecode(jsonStr);
+      return decoded.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<bool> isJapSaved(String japId) async {
+    if (japId.isEmpty) return false;
+    final list = await getSavedJaps();
+    return list.any((j) => (j['id'] ?? j['_id'] ?? '').toString() == japId);
+  }
+
+  static Future<bool> toggleSaveJap(Map<String, dynamic> jap) async {
+    final prefs = await SharedPreferences.getInstance();
+    final japId = (jap['id'] ?? jap['_id'] ?? '').toString();
+    if (japId.isEmpty) return false;
+
+    final list = await getSavedJaps();
+    final index = list.indexWhere((j) => (j['id'] ?? j['_id'] ?? '').toString() == japId);
+
+    bool isNowSaved = false;
+    if (index >= 0) {
+      list.removeAt(index);
+      isNowSaved = false;
+    } else {
+      list.insert(0, {
+        'id': japId,
+        'title': jap['title'] ?? jap['name'] ?? 'Sacred Jap',
+        'subtitle': jap['subtitle'] ?? jap['mantra'] ?? 'Sacred Jap',
+        'image': jap['image'] ?? jap['thumbnail'] ?? '',
+        'targetCount': jap['targetCount'] ?? 108,
+        'savedAt': DateTime.now().toIso8601String(),
+      });
+      isNowSaved = true;
+    }
+
+    await prefs.setString(_keySavedJaps, jsonEncode(list));
+    return isNowSaved;
+  }
+
+  // --- FAVOURITE JAPS ---
+  static Future<List<Map<String, dynamic>>> getFavouriteJaps() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? jsonStr = prefs.getString(_keyFavouriteJaps);
+      if (jsonStr == null || jsonStr.isEmpty) return [];
+      final List<dynamic> decoded = jsonDecode(jsonStr);
+      return decoded.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<bool> isJapFavourite(String japId) async {
+    if (japId.isEmpty) return false;
+    final list = await getFavouriteJaps();
+    return list.any((j) => (j['id'] ?? j['_id'] ?? '').toString() == japId);
+  }
+
+  static Future<bool> toggleFavouriteJap(Map<String, dynamic> jap) async {
+    final prefs = await SharedPreferences.getInstance();
+    final japId = (jap['id'] ?? jap['_id'] ?? '').toString();
+    if (japId.isEmpty) return false;
+
+    final list = await getFavouriteJaps();
+    final index = list.indexWhere((j) => (j['id'] ?? j['_id'] ?? '').toString() == japId);
+
+    bool isNowFav = false;
+    if (index >= 0) {
+      list.removeAt(index);
+      isNowFav = false;
+    } else {
+      list.insert(0, {
+        'id': japId,
+        'title': jap['title'] ?? jap['name'] ?? 'Sacred Jap',
+        'subtitle': jap['subtitle'] ?? jap['mantra'] ?? 'Favourite Jap',
+        'image': jap['image'] ?? jap['thumbnail'] ?? '',
+        'targetCount': jap['targetCount'] ?? 108,
+        'favouritedAt': DateTime.now().toIso8601String(),
+      });
+      isNowFav = true;
+    }
+
+    await prefs.setString(_keyFavouriteJaps, jsonEncode(list));
+    return isNowFav;
   }
 }

@@ -41,7 +41,7 @@ class _PushpVarshaJapScreenState extends State<PushpVarshaJapScreen>
   @override
   JapConfig get japEntry => widget.entry;
 
-  static const int _target = 108;
+  late final int _target = widget.entry.targetCount > 0 ? widget.entry.targetCount : 108;
   late int _count;
   int _completedMalas = 0;
   bool _isCompleted = false;
@@ -149,7 +149,7 @@ class _PushpVarshaJapScreenState extends State<PushpVarshaJapScreen>
           _isCompleted = false;
 
           if (_count > 0) {
-            _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count);
+            _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count, target: _target);
             _newestNode = _revealedNodes.isNotEmpty ? _revealedNodes.last : null;
           } else {
             _revealedNodes = [];
@@ -360,7 +360,7 @@ class _PushpVarshaJapScreenState extends State<PushpVarshaJapScreen>
 
     // 3. Compute target node and exact screen coordinate
     final int nextCount = _count + 1;
-    final targetNode = RamPathCalculator.getNodeForStep(_count);
+    final targetNode = RamPathCalculator.getNodeForStep(_count, target: _target);
 
     final Size screenSize = MediaQuery.of(context).size;
     final Rect dstRect = RamPathCalculator.computeDstRect(

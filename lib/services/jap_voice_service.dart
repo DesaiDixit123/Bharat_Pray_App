@@ -155,7 +155,7 @@ class JapVoiceService {
       if (!clipDir.existsSync()) clipDir.createSync(recursive: true);
 
       final mantraKey = base64Url.encode(utf8.encode(mantraText));
-      final clip = File('${clipDir.path}/${voiceId}_$mantraKey.mp3');
+      final clip = File('${clipDir.path}/v2_${voiceId}_$mantraKey.mp3');
       if (clip.existsSync() && clip.lengthSync() > 0) return clip.path;
 
       final url = await synthesizeMantra(mantraText, voiceId);

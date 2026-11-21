@@ -17,6 +17,7 @@ class DivineParticleRevealPainter extends CustomPainter {
   final double shimmerProgress;
   final bool isCompleted;
   final double completionGlowProgress;
+  final double? revealProgress;
 
   final Paint _backgroundPaint = Paint()..color = Colors.black;
   final Paint _imagePaint = Paint()..filterQuality = FilterQuality.high;
@@ -31,6 +32,7 @@ class DivineParticleRevealPainter extends CustomPainter {
     required this.shimmerProgress,
     required this.isCompleted,
     required this.completionGlowProgress,
+    this.revealProgress,
   });
 
   @override
@@ -83,40 +85,40 @@ class DivineParticleRevealPainter extends CustomPainter {
     }
 
     // 3. Ambient Drifting Golden Stardust in Background
-    final double progressRatio = (revealedNodes.length / 108.0).clamp(0.0, 1.0);
+    final double progressRatio = (revealProgress ?? (revealedNodes.length / 108.0)).clamp(0.0, 1.0);
     _drawCelestialStardustField(canvas, dstRect, 22, progressRatio);
 
     // 4. SaveLayer for progressive feathered aperture masking
     canvas.saveLayer(screenRect, Paint());
 
     // Balanced progressive expansion:
-    final double expansion = 1.0 + (2.00 * math.pow(progressRatio, 2.2));
+    final double expansion = 1.0 + (1.20 * math.pow(progressRatio, 2.5));
 
     // ── A. Draw Non-Face Mask Blobs ─────────────────────────────────────
     // Overlapping organic feathered nodes with stardust particle clusters
     for (final node in revealedNodes) {
-      if (node.step >= 102) continue; // Face climax nodes in Step B
+      if (node.step >= 96) continue; // Face climax nodes in Step B
 
       final center = Offset(
         dstRect.left + (node.u * dstRect.width),
         dstRect.top + (node.v * dstRect.height),
       );
-      final radius = node.radiusNorm * 1.18 * dstRect.width * expansion;
+      final radius = node.radiusNorm * dstRect.width * expansion;
 
-      RamPathCalculator.drawOrganicRevealMask(canvas, center, radius * 0.65, node.step);
+      RamPathCalculator.drawOrganicRevealMask(canvas, center, radius, node.step);
     }
 
-    // ── B. Draw Sacred Face Climax Nodes (Japs 103..108) ────────────────
+    // ── B. Draw Sacred Face Climax Nodes (Japs 97..108) ────────────────
     for (final node in revealedNodes) {
-      if (node.step < 102) continue;
+      if (node.step < 96) continue;
 
       final center = Offset(
         dstRect.left + (node.u * dstRect.width),
         dstRect.top + (node.v * dstRect.height),
       );
-      final radius = node.radiusNorm * 1.18 * dstRect.width;
+      final radius = node.radiusNorm * dstRect.width * (node.step == 107 ? (1.25 * expansion) : 1.10);
 
-      RamPathCalculator.drawOrganicRevealMask(canvas, center, radius * 0.65, node.step);
+      RamPathCalculator.drawOrganicRevealMask(canvas, center, radius, node.step);
     }
 
     // Composite portrait onto mask
@@ -199,6 +201,7 @@ class DivineParticleRevealPainter extends CustomPainter {
         oldDelegate.shimmerProgress != shimmerProgress ||
         oldDelegate.isCompleted != isCompleted ||
         oldDelegate.completionGlowProgress != completionGlowProgress ||
+        oldDelegate.revealProgress != revealProgress ||
         oldDelegate.image != image;
   }
 }
