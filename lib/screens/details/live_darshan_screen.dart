@@ -188,10 +188,10 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
       }
 
       final ytUrl = (details['youtube_darshan_details']?['youtubeUrl'] ?? '').toString().toLowerCase();
-      _isShort = ytUrl.contains('shorts') || _youtubeVideoId == 'SmYpQzL7RRg';
+      _isShort = ytUrl.contains('shorts');
 
-      // Check if stream is live or has an active configured YouTube video
-      final bool isLiveFlag = _youtubeVideoId.trim().isNotEmpty && (details['is_live_status'] != false);
+      // Check if stream is actually live
+      final bool isLiveFlag = _youtubeVideoId.trim().isNotEmpty && (details['is_live_status'] == true);
 
       if (!isLiveFlag) {
         _isOffline = true;

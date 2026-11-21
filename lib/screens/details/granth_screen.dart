@@ -30,24 +30,6 @@ class _GranthScreenState extends State<GranthScreen> {
       final catMap = Map<String, dynamic>.from(cat as Map);
       final title = (catMap['name'] ?? catMap['title'] ?? 'Granth').toString();
       final catId = (catMap['_id'] ?? catMap['id'] ?? '').toString();
-      final rawImg = (catMap['image'] ?? catMap['coverImage'] ?? '').toString();
-
-      String resolvedImg = 'assets/images/bhagavad_gita.png';
-      if (rawImg.isNotEmpty) {
-        resolvedImg = ApiService.resolveImageUrl(rawImg);
-      } else if (title.toLowerCase().contains('gita')) {
-        resolvedImg = 'assets/images/bhagavad_gita.png';
-      } else if (title.toLowerCase().contains('itihas') || title.toLowerCase().contains('epic')) {
-        resolvedImg = 'assets/images/image_2.png';
-      } else if (title.toLowerCase().contains('puran')) {
-        resolvedImg = 'assets/images/deity_shiva.png';
-      } else if (title.toLowerCase().contains('stotra') || title.toLowerCase().contains('chalisa')) {
-        resolvedImg = 'assets/images/image_4.png';
-      } else if (title.toLowerCase().contains('veda') || title.toLowerCase().contains('upanishad')) {
-        resolvedImg = 'assets/images/image_4_1.png';
-      } else if (title.toLowerCase().contains('aarti')) {
-        resolvedImg = 'assets/images/image_4_1.png';
-      }
 
       int? countVal;
       if (catMap['granthCount'] != null) {
@@ -60,7 +42,6 @@ class _GranthScreenState extends State<GranthScreen> {
         '_id': catId,
         'title': title,
         'count': countVal ?? 0,
-        'image': resolvedImg,
         'description': (catMap['description'] ?? '').toString().isNotEmpty
             ? catMap['description'].toString()
             : 'Explore sacred texts of $title',
@@ -249,39 +230,6 @@ class _CategoryCard extends StatelessWidget {
   final Map<String, dynamic> category;
   final VoidCallback onTap;
 
-  Widget _buildImage(String imgPath) {
-    if (imgPath.startsWith('http')) {
-      return Image.network(
-        imgPath,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-        filterQuality: FilterQuality.high,
-        errorBuilder: (_, _, _) => _fallbackImage(),
-      );
-    }
-    return Image.asset(
-      imgPath,
-      fit: BoxFit.cover,
-      width: double.infinity,
-      height: double.infinity,
-      filterQuality: FilterQuality.high,
-      errorBuilder: (_, _, _) => _fallbackImage(),
-    );
-  }
-
-  Widget _fallbackImage() {
-    return Container(
-      color: const Color(0xFF8F4D18),
-      alignment: Alignment.center,
-      child: const Icon(
-        Icons.menu_book_rounded,
-        color: Colors.white,
-        size: 30,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final title = (category['title'] ?? category['name'] ?? 'Granth').toString();
@@ -289,7 +237,6 @@ class _CategoryCard extends StatelessWidget {
         ? category['count'] as int
         : (int.tryParse(category['count']?.toString() ?? '0') ?? 0);
     final String countText = count == 1 ? '1 Granth' : '$count Granths';
-    final imgPath = (category['image'] ?? 'assets/images/bhagavad_gita.png').toString();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -309,16 +256,26 @@ class _CategoryCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           child: Row(
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: Container(
-                  height: 74,
-                  width: 96,
-                  color: const Color(0xFFF6ECE1),
-                  child: _buildImage(imgPath),
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF7700).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFFFF7700).withValues(alpha: 0.2),
+                    width: 1,
+                  ),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.auto_stories_rounded,
+                    color: Color(0xFFFF7700),
+                    size: 24,
+                  ),
                 ),
               ),
               const SizedBox(width: 16),
@@ -330,7 +287,7 @@ class _CategoryCard extends StatelessWidget {
                     Text(
                       title,
                       style: GoogleFonts.outfit(
-                        fontSize: 15,
+                        fontSize: 16,
                         fontWeight: FontWeight.w700,
                         color: const Color(0xFF2E2A36),
                       ),
@@ -339,22 +296,18 @@ class _CategoryCard extends StatelessWidget {
                     Text(
                       countText,
                       style: GoogleFonts.outfit(
-                        fontSize: 12,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: const Color(0xFF2E2A36).withValues(alpha: 0.42),
+                        color: const Color(0xFF2E2A36).withValues(alpha: 0.45),
                       ),
                     ),
                   ],
                 ),
               ),
-              SizedBox(
-                height: 36,
-                width: 36,
-                child: const Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  color: Color(0xFFFF7700),
-                  size: 16,
-                ),
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: Color(0xFFFF7700),
+                size: 16,
               ),
             ],
           ),

@@ -458,8 +458,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final bool hasYtVideo = item['yt_info'] is Map &&
             (item['yt_info']['youtubeVideoId']?.toString().trim().isNotEmpty ?? false);
         final bool isLive = (item['is_live_status'] == true) ||
-            (hasYtVideo && item['yt_info']['isLiveStatus'] == true) ||
-            (item['live_darshan_info'] is Map && item['live_darshan_info']['is_live_status'] == true);
+            (hasYtVideo && item['yt_info']['isLiveStatus'] == true);
 
         final String darshanId = (item['darshan_id'] ?? item['_id'])?.toString() ?? '';
         final String title = (item['name'] ?? item['temple']?['name'] ?? 'Sacred Darshan').toString();
@@ -571,9 +570,10 @@ class _HomeScreenState extends State<HomeScreen> {
     if (homeData['featuredDarshans'] is List) {
       for (final item in homeData['featuredDarshans']) {
         if (item is Map) {
+          final bool hasYtVideo = item['yt_info'] is Map &&
+              (item['yt_info']['youtubeVideoId']?.toString().trim().isNotEmpty ?? false);
           final bool isLive = (item['is_live_status'] == true) ||
-              (item['live_darshan_info'] is Map && item['live_darshan_info']['is_live_status'] == true) ||
-              (item['yt_info'] is Map && item['yt_info']['isLiveStatus'] == true);
+              (hasYtVideo && item['yt_info']['isLiveStatus'] == true);
 
           final String darshanId = (item['darshan_id'] ?? item['_id'])?.toString() ?? '';
           final alreadyAdded = banners.any((b) => b['id'] == darshanId);
@@ -1108,8 +1108,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final hasYtVideo = item['yt_info'] is Map &&
             (item['yt_info']['youtubeVideoId']?.toString().trim().isNotEmpty ?? false);
         final bool isLive = (item['is_live_status'] == true) ||
-            (hasYtVideo && item['yt_info']['isLiveStatus'] == true) ||
-            (item['live_darshan_info'] is Map && item['live_darshan_info']['is_live_status'] == true);
+            (hasYtVideo && item['yt_info']['isLiveStatus'] == true);
 
         final String darshanId = (item['darshan_id'] ?? item['_id'])?.toString() ?? '';
         final String title = (item['name'] ?? item['temple']?['name'] ?? 'Sacred Darshan').toString();

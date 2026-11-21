@@ -448,12 +448,12 @@ class UtsavService {
           'logo': myReg['logo'] ?? myReg['logoUrl'] ?? 'assets/images/devotional/khodal_dham_logo.jpg',
           'description': 'Devotional Mandal in ${myReg['address'] ?? 'Gujarat'}.',
           'leader': {
-            'name': myReg['leaderName'] ?? 'Ayush',
+            'name': myReg['leaderName'] ?? '',
             'role': 'Leader',
-            'phone': myReg['mobile'] ?? '8128753230',
+            'phone': myReg['mobile'] ?? '',
           },
-          'leaderName': myReg['leaderName'] ?? 'Ayush',
-          'phone': myReg['mobile'] ?? '8128753230',
+          'leaderName': myReg['leaderName'] ?? '',
+          'phone': myReg['mobile'] ?? '',
           'createdAt': myReg['createdAt'] ?? myReg['updatedAt'],
           'updatedAt': myReg['updatedAt'] ?? myReg['createdAt'],
         });

@@ -794,6 +794,8 @@ class ApiService {
     required String token,
     String? search,
     String? categoryId,
+    String? state,
+    String? city,
     int page = 1,
     int limit = 10,
   }) async {
@@ -807,6 +809,12 @@ class ApiService {
     if (categoryId != null && categoryId.isNotEmpty && categoryId != 'All') {
       queryParams['categoryId'] = categoryId;
     }
+    if (state != null && state.isNotEmpty && state != 'All') {
+      queryParams['state'] = state;
+    }
+    if (city != null && city.isNotEmpty && city != 'All') {
+      queryParams['city'] = city;
+    }
 
     final uri = Uri.parse('$baseUrl/user/darshan/list').replace(queryParameters: queryParams);
     final response = await _safeGet(
@@ -817,6 +825,19 @@ class ApiService {
       },
     );
     return _processResponse(response)['Data'];
+  }
+
+  // GET /user/darshan/locations
+  static Future<Map<String, dynamic>> getDarshanLocations(String token) async {
+    final uri = Uri.parse('$baseUrl/user/darshan/locations');
+    final response = await _safeGet(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    return _processResponse(response)['Data'] ?? {};
   }
 
   // GET /user/darshan/details/:id
