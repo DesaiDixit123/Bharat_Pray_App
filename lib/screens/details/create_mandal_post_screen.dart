@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../core/localization/localized_api_helper.dart';
 import '../../services/utsav_service.dart';
 import 'mandal_profile_screen.dart';
 
@@ -100,12 +101,12 @@ class _CreateMandalPostScreenState extends State<CreateMandalPostScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                "Select Photo Source",
+                LocalizedApiHelper.parse("Select Photo Source"),
                 style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
               ),
               const SizedBox(height: 6),
               Text(
-                "Choose how you want to add your Mandal post image:",
+                LocalizedApiHelper.parse("Choose how you want to add your Mandal post image:"),
                 style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey),
               ),
               const SizedBox(height: 20),
@@ -238,7 +239,7 @@ class _CreateMandalPostScreenState extends State<CreateMandalPostScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          "Create Mandal Post",
+          LocalizedApiHelper.parse("Create Mandal Post"),
           style: GoogleFonts.outfit(color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold, fontSize: 18),
         ),
       ),
@@ -248,7 +249,7 @@ class _CreateMandalPostScreenState extends State<CreateMandalPostScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "Upload Post Photo:",
+              LocalizedApiHelper.parse("Upload Post Photo:"),
               style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF2E2A36)),
             ),
             const SizedBox(height: 10),
@@ -280,12 +281,12 @@ class _CreateMandalPostScreenState extends State<CreateMandalPostScreen> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            "Tap to Select Photo",
+                            LocalizedApiHelper.parse("Tap to Select Photo"),
                             style: GoogleFonts.outfit(color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold, fontSize: 16),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            "Take from Camera or Browse Gallery",
+                            LocalizedApiHelper.parse("Take from Camera or Browse Gallery"),
                             style: GoogleFonts.outfit(color: Colors.grey, fontSize: 12),
                           ),
                         ],
@@ -317,7 +318,7 @@ class _CreateMandalPostScreenState extends State<CreateMandalPostScreen> {
             const SizedBox(height: 24),
 
             Text(
-              "Post Caption & Details:",
+              LocalizedApiHelper.parse("Post Caption & Details:"),
               style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF2E2A36)),
             ),
             const SizedBox(height: 8),
@@ -326,7 +327,7 @@ class _CreateMandalPostScreenState extends State<CreateMandalPostScreen> {
               maxLines: 4,
               style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF2E2A36)),
               decoration: InputDecoration(
-                hintText: "Write a detailed caption for your Mandal post...",
+                hintText: LocalizedApiHelper.parse("Write a detailed caption for your Mandal post..."),
                 hintStyle: GoogleFonts.outfit(color: Colors.grey.shade400, fontSize: 13),
                 filled: true,
                 fillColor: Colors.white,
@@ -362,11 +363,11 @@ class _CreateMandalPostScreenState extends State<CreateMandalPostScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              "Registered Festival",
+                              LocalizedApiHelper.parse("Registered Festival"),
                               style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
                             ),
                             Text(
-                              _festivalName,
+                              LocalizedApiHelper.parse(_festivalName),
                               style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold),
                             ),
                           ],
@@ -379,7 +380,7 @@ class _CreateMandalPostScreenState extends State<CreateMandalPostScreen> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          "Auto-Linked",
+                          LocalizedApiHelper.parse("Auto-Linked"),
                           style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF2E7D32)),
                         ),
                       ),
@@ -405,11 +406,11 @@ class _CreateMandalPostScreenState extends State<CreateMandalPostScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              "Mandal Location",
+                              LocalizedApiHelper.parse("Mandal Location"),
                               style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
                             ),
                             Text(
-                              _mandalLocation,
+                              LocalizedApiHelper.parse(_mandalLocation),
                               style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold),
                             ),
                           ],
@@ -435,7 +436,7 @@ class _CreateMandalPostScreenState extends State<CreateMandalPostScreen> {
                 ),
                 icon: const Icon(Icons.send_rounded, size: 22),
                 label: Text(
-                  "Share Post to Mandal Feed",
+                  LocalizedApiHelper.parse("Share Post to Mandal Feed"),
                   style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 onPressed: () async {

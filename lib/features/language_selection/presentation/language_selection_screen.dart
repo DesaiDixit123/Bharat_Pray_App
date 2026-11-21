@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../core/localization/dynamic_translation_service.dart';
 import '../../../../core/localization/language_manager.dart';
-import '../../../../core/localization/language_model.dart';
 import '../../../../screens/home_screen.dart';
 import '../../../../screens/login_screen.dart';
 import 'widgets/language_card.dart';
@@ -84,10 +84,22 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
   }
 
   Future<void> _applyLanguage() async {
+    if (_isSaving) return;
     HapticFeedback.mediumImpact();
     setState(() => _isSaving = true);
 
-    await LanguageManager.instance.changeLanguageByCode(_selectedCode);
+    try {
+      // 1. Prewarm dynamic translation cache for selected language
+      await DynamicTranslationService.instance.prewarmLanguage(_selectedCode);
+
+      // 2. Apply language change to LanguageManager
+      await LanguageManager.instance.changeLanguageByCode(_selectedCode);
+
+      // 3. Keep loader visible for ~1.5s so all widgets & texts across the app convert smoothly
+      await Future.delayed(const Duration(milliseconds: 1400));
+    } catch (e) {
+      debugPrint('[LanguageSelection] Error applying language: $e');
+    }
 
     if (!mounted) return;
 
@@ -118,6 +130,19 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
         ),
         (_) => false,
       );
+    }
+  }
+
+  String _getLoadingButtonText() {
+    switch (_selectedCode.toLowerCase()) {
+      case 'gu':
+        return 'ભાષા લાગુ થઈ રહી છે...';
+      case 'hi':
+        return 'भाषा लागू हो रही है...';
+      case 'mr':
+        return 'भाषा लागू होत आहे...';
+      default:
+        return 'Applying Language...';
     }
   }
 
@@ -377,11 +402,9 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
                               isSelected: _selectedCode.toLowerCase() ==
                                   lang.code.toLowerCase(),
                               onTap: () {
+                                if (_isSaving) return;
                                 HapticFeedback.selectionClick();
                                 setState(() => _selectedCode = lang.code);
-                                // Immediately update app language instance in real-time
-                                LanguageManager.instance
-                                    .changeLanguageByCode(lang.code);
                               },
                             ),
                           ),
@@ -403,6 +426,7 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFFF7700),
                           foregroundColor: Colors.white,
+                          disabledBackgroundColor: const Color(0xFFFF7700).withValues(alpha: 0.85),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(18),
                           ),
@@ -411,13 +435,28 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
                               const Color(0xFFFF7700).withValues(alpha: 0.45),
                         ),
                         child: _isSaving
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  color: Colors.white,
-                                ),
+                            ? Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    _getLoadingButtonText(),
+                                    style: const TextStyle(
+                                      fontSize: 15.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ],
                               )
                             : AnimatedSwitcher(
                                 duration: const Duration(milliseconds: 200),

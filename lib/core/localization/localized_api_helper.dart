@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'language_manager.dart';
+import 'dynamic_translation_service.dart';
 
 class LocalizedApiHelper {
   static const Map<String, Map<String, String>> _spiritualCanonicalMap = {
@@ -26,7 +27,30 @@ class LocalizedApiHelper {
     'khodaldham temple': {'en': 'Khodaldham Temple', 'hi': 'खोडलधाम मंदिर', 'gu': 'ખોડલધામ મંદિર', 'mr': 'ખોડલધામ મંદિર'},
     'khodaldham': {'en': 'Khodaldham', 'hi': 'खोडलधाम', 'gu': 'ખોડલધામ', 'mr': 'ખોડલધામ'},
     'salangpur hanuman': {'en': 'Salangpur Hanuman', 'hi': 'साळंगपुर हनुमान', 'gu': 'સાળંગપુર હનુમાન', 'mr': 'साळंगपूर हनुमान'},
-    'salangpur': {'en': 'Salangpur', 'hi': 'साळंगपुर', 'gu': 'સાળંગપુર', 'mr': 'साळંગपूर'},
+    'salangpur': {'en': 'Salangpur', 'hi': 'साळંગપુર', 'gu': 'સાળંગપુર', 'mr': 'साळંગपूर'},
+
+    // Places & States
+    'gaya': {'en': 'Gaya', 'hi': 'गया', 'gu': 'ગયા', 'mr': 'गया'},
+    'bihar': {'en': 'Bihar', 'hi': 'बिहार', 'gu': 'બિહાર', 'mr': 'बिहार'},
+    'kolkata': {'en': 'Kolkata', 'hi': 'कोलकाता', 'gu': 'કોલકાતા', 'mr': 'कोलकाता'},
+    'west bengal': {'en': 'West Bengal', 'hi': 'पश्चिम बंगाल', 'gu': 'પશ્ચિમ બંગાળ', 'mr': 'पश्चिम बंगाल'},
+    'bhatkal': {'en': 'Bhatkal', 'hi': 'भटकल', 'gu': 'ભટકલ', 'mr': 'भटकळ'},
+    'karnataka': {'en': 'Karnataka', 'hi': 'कर्नाटक', 'gu': 'કર્ણાટક', 'mr': 'कर्नाटक'},
+    'guruvayur': {'en': 'Guruvayur', 'hi': 'गुरूवायूर', 'gu': 'ગુરુવાયુર', 'mr': 'गुरुवायूर'},
+    'kerala': {'en': 'Kerala', 'hi': 'केरल', 'gu': 'કેરળ', 'mr': 'केरळ'},
+    'tamil nadu': {'en': 'Tamil Nadu', 'hi': 'तमिलनाडु', 'gu': 'તમિલનાડુ', 'mr': 'तमिळनाडू'},
+    'andhra pradesh': {'en': 'Andhra Pradesh', 'hi': 'आंध्र प्रदेश', 'gu': 'આંધ્ર પ્રદેશ', 'mr': 'आंध्र प्रदेश'},
+    'telangana': {'en': 'Telangana', 'hi': 'तेलंगाना', 'gu': 'તેલંગાણા', 'mr': 'तेलंगणा'},
+    'odisha': {'en': 'Odisha', 'hi': 'ओडिशा', 'gu': 'ઓડિશા', 'mr': 'ओडिशा'},
+    'punjab': {'en': 'Punjab', 'hi': 'पंजाब', 'gu': 'પંજાબ', 'mr': 'पंजाब'},
+    'haryana': {'en': 'Haryana', 'hi': 'हरियाणा', 'gu': 'હરિયાણા', 'mr': 'हरियाणा'},
+    'himachal pradesh': {'en': 'Himachal Pradesh', 'hi': 'हिमाचल प्रदेश', 'gu': 'હિમાચલ પ્રદેશ', 'mr': 'हिमाचल प्रदेश'},
+    'delhi': {'en': 'Delhi', 'hi': 'दिल्ली', 'gu': 'દિલ્હી', 'mr': 'दिल्ली'},
+
+    // User & Profile names
+    'dixit desai': {'en': 'Dixit Desai', 'hi': 'दीक्षित देसाई', 'gu': 'દીક્ષિત દેસાઈ', 'mr': 'दीक्षित देसाई'},
+    'dixit': {'en': 'Dixit', 'hi': 'दीक्षित', 'gu': 'દીક્ષિત', 'mr': 'दीक्षित'},
+    'desai': {'en': 'Desai', 'hi': 'देसाई', 'gu': 'દેસાઈ', 'mr': 'देसाई'},
 
     // Deities
     'lord shiva': {'en': 'Lord Shiva', 'hi': 'भगवान शिव', 'gu': 'ભગવાન શિવ', 'mr': 'भगवान शिव'},
@@ -56,6 +80,60 @@ class LocalizedApiHelper {
     'char dham yatra': {'en': 'Char Dham Yatra', 'hi': 'चार धाम यात्रा', 'gu': 'ચાર ધામ યાત્રા', 'mr': 'चार धाम यात्रा'},
     'jyotirlinga yatra': {'en': '12 Jyotirlinga Yatra', 'hi': '१२ ज्योतिर्लिंग यात्रा', 'gu': '૧૨ જ્યોતિર્લિંગ યાત્રા', 'mr': '१२ ज्योतिर्लिंग यात्रा'},
     'panch dwarika yatra': {'en': 'Panch Dwarika Yatra', 'hi': 'पंच द्वारिका यात्रा', 'gu': 'પંચ દ્વારિકા યાત્રા', 'mr': 'पंच द्वारिका यात्रा'},
+    'popular yatra': {'en': 'Popular Yatra', 'hi': 'लोकप्रिय यात्रा', 'gu': 'લોકપ્રિય યાત્રા', 'mr': 'लोकप्रिय यात्रा'},
+    'continue yatra': {'en': 'Continue Yatra', 'hi': 'यात्रा जारी रखें', 'gu': 'યાત્રા ચાલુ રાખો', 'mr': 'यात्रा चालू ठेवा'},
+    'start yatra': {'en': 'Start Yatra', 'hi': 'यात्रा शुरू करें', 'gu': 'યાત્રા શરૂ કરો', 'mr': 'यात्रा सुरू करा'},
+    'create group': {'en': 'Create Group', 'hi': 'ग्रुप बनाएं', 'gu': 'ગ્રુપ બનાવો', 'mr': 'गट तयार करा'},
+    'my groups': {'en': 'My Groups', 'hi': 'मेरे ग्रुप', 'gu': 'મારા ગ્રુપ', 'mr': 'माझे गट'},
+    'bharat pray jap': {'en': 'Bharat Pray Jap', 'hi': 'भारत प्रे जाप', 'gu': 'ભારત પ્રે જાપ', 'mr': 'भारत प्रे जप'},
+    'admin jap': {'en': 'Bharat Pray Jap', 'hi': 'भारत प्रे जाप', 'gu': 'ભારત પ્રે જાપ', 'mr': 'भारत प्रे जप'},
+    'your custom jap': {'en': 'Your Custom Jap', 'hi': 'आपके कस्टम जाप', 'gu': 'તમારા કસ્ટમ જાપ', 'mr': 'तुमचे सानुकूल जप'},
+    'create custom jap': {'en': 'Create Custom Jap', 'hi': 'कस्टम जाप बनाएं', 'gu': 'કસ્ટમ જાપ બનાવો', 'mr': 'सानुकूल जप तयार करा'},
+    'chant': {'en': 'Chant', 'hi': 'जाप करें', 'gu': 'જાપ કરો', 'mr': 'जप करा'},
+    'effect': {'en': 'Effect', 'hi': 'इफेक्ट', 'gu': 'ઇફેક્ટ', 'mr': 'प्रभाव'},
+    'refresh': {'en': 'Refresh', 'hi': 'रिफ्रेश', 'gu': 'રીફ્રેશ', 'mr': 'रिफ्रेश'},
+    'progress': {'en': 'Progress', 'hi': 'प्रगति', 'gu': 'પ્રગતિ', 'mr': 'प्रगती'},
+    'admin approved': {'en': 'Admin Approved', 'hi': 'एडमिन द्वारा स्वीकृत', 'gu': 'એડમિન દ્વારા મંજૂર', 'mr': 'अ‍ॅडमिन मान्यताप्राप्त'},
+    'official spiritual organisation': {'en': 'Official Spiritual Organisation', 'hi': 'आधिकारिक आध्यात्मिक संगठन', 'gu': 'સત્તાવાર આધ્યાત્મિક સંસ્થા', 'mr': 'अधिकृत आध्यात्मिक संस्था'},
+    'posts': {'en': 'Posts', 'hi': 'पोस्ट', 'gu': 'પોસ્ટ', 'mr': 'पोस्ट'},
+    'reels': {'en': 'Reels', 'hi': 'रील्स', 'gu': 'રીલ્સ', 'mr': 'रील्स'},
+    'lives': {'en': 'Lives', 'hi': 'लाइव', 'gu': 'લાઈવ', 'mr': 'लाईव्ह'},
+    'add post': {'en': 'Add Post', 'hi': 'पोस्ट जोड़ें', 'gu': 'પોસ્ટ ઉમેરો', 'mr': 'पोस्ट जोडा'},
+    'add reel': {'en': 'Add Reel', 'hi': 'रील जोड़ें', 'gu': 'રીલ ઉમેરો', 'mr': 'रील जोडा'},
+    'share mandal': {'en': 'Share Mandal', 'hi': 'मंडल शेयर करें', 'gu': 'મંડળ શેર કરો', 'mr': 'मंडळ शेअर करा'},
+    'mandal info': {'en': 'Mandal Info', 'hi': 'मंडल जानकारी', 'gu': 'મંડળ માહિતી', 'mr': 'मंडळ माहिती'},
+    'no posts yet': {'en': 'No Posts Yet', 'hi': 'अभी तक कोई पोस्ट नहीं', 'gu': 'હજુ સુધી કોઈ પોસ્ટ નથી', 'mr': 'अद्याप कोणतीही पोस्ट नाही'},
+    'no reels yet': {'en': 'No Reels Yet', 'hi': 'अभी तक कोई रील नहीं', 'gu': 'હજુ સુધી કોઈ રીલ નથી', 'mr': 'अद्याप कोणतीही रील नाही'},
+    'no live streams yet': {'en': 'No Live Streams Yet', 'hi': 'अभी तक कोई लाइव स्ट्रीम नहीं', 'gu': 'હજુ સુધી કોઈ લાઈવ સ્ટ્રીમ નથી', 'mr': 'अद्याप कोणतेही लाईव्ह स्ट्रीम नाही'},
+    'live stream broadcasts & history': {'en': 'Live Stream Broadcasts & History', 'hi': 'लाइव स्ट्रीम प्रसारण एवं इतिहास', 'gu': 'લાઈવ સ્ટ્રીમ પ્રસારણ અને ઇતિહાસ', 'mr': 'लाईव्ह स्ट्रीम प्रक्षेपण आणि इतिहास'},
+    'official registration certificate': {'en': 'Official Registration Certificate', 'hi': 'आधिकारिक पंजीकरण प्रमाणपत्र', 'gu': 'સત્તાવાર નોંધણી પ્રમાણપત્ર', 'mr': 'अधिकृत नोंदणी प्रमाणपत्र'},
+    'registration number:': {'en': 'Registration Number:', 'hi': 'पंजीकरण संख्या:', 'gu': 'નોંધણી નંબર:', 'mr': 'नोंदणी क्रमांक:'},
+    'status:': {'en': 'Status:', 'hi': 'स्थिति:', 'gu': 'સ્થિતિ:', 'mr': 'स्थिती:'},
+    'approved date:': {'en': 'Approved Date:', 'hi': 'स्वीकृति तिथि:', 'gu': 'મંજૂરી તારીખ:', 'mr': 'मंजूरी तारीख:'},
+    'mandal president:': {'en': 'Mandal President:', 'hi': 'मंडल अध्यक्ष:', 'gu': 'મંડળ પ્રમુખ:', 'mr': 'मंडळ अध्यक्ष:'},
+    'official phone:': {'en': 'Official Phone:', 'hi': 'आधिकारिक फ़ोन:', 'gu': 'સત્તાવાર ફોન:', 'mr': 'अधिकृत फोन:'},
+    'location:': {'en': 'Location:', 'hi': 'स्थान:', 'gu': 'સ્થળ:', 'mr': 'स्थान:'},
+    'approved by bharat pray admin ✅': {'en': 'Approved by Bharat Pray Admin ✅', 'hi': 'भारत प्रे एडमिन द्वारा स्वीकृत ✅', 'gu': 'ભારત પ્રે એડમિન દ્વારા મંજૂર ✅', 'mr': 'भारत प्रे अ‍ॅडमिन मान्यताप्राप्त ✅'},
+    'pending verification ⏳': {'en': 'Pending Verification ⏳', 'hi': 'सत्यापन लंबित ⏳', 'gu': 'ચકાસણી બાકી ⏳', 'mr': 'पडताळणी प्रलंबित ⏳'},
+    'rejected by bharat pray admin ❌': {'en': 'Rejected by Bharat Pray Admin ❌', 'hi': 'भारत प्रे एडमिन द्वारा अस्वीकृत ❌', 'gu': 'ભારત પ્રે એડમિન દ્વારા અસ્વીકાર ❌', 'mr': 'भारत प्रे अ‍ॅડમિન નાકારले ❌'},
+    'live broadcast options': {'en': 'Live Broadcast Options', 'hi': 'लाइव प्रसारण विकल्प', 'gu': 'લાઈવ પ્રસારણ વિકલ્પો', 'mr': 'लाईव्ह प्रक्षेपण पर्याय'},
+    'instant live': {'en': 'Instant Live', 'hi': 'तुरंत लाइव', 'gu': 'તાત્કાલિક લાઈવ', 'mr': 'तात्काळ लाईव्ह'},
+    'schedule live': {'en': 'Schedule Live', 'hi': 'लाइव शेड्यूल करें', 'gu': 'લાઈવ શેડ્યૂલ કરો', 'mr': 'लाईव्ह शेड्युल करा'},
+    'go live now': {'en': 'GO LIVE NOW', 'hi': 'अभी लाइव जाएं', 'gu': 'હમણાં લાઈવ જાઓ', 'mr': 'आत्ता लाईव्ह जा'},
+    'set time & date': {'en': 'SET TIME & DATE', 'hi': 'समय और तिथि सेट करें', 'gu': 'સમય અને તારીખ સેટ કરો', 'mr': 'वेळ आणि तारीख सेट करा'},
+    'instant live broadcast': {'en': 'Instant Live Broadcast', 'hi': 'तुरंत लाइव प्रसारण', 'gu': 'તાત્કાલિક લાઈવ પ્રસારણ', 'mr': 'तात्काळ लाईव्ह प्रक्षेपण'},
+    'schedule live broadcast': {'en': 'Schedule Live Broadcast', 'hi': 'लाइव प्रसारण शेड्यूल करें', 'gu': 'લાઈવ પ્રસારણ શેડ્યૂલ કરો', 'mr': 'लाईव्ह प्रक्षेपण शेड्युल करा'},
+    'live stream / aarti name': {'en': 'Live Stream / Aarti Name', 'hi': 'लाइव स्ट्रीम / आरती का नाम', 'gu': 'લાઈવ સ્ટ્રીમ / આરતીનું નામ', 'mr': 'लाईव्ह स्ट्रीम / आरतीचे नाव'},
+    'live event / puja name': {'en': 'Live Event / Puja Name', 'hi': 'लाइव कार्यक्रम / पूजा का नाम', 'gu': 'લાઈવ કાર્યક્રમ / પૂજાનું નામ', 'mr': 'लाईव्ह कार्यक्रम / पूजेचे नाव'},
+    'start live camera now': {'en': 'Start Live Camera Now', 'hi': 'अभी लाइव कैमरा शुरू करें', 'gu': 'હમણાં લાઈવ કેમેરા શરૂ કરો', 'mr': 'आत्ता लाईव्ह कॅमेरा सुरू करा'},
+    'event date': {'en': 'Event Date', 'hi': 'कार्यक्रम तिथि', 'gu': 'કાર્યક્રમ તારીખ', 'mr': 'कार्यक्रम तारीख'},
+    'event time': {'en': 'Event Time', 'hi': 'कार्यक्रम समय', 'gu': 'કાર્યક્રમ સમય', 'mr': 'कार्यक्रम वेळ'},
+    'schedule & notify devotees': {'en': 'Schedule & Notify Devotees', 'hi': 'शेड्यूल करें और भक्तों को सूचित करें', 'gu': 'શેડ્યૂલ કરો અને ભક્તોને જાણ કરો', 'mr': 'शेड्युल करा आणि भक्तांना सूचित करा'},
+    'save': {'en': 'Save', 'hi': 'सहेजें', 'gu': 'સાચવો', 'mr': 'जतन करा'},
+    'festival not started yet ⏳': {'en': 'Festival Not Started Yet ⏳', 'hi': 'उत्सव अभी शुरू नहीं हुआ ⏳', 'gu': 'ઉત્સવ હજુ શરૂ થયો નથી ⏳', 'mr': 'उत्सव अद्याप सुरू झाला नाही ⏳'},
+    'understood': {'en': 'Understood', 'hi': 'समझ गया', 'gu': 'સમજાયું', 'mr': 'समजले'},
+    'upcoming': {'en': 'Upcoming', 'hi': 'आगामी', 'gu': 'આગામી', 'mr': 'आगामी'},
+    'no posts available': {'en': 'No posts available', 'hi': 'कोई पोस्ट उपलब्ध नहीं है', 'gu': 'કોઈ પોસ્ટ ઉપલબ્ધ નથી', 'mr': 'कोणतीही पोस्ट उपलब्ध नाही'},
 
     // Festivals
     'pre navratri': {'en': 'Pre Navratri', 'hi': 'प्री नवरात्रि', 'gu': 'પ્રી નવરાત્રી', 'mr': 'प्री नवरात्री'},
@@ -335,7 +413,13 @@ class LocalizedApiHelper {
           return match[currentCode]!;
         }
 
-        // Deep Dynamic Translation (Sentence / Phrase token substitution)
+        // 1. Check Dynamic Translation Service (Google Translator engine + persistent cache)
+        final dynamicTrans = DynamicTranslationService.instance.translateSync(trimmed, targetLang: currentCode);
+        if (dynamicTrans != trimmed) {
+          return dynamicTrans;
+        }
+
+        // 2. Deep Dynamic Translation (Sentence / Phrase token substitution)
         String translated = trimmed;
         bool hasReplacements = false;
         for (final entry in _sortedCanonicalEntries) {
@@ -372,10 +456,12 @@ class LocalizedApiHelper {
         }
       }
 
-      // 2. Fallback to English
+      // 2. Fallback to English and translate it dynamically into target language
       if (value.containsKey('en')) {
         final val = value['en']?.toString().trim() ?? '';
-        if (val.isNotEmpty) return val;
+        if (val.isNotEmpty) {
+          return parse(val, defaultValue: defaultValue, context: context);
+        }
       }
 
       // 3. Fallback to Hindi

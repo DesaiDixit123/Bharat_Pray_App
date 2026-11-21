@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'core/localization/language_manager.dart';
+import 'core/localization/dynamic_translation_service.dart';
 import 'l10n/app_localizations.dart';
 import 'screens/splash_screen.dart';
 import 'services/fcm_notification_service.dart';
@@ -23,8 +24,9 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
   
-  // Initialize Persistent Language Management
+  // Initialize Persistent Language Management & Dynamic Translation Engine
   await LanguageManager.instance.initialize();
+  await DynamicTranslationService.instance.initialize();
 
   // Initialize Firebase and Sacred Push Notification Service
   try {
@@ -58,7 +60,10 @@ class BharatPrayApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: LanguageManager.instance,
+      listenable: Listenable.merge([
+        LanguageManager.instance,
+        DynamicTranslationService.instance,
+      ]),
       builder: (context, _) {
         return MaterialApp(
           navigatorKey: rootNavigatorKey,

@@ -11,6 +11,8 @@ import 'live_darshan_dashboard_screen.dart';
 import 'mandal_leaderboard_tab_content.dart';
 import 'mandal_profile_screen.dart';
 import '../../services/utsav_service.dart';
+import '../../core/localization/language_manager.dart';
+import '../../core/localization/dynamic_translation_service.dart';
 import '../../core/localization/localized_api_helper.dart';
 
 
@@ -54,9 +56,15 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
   @override
   void initState() {
     super.initState();
+    LanguageManager.instance.addListener(_onLanguageOrTranslationChanged);
+    DynamicTranslationService.instance.addListener(_onLanguageOrTranslationChanged);
     _bannerController = PageController(viewportFraction: 0.92);
     _startBannerTimer();
     _loadUtsavData();
+  }
+
+  void _onLanguageOrTranslationChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadUtsavData() async {
@@ -128,6 +136,8 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
 
   @override
   void dispose() {
+    LanguageManager.instance.removeListener(_onLanguageOrTranslationChanged);
+    DynamicTranslationService.instance.removeListener(_onLanguageOrTranslationChanged);
     _bannerTimer?.cancel();
     _bannerController.dispose();
     super.dispose();
@@ -541,7 +551,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
         ),
         child: Center(
           child: Text(
-            label,
+            LocalizedApiHelper.parse(label),
             style: GoogleFonts.outfit(
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -730,7 +740,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
                           const Icon(Icons.app_registration_rounded, size: 14, color: Colors.white),
                           const SizedBox(width: 4),
                           Text(
-                            'Register',
+                            LocalizedApiHelper.parse('Register'),
                             style: GoogleFonts.outfit(
                               fontSize: 12.5,
                               fontWeight: FontWeight.bold,
@@ -921,7 +931,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
               const Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF27AE60)),
               const SizedBox(width: 4),
               Text(
-                'Mandal Approved',
+                LocalizedApiHelper.parse('Mandal Approved'),
                 style: GoogleFonts.outfit(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
@@ -937,7 +947,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
               const Icon(Icons.cancel_rounded, size: 14, color: Color(0xFFE74C3C)),
               const SizedBox(width: 4),
               Text(
-                'Registration Rejected',
+                LocalizedApiHelper.parse('Registration Rejected'),
                 style: GoogleFonts.outfit(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
@@ -954,7 +964,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
               const Icon(Icons.hourglass_top_rounded, size: 14, color: Color(0xFFE67E22)),
               const SizedBox(width: 4),
               Text(
-                'Verification in Progress ⏳',
+                LocalizedApiHelper.parse('Verification in Progress ⏳'),
                 style: GoogleFonts.outfit(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
@@ -987,7 +997,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
     }
 
     return Text(
-      text,
+      LocalizedApiHelper.parse(text),
       style: GoogleFonts.outfit(
         fontSize: 13,
         fontWeight: FontWeight.w600,
@@ -1043,7 +1053,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
         ),
         const SizedBox(height: 16),
         Text(
-          'હાલમાં કોઈ ઉત્સવ ઉપલબ્ધ નથી',
+          LocalizedApiHelper.parse('No Active Festivals Today'),
           textAlign: TextAlign.center,
           style: GoogleFonts.outfit(
             fontSize: 18,
@@ -1053,7 +1063,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
         ),
         const SizedBox(height: 8),
         Text(
-          'No Active Festivals Today\nનવા ઉત્સવની વિગતો અહીં ટૂંક સમયમાં જોવા મળશે.',
+          LocalizedApiHelper.parse('New festival details will be available here soon.'),
           textAlign: TextAlign.center,
           style: GoogleFonts.outfit(
             fontSize: 13.5,
@@ -1068,7 +1078,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
           },
           icon: const Icon(Icons.app_registration_rounded, size: 18, color: Colors.white),
           label: Text(
-            'View Register Open Festivals',
+            LocalizedApiHelper.parse('View Register Open Festivals'),
             style: GoogleFonts.outfit(
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -1103,7 +1113,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
         ),
         const SizedBox(height: 16),
         Text(
-          'હાલમાં કોઈ રજિસ્ટ્રેશન ઓપન નથી',
+          LocalizedApiHelper.parse('No Registrations Open Currently'),
           textAlign: TextAlign.center,
           style: GoogleFonts.outfit(
             fontSize: 18,
@@ -1113,7 +1123,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
         ),
         const SizedBox(height: 8),
         Text(
-          'No Registrations Open Currently\nનવા ઉત્સવનું રજિસ્ટ્રેશન શરૂ થશે ત્યારે તે અહીં જોવા મળશે.',
+          LocalizedApiHelper.parse('New festival registrations will appear here when opened.'),
           textAlign: TextAlign.center,
           style: GoogleFonts.outfit(
             fontSize: 13.5,
@@ -1140,7 +1150,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
         ),
         const SizedBox(height: 16),
         Text(
-          'No Top Mandals Yet',
+          LocalizedApiHelper.parse('No Top Mandals Yet'),
           textAlign: TextAlign.center,
           style: GoogleFonts.outfit(
             fontSize: 18,
@@ -1150,7 +1160,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Top mandals will be featured when an active festival begins.',
+          LocalizedApiHelper.parse('Top mandals will be featured when an active festival begins.'),
           textAlign: TextAlign.center,
           style: GoogleFonts.outfit(
             fontSize: 13.5,
@@ -1258,7 +1268,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
               ),
             const SizedBox(height: 4),
             Text(
-              label,
+              LocalizedApiHelper.parse(label),
               style: GoogleFonts.outfit(
                 color: isActive ? activeColor : inactiveColor,
                 fontWeight: isActive ? FontWeight.bold : FontWeight.w500,

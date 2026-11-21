@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
+import '../../core/localization/localized_api_helper.dart';
 import '../../services/utsav_service.dart';
 import 'mandal_profile_screen.dart';
 
@@ -237,7 +238,7 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          "Create Mandal Reel 🎬",
+          LocalizedApiHelper.parse("Create Mandal Reel 🎬"),
           style: GoogleFonts.outfit(color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold, fontSize: 18),
         ),
       ),
@@ -247,7 +248,7 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "Upload Reel Video:",
+              LocalizedApiHelper.parse("Upload Reel Video:"),
               style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF2E2A36)),
             ),
             const SizedBox(height: 10),
@@ -279,12 +280,12 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            "Tap to Select Reel Video",
+                            LocalizedApiHelper.parse("Tap to Select Reel Video"),
                             style: GoogleFonts.outfit(color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold, fontSize: 16),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            "Record Camera Video or Browse Gallery",
+                            LocalizedApiHelper.parse("Record Camera Video or Browse Gallery"),
                             style: GoogleFonts.outfit(color: Colors.grey, fontSize: 12),
                           ),
                         ],
@@ -388,7 +389,7 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
             const SizedBox(height: 24),
 
             Text(
-              "Reel Title & Description:",
+              LocalizedApiHelper.parse("Reel Title & Description:"),
               style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF2E2A36)),
             ),
             const SizedBox(height: 8),
@@ -396,7 +397,7 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
               controller: _titleController,
               style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF2E2A36)),
               decoration: InputDecoration(
-                hintText: "Reel Title (e.g. Somnath Damru Aarti Clips)",
+                hintText: LocalizedApiHelper.parse("Reel Title (e.g. Somnath Damru Aarti Clips)"),
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
@@ -406,7 +407,7 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
             const SizedBox(height: 18),
 
             Text(
-              "Audio / Dhun Track Name:",
+              LocalizedApiHelper.parse("Audio / Dhun Track Name:"),
               style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF2E2A36)),
             ),
             const SizedBox(height: 8),
@@ -415,7 +416,7 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
               style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF2E2A36)),
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.music_note_rounded, color: Color(0xFFFF7700), size: 22),
-                hintText: "Add Audio Soundtrack",
+                hintText: LocalizedApiHelper.parse("Add Audio Soundtrack"),
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
@@ -448,11 +449,11 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Registered Festival",
+                          LocalizedApiHelper.parse("Registered Festival"),
                           style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
                         ),
                         Text(
-                          _festivalName,
+                          LocalizedApiHelper.parse(_festivalName),
                           style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF2E2A36), fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -465,7 +466,7 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      "Auto-Linked",
+                      LocalizedApiHelper.parse("Auto-Linked"),
                       style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF2E7D32)),
                     ),
                   ),
@@ -487,7 +488,7 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
                 ),
                 icon: const Icon(Icons.video_library_rounded, size: 22),
                 label: Text(
-                  "Publish Reel to Mandal Profile",
+                  LocalizedApiHelper.parse("Publish Reel to Mandal Profile"),
                   style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 onPressed: () async {

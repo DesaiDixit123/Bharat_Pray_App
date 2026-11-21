@@ -7,6 +7,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
+import '../../core/localization/dynamic_translation_service.dart';
+import '../../core/localization/language_manager.dart';
+import '../../core/localization/localized_api_helper.dart';
 import '../../services/api_service.dart';
 import '../../services/saved_items_service.dart';
 import '../../services/utsav_service.dart';
@@ -277,6 +280,8 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
   @override
   void initState() {
     super.initState();
+    LanguageManager.instance.addListener(_onLanguageOrTranslationChanged);
+    DynamicTranslationService.instance.addListener(_onLanguageOrTranslationChanged);
     if (widget.mandalName != null && widget.mandalName!.isNotEmpty) {
       _mandalName = widget.mandalName!;
     }
@@ -291,8 +296,14 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
     _startStatusPolling();
   }
 
+  void _onLanguageOrTranslationChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    LanguageManager.instance.removeListener(_onLanguageOrTranslationChanged);
+    DynamicTranslationService.instance.removeListener(_onLanguageOrTranslationChanged);
     _statusPollTimer?.cancel();
     super.dispose();
   }
@@ -958,7 +969,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                       const Icon(Icons.verified_user_rounded, color: Colors.white, size: 14),
                       const SizedBox(width: 4),
                       Text(
-                        "Admin Approved",
+                        LocalizedApiHelper.parse("Admin Approved"),
                         style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
                       ),
                     ],
@@ -1016,7 +1027,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _mandalName,
+                      LocalizedApiHelper.parse(_mandalName),
                       style: GoogleFonts.outfit(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -1025,7 +1036,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      _mandalTag,
+                      LocalizedApiHelper.parse(_mandalTag),
                       style: GoogleFonts.outfit(
                         fontSize: 12,
                         color: const Color(0xFF2E2A36).withOpacity(0.6),
@@ -1037,7 +1048,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
 
                 if (_bio.trim().isNotEmpty) ...[
                   Text(
-                    _bio,
+                    LocalizedApiHelper.parse(_bio),
                     style: GoogleFonts.outfit(
                       fontSize: 13,
                       color: const Color(0xFF2E2A36).withOpacity(0.9),
@@ -1057,11 +1068,11 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _buildProfileStatColumn("${_posts.length}", "Posts"),
+                      _buildProfileStatColumn("${_posts.length}", LocalizedApiHelper.parse("Posts")),
                       Container(height: 24, width: 1, color: Colors.grey.shade300),
-                      _buildProfileStatColumn("${_reels.length}", "Reels"),
+                      _buildProfileStatColumn("${_reels.length}", LocalizedApiHelper.parse("Reels")),
                       Container(height: 24, width: 1, color: Colors.grey.shade300),
-                      _buildProfileStatColumn("${_liveEvents.length}", "Lives"),
+                      _buildProfileStatColumn("${_liveEvents.length}", LocalizedApiHelper.parse("Lives")),
                     ],
                   ),
                 ),
@@ -1104,7 +1115,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
-                                    "Add Post",
+                                    LocalizedApiHelper.parse("Add Post"),
                                     style: GoogleFonts.outfit(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 13,
@@ -1155,7 +1166,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
-                                    "Add Reel",
+                                    LocalizedApiHelper.parse("Add Reel"),
                                     style: GoogleFonts.outfit(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 13,
@@ -1202,7 +1213,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
-                                    "Go Live",
+                                    LocalizedApiHelper.parse("Go Live"),
                                     style: GoogleFonts.outfit(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 13,
@@ -1232,7 +1243,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              "Posts, Reels and Live will unlock once the festival starts ($_festivalStartDateStr).",
+                              "${LocalizedApiHelper.parse("Posts, Reels and Live will unlock once the festival starts")} ($_festivalStartDateStr).",
                               style: GoogleFonts.outfit(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w500,
@@ -1258,7 +1269,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                       ),
                       icon: const Icon(Icons.share_rounded, color: Colors.white, size: 18),
                       label: Text(
-                        "Share Mandal",
+                        LocalizedApiHelper.parse("Share Mandal"),
                         style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14),
                       ),
                       onPressed: () {
@@ -1285,10 +1296,10 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
             ),
             child: Row(
               children: [
-                _buildTabItem(0, Icons.grid_on_rounded, "Posts (${_posts.length})"),
-                _buildTabItem(1, Icons.video_collection_rounded, "Reels (${_reels.length})"),
-                _buildTabItem(2, Icons.live_tv_rounded, "Live"),
-                _buildTabItem(3, Icons.info_outline_rounded, "Mandal Info"),
+                _buildTabItem(0, Icons.grid_on_rounded, "${LocalizedApiHelper.parse("Posts")} (${_posts.length})"),
+                _buildTabItem(1, Icons.video_collection_rounded, "${LocalizedApiHelper.parse("Reels")} (${_reels.length})"),
+                _buildTabItem(2, Icons.live_tv_rounded, LocalizedApiHelper.parse("Live")),
+                _buildTabItem(3, Icons.info_outline_rounded, LocalizedApiHelper.parse("Mandal Info")),
               ],
             ),
           ),
@@ -1337,7 +1348,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
               ),
               const SizedBox(height: 16),
               Text(
-                "No Posts Yet",
+                LocalizedApiHelper.parse("No Posts Yet"),
                 style: GoogleFonts.outfit(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -1346,9 +1357,11 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
               ),
               const SizedBox(height: 6),
               Text(
-                widget.isOwnProfile
-                    ? "Tap 'Add Post' to share your first Mandal update!"
-                    : "No posts shared by this Mandal yet.",
+                LocalizedApiHelper.parse(
+                  widget.isOwnProfile
+                      ? "Tap 'Add Post' to share your first Mandal update!"
+                      : "No posts shared by this Mandal yet.",
+                ),
                 textAlign: TextAlign.center,
                 style: GoogleFonts.outfit(
                   fontSize: 13,
@@ -1435,7 +1448,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
               ),
               const SizedBox(height: 16),
               Text(
-                "No Reels Yet",
+                LocalizedApiHelper.parse("No Reels Yet"),
                 style: GoogleFonts.outfit(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -1444,9 +1457,11 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
               ),
               const SizedBox(height: 6),
               Text(
-                widget.isOwnProfile
-                    ? "Tap 'Add Reel' to upload divine video clips!"
-                    : "No reels uploaded by this Mandal yet.",
+                LocalizedApiHelper.parse(
+                  widget.isOwnProfile
+                      ? "Tap 'Add Reel' to upload divine video clips!"
+                      : "No reels uploaded by this Mandal yet.",
+                ),
                 textAlign: TextAlign.center,
                 style: GoogleFonts.outfit(
                   fontSize: 13,
@@ -1518,7 +1533,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            "Live Stream Broadcasts & History",
+            LocalizedApiHelper.parse("Live Stream Broadcasts & History"),
             style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
           ),
           const SizedBox(height: 12),
@@ -1549,7 +1564,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      "No Live Streams Yet",
+                      LocalizedApiHelper.parse("No Live Streams Yet"),
                       style: GoogleFonts.outfit(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -1558,9 +1573,11 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      widget.isOwnProfile
-                          ? "Use the 'Go Live' button above to start your live broadcast."
-                          : "No live broadcasts or past streams available.",
+                      LocalizedApiHelper.parse(
+                        widget.isOwnProfile
+                            ? "Use the 'Go Live' button above to start your live broadcast."
+                            : "No live broadcasts or past streams available.",
+                      ),
                       textAlign: TextAlign.center,
                       style: GoogleFonts.outfit(
                         fontSize: 13,
@@ -1607,7 +1624,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
-                                    live.status,
+                                    LocalizedApiHelper.parse(live.status),
                                     style: GoogleFonts.outfit(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
@@ -1621,7 +1638,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              live.title,
+                              LocalizedApiHelper.parse(live.title),
                               style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
                             ),
                             Text(
@@ -1668,18 +1685,18 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                     const Icon(Icons.verified_user_rounded, color: Color(0xFF2E7D32), size: 24),
                     const SizedBox(width: 8),
                     Text(
-                      "Official Registration Certificate",
+                      LocalizedApiHelper.parse("Official Registration Certificate"),
                       style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
                     ),
                   ],
                 ),
                 const SizedBox(height: 14),
-                _buildInfoRow("Registration Number:", _regNumber),
-                _buildInfoRow("Status:", _statusText),
-                _buildInfoRow("Approved Date:", _approvedDate),
-                _buildInfoRow("Mandal President:", _presidentName),
-                _buildInfoRow("Official Phone:", displayPhone),
-                _buildInfoRow("Location:", _location),
+                _buildInfoRow(LocalizedApiHelper.parse("Registration Number:"), _regNumber),
+                _buildInfoRow(LocalizedApiHelper.parse("Status:"), LocalizedApiHelper.parse(_statusText)),
+                _buildInfoRow(LocalizedApiHelper.parse("Approved Date:"), LocalizedApiHelper.parse(_approvedDate)),
+                _buildInfoRow(LocalizedApiHelper.parse("Mandal President:"), LocalizedApiHelper.parse(_presidentName)),
+                _buildInfoRow(LocalizedApiHelper.parse("Official Phone:"), displayPhone),
+                _buildInfoRow(LocalizedApiHelper.parse("Location:"), LocalizedApiHelper.parse(_location)),
               ],
             ),
           ),
@@ -1745,7 +1762,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Live Broadcast Options",
+                          LocalizedApiHelper.parse("Live Broadcast Options"),
                           style: GoogleFonts.outfit(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -1753,7 +1770,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                           ),
                         ),
                         Text(
-                          "Broadcast live spiritual Darshan for $_mandalName",
+                          "${LocalizedApiHelper.parse("Broadcast live spiritual Darshan for")} ${LocalizedApiHelper.parse(_mandalName)}",
                           style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey.shade600),
                         ),
                       ],
@@ -1768,9 +1785,9 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                 icon: Icons.videocam_rounded,
                 iconBg: const Color(0xFFD32F2F).withOpacity(0.12),
                 iconColor: const Color(0xFFD32F2F),
-                title: "Instant Live",
-                subtitle: "Start live streaming immediately via device camera",
-                badge: "GO LIVE NOW",
+                title: LocalizedApiHelper.parse("Instant Live"),
+                subtitle: LocalizedApiHelper.parse("Start live streaming immediately via device camera"),
+                badge: LocalizedApiHelper.parse("GO LIVE NOW"),
                 badgeColor: const Color(0xFFD32F2F),
                 onTap: () {
                   Navigator.pop(context);
@@ -1785,9 +1802,9 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                 icon: Icons.calendar_today_rounded,
                 iconBg: const Color(0xFFFF7700).withOpacity(0.12),
                 iconColor: const Color(0xFFFF7700),
-                title: "Schedule Live",
-                subtitle: "Set date & time, devotees will be notified automatically",
-                badge: "SET TIME & DATE",
+                title: LocalizedApiHelper.parse("Schedule Live"),
+                subtitle: LocalizedApiHelper.parse("Set date & time, devotees will be notified automatically"),
+                badge: LocalizedApiHelper.parse("SET TIME & DATE"),
                 badgeColor: const Color(0xFFFF7700),
                 onTap: () {
                   Navigator.pop(context);
@@ -1929,21 +1946,21 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                     ),
                     const SizedBox(width: 10),
                     Text(
-                      "Instant Live Broadcast",
+                      LocalizedApiHelper.parse("Instant Live Broadcast"),
                       style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  "Live Stream / Aarti Name",
+                  LocalizedApiHelper.parse("Live Stream / Aarti Name"),
                   style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF2E2A36)),
                 ),
                 const SizedBox(height: 8),
                 TextField(
                   controller: titleController,
                   decoration: InputDecoration(
-                    hintText: "Enter live stream name...",
+                    hintText: LocalizedApiHelper.parse("Enter live stream name..."),
                     filled: true,
                     fillColor: Colors.white,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -1965,7 +1982,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                     ),
                     icon: const Icon(Icons.videocam_rounded, size: 20),
                     label: Text(
-                      "Start Live Camera Now",
+                      LocalizedApiHelper.parse("Start Live Camera Now"),
                       style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15),
                     ),
                     onPressed: () {
@@ -2037,7 +2054,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                         ),
                         const SizedBox(width: 10),
                         Text(
-                          "Schedule Live Broadcast",
+                          LocalizedApiHelper.parse("Schedule Live Broadcast"),
                           style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36)),
                         ),
                       ],
@@ -2046,14 +2063,14 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
 
                     // Name / Title Input
                     Text(
-                      "Live Event / Puja Name",
+                      LocalizedApiHelper.parse("Live Event / Puja Name"),
                       style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF2E2A36)),
                     ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: titleController,
                       decoration: InputDecoration(
-                        hintText: "e.g. Sunderkand Path, Sandhya Aarti...",
+                        hintText: LocalizedApiHelper.parse("e.g. Sunderkand Path, Sandhya Aarti..."),
                         filled: true,
                         fillColor: Colors.white,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -2073,7 +2090,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "Event Date",
+                                LocalizedApiHelper.parse("Event Date"),
                                 style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w600, color: const Color(0xFF2E2A36)),
                               ),
                               const SizedBox(height: 6),
@@ -2124,7 +2141,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "Event Time",
+                                LocalizedApiHelper.parse("Event Time"),
                                 style: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w600, color: const Color(0xFF2E2A36)),
                               ),
                               const SizedBox(height: 6),
@@ -2184,7 +2201,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              "All Mandal devotees will be sent an automated notification alert at scheduled time.",
+                              LocalizedApiHelper.parse("All Mandal devotees will be sent an automated notification alert at scheduled time."),
                               style: GoogleFonts.outfit(fontSize: 11.5, color: const Color(0xFFE65100), fontWeight: FontWeight.w500),
                             ),
                           ),
@@ -2207,7 +2224,7 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                         ),
                         icon: const Icon(Icons.notifications_rounded, size: 20),
                         label: Text(
-                          "Schedule & Notify Devotees",
+                          LocalizedApiHelper.parse("Schedule & Notify Devotees"),
                           style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15),
                         ),
                         onPressed: () {
@@ -2337,10 +2354,10 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
         children: [
           SizedBox(
             width: 130,
-            child: Text(label, style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey)),
+            child: Text(LocalizedApiHelper.parse(label), style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey)),
           ),
           Expanded(
-            child: Text(val, style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36))),
+            child: Text(LocalizedApiHelper.parse(val), style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF2E2A36))),
           ),
         ],
       ),
@@ -2463,7 +2480,7 @@ class _MandalPostsFeedScreenState extends State<MandalPostsFeedScreen> {
             onPressed: () => Navigator.pop(context),
           ),
           title: Text(
-            "Posts",
+            LocalizedApiHelper.parse("Posts"),
             style: GoogleFonts.outfit(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -2495,7 +2512,7 @@ class _MandalPostsFeedScreenState extends State<MandalPostsFeedScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    "No posts available",
+                    LocalizedApiHelper.parse("No posts available"),
                     style: GoogleFonts.outfit(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
@@ -2610,10 +2627,10 @@ class _MandalPostsFeedScreenState extends State<MandalPostsFeedScreen> {
                                     context: context,
                                     builder: (ctx) => AlertDialog(
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                      title: const Text("Delete Post?"),
-                                      content: const Text("Are you sure you want to delete this sacred post?"),
+                                      title: Text(LocalizedApiHelper.parse("Delete Post?")),
+                                      content: Text(LocalizedApiHelper.parse("Are you sure you want to delete this sacred post?")),
                                       actions: [
-                                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+                                        TextButton(onPressed: () => Navigator.pop(ctx), child: Text(LocalizedApiHelper.parse("Cancel"))),
                                         ElevatedButton(
                                           style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
                                           onPressed: () {
@@ -2623,7 +2640,7 @@ class _MandalPostsFeedScreenState extends State<MandalPostsFeedScreen> {
                                             });
                                             widget.onPostDeleted?.call(post.id);
                                           },
-                                          child: const Text("Delete", style: TextStyle(color: Colors.white)),
+                                          child: Text(LocalizedApiHelper.parse("Delete"), style: const TextStyle(color: Colors.white)),
                                         ),
                                       ],
                                     ),
@@ -3136,7 +3153,7 @@ class _SingleReelViewState extends State<_SingleReelView> {
                     }
                   },
                 ),
-                Text("Save", style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                Text(LocalizedApiHelper.parse("Save"), style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
                 const SizedBox(height: 16),
                 IconButton(
                   icon: const Icon(Icons.send_rounded, color: Colors.white, size: 30),
@@ -3147,7 +3164,7 @@ class _SingleReelViewState extends State<_SingleReelView> {
                     );
                   },
                 ),
-                Text("Share", style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                Text(LocalizedApiHelper.parse("Share"), style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
               ],
             ),
           ),

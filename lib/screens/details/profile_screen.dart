@@ -1,4 +1,5 @@
 import '../../core/localization/language_manager.dart';
+import '../../core/localization/dynamic_translation_service.dart';
 import '../../core/localization/localized_api_helper.dart';
 import '../../features/language_selection/presentation/language_selection_screen.dart';
 import 'dart:async';
@@ -71,12 +72,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    LanguageManager.instance.addListener(_onLanguageOrTranslationChanged);
+    DynamicTranslationService.instance.addListener(_onLanguageOrTranslationChanged);
     _loadProfileData();
     _startStatusPolling();
   }
 
+  void _onLanguageOrTranslationChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    LanguageManager.instance.removeListener(_onLanguageOrTranslationChanged);
+    DynamicTranslationService.instance.removeListener(_onLanguageOrTranslationChanged);
     _statusPollTimer?.cancel();
     super.dispose();
   }
@@ -671,7 +680,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           child: UserAvatar(
                             profilePic: _profilePic,
-                            userName: _userName,
+                            userName: LocalizedApiHelper.parse(_userName),
                             size: 104,
                             fontSize: 36,
                             borderColor: const Color(0xFFFF7700),
@@ -699,7 +708,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      '$_userName ☀️',
+                      '${LocalizedApiHelper.parse(_userName)} ☀️',
                       style: GoogleFonts.outfit(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
@@ -907,7 +916,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        "$mandalName 🚩",
+                                        "${LocalizedApiHelper.parse(mandalName)} 🚩",
                                         style: GoogleFonts.outfit(
                                           color: const Color(0xFFFF7700),
                                           fontWeight: FontWeight.bold,

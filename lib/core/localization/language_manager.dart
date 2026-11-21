@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'language_model.dart';
+import 'dynamic_translation_service.dart';
 
 class LanguageManager extends ChangeNotifier {
   LanguageManager._internal();
@@ -66,6 +67,7 @@ class LanguageManager extends ChangeNotifier {
       debugPrint('[LanguageManager] Save error: $e');
     }
 
+    DynamicTranslationService.instance.onLanguageChanged(_currentLocale.languageCode);
     notifyListeners();
   }
 

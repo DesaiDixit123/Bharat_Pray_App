@@ -3,6 +3,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../core/localization/localized_api_helper.dart';
 import '../../services/utsav_service.dart';
 
 class GoLiveStudioScreen extends StatefulWidget {
@@ -222,7 +223,7 @@ class _GoLiveStudioScreenState extends State<GoLiveStudioScreen> {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        Text("LIVE", style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                        Text(LocalizedApiHelper.parse("LIVE"), style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                       ],
                     ),
                   )
@@ -233,7 +234,7 @@ class _GoLiveStudioScreenState extends State<GoLiveStudioScreen> {
                       color: Colors.black54,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Text("LIVE CAMERA STUDIO", style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                    child: Text(LocalizedApiHelper.parse("LIVE CAMERA STUDIO"), style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
 
                 const SizedBox(width: 10),
@@ -249,7 +250,7 @@ class _GoLiveStudioScreenState extends State<GoLiveStudioScreen> {
                       children: [
                         const Icon(Icons.remove_red_eye_rounded, color: Colors.white, size: 16),
                         const SizedBox(width: 6),
-                        Text("$_viewerCount Viewers", style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                        Text("$_viewerCount ${LocalizedApiHelper.parse("Viewers")}", style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                       ],
                     ),
                   ),
@@ -281,7 +282,7 @@ class _GoLiveStudioScreenState extends State<GoLiveStudioScreen> {
                     controller: _liveTitleController,
                     style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                     decoration: InputDecoration(
-                      hintText: "Add Live Stream Title...",
+                      hintText: LocalizedApiHelper.parse("Add Live Stream Title..."),
                       hintStyle: GoogleFonts.outfit(color: Colors.white60),
                       filled: true,
                       fillColor: Colors.black54,
@@ -302,7 +303,7 @@ class _GoLiveStudioScreenState extends State<GoLiveStudioScreen> {
                       ),
                       icon: const Icon(Icons.sensors_rounded, size: 26),
                       label: Text(
-                        "START LIVE BROADCAST",
+                        LocalizedApiHelper.parse("START LIVE BROADCAST"),
                         style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                       ),
                       onPressed: _startLiveStream,
@@ -375,7 +376,7 @@ class _GoLiveStudioScreenState extends State<GoLiveStudioScreen> {
                     },
                   ),
                   Text(
-                    "Share",
+                    LocalizedApiHelper.parse("Share"),
                     style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                   ),
                 ],
@@ -398,7 +399,7 @@ class _GoLiveStudioScreenState extends State<GoLiveStudioScreen> {
                   ),
                   onPressed: _endLiveStream,
                   child: Text(
-                    "END LIVE BROADCAST",
+                    LocalizedApiHelper.parse("END LIVE BROADCAST"),
                     style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 0.5),
                   ),
                 ),

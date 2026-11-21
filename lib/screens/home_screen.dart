@@ -1,5 +1,6 @@
 import '../core/localization/app_localization.dart';
 import '../core/localization/language_manager.dart';
+import '../core/localization/dynamic_translation_service.dart';
 import '../core/localization/localized_api_helper.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -149,12 +150,18 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    LanguageManager.instance.addListener(_onLanguageOrTranslationChanged);
+    DynamicTranslationService.instance.addListener(_onLanguageOrTranslationChanged);
     _pageController = PageController(initialPage: 0);
     _loadRecentSearches();
     _searchFocusNode.addListener(_onSearchFocusChanged);
     _loadProfileName();
     _loadFestivals();
     GlobalSocketService.instance.connect();
+  }
+
+  void _onLanguageOrTranslationChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadFestivals() async {
@@ -890,7 +897,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   UserAvatar(
                     profilePic: _profilePic,
-                    userName: _profileName,
+                    userName: LocalizedApiHelper.parse(_profileName),
                     size: 48,
                     borderColor: const Color(0xFFFF7700).withValues(alpha: 0.2),
                     borderWidth: 1.5,
@@ -917,7 +924,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '$greeting, $_profileName $icon',
+                        '$greeting, ${LocalizedApiHelper.parse(_profileName)} $icon',
                         style: GoogleFonts.outfit(
                           fontSize: 13,
                           color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
@@ -993,6 +1000,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    LanguageManager.instance.removeListener(_onLanguageOrTranslationChanged);
+    DynamicTranslationService.instance.removeListener(_onLanguageOrTranslationChanged);
     YatraPersonalChatService().unreadMessageCount.removeListener(_onUnreadMessagesChanged);
     _carouselTimer?.cancel();
     _pageController.dispose();
@@ -1903,7 +1912,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              theme.name,
+                              LocalizedApiHelper.parse(theme.name),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.outfit(
@@ -1920,7 +1929,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              '108 Jap',
+                              '108 ${LocalizedApiHelper.parse('Jap')}',
                               style: GoogleFonts.outfit(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
@@ -1932,7 +1941,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Mantra: ${theme.mantraText}',
+                        '${LocalizedApiHelper.parse('Mantra')}: ${LocalizedApiHelper.parse(theme.mantraText)}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.outfit(
@@ -1943,7 +1952,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        theme.blessingSubtitle,
+                        LocalizedApiHelper.parse(theme.blessingSubtitle),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.outfit(
@@ -2024,7 +2033,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        yatra.title,
+                        LocalizedApiHelper.parse(yatra.title),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.outfit(
@@ -2038,7 +2047,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           if (yatra.distance.isNotEmpty) ...[
                             Text(
-                              yatra.distance,
+                              LocalizedApiHelper.parse(yatra.distance),
                               style: GoogleFonts.outfit(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -2051,7 +2060,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ],
                           if (yatra.duration.isNotEmpty)
                             Text(
-                              yatra.duration,
+                              LocalizedApiHelper.parse(yatra.duration),
                               style: GoogleFonts.outfit(
                                 fontSize: 12,
                                 color: const Color(0xFF8C8797),
@@ -2061,7 +2070,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        yatra.steps.isNotEmpty ? '${yatra.steps} • Pilgrimage' : 'Sacred pilgrimage journey',
+                        yatra.steps.isNotEmpty ? '${yatra.steps} • ${LocalizedApiHelper.parse('Pilgrimage')}' : LocalizedApiHelper.parse('Sacred pilgrimage journey'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.outfit(
@@ -2134,7 +2143,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        title,
+                        LocalizedApiHelper.parse(title),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.outfit(
@@ -2145,7 +2154,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        subtitle,
+                        LocalizedApiHelper.parse(subtitle),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.outfit(
@@ -2172,7 +2181,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  isLive ? 'LIVE' : 'OFFLINE',
+                                  LocalizedApiHelper.parse(isLive ? 'LIVE' : 'OFFLINE'),
                                   style: GoogleFonts.outfit(
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
@@ -2517,7 +2526,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       return SizedBox(
                         width: 208,
                         child: _buildFestivalCard(
-                          title: title.isNotEmpty ? title : 'Festival',
+                          title: LocalizedApiHelper.parse(title.isNotEmpty ? title : 'Festival'),
                           dateText: dateText,
                           rawDate: startDate,
                           formattedDate: formattedDate,
@@ -2963,7 +2972,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 14),
               Text(
-                'Checking Live Streams...',
+                LocalizedApiHelper.parse('Checking Live Streams...'),
                 style: GoogleFonts.outfit(
                   color: Colors.white.withValues(alpha: 0.8),
                   fontSize: 14,
@@ -3054,7 +3063,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              'Offline',
+                              LocalizedApiHelper.parse('Offline'),
                               style: GoogleFonts.outfit(
                                 color: Colors.white,
                                 fontSize: 13,
@@ -3087,7 +3096,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 const Icon(Icons.schedule_rounded, color: Color(0xFFFF9B38), size: 16),
                                 const SizedBox(width: 6),
                                 Text(
-                                  'Aarti Soon',
+                                  LocalizedApiHelper.parse('Aarti Soon'),
                                   style: GoogleFonts.outfit(
                                     color: Colors.white,
                                     fontSize: 13,
@@ -3133,7 +3142,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'No Live Darshan Right Now',
+                        LocalizedApiHelper.parse('No Live Darshan Right Now'),
                         style: GoogleFonts.outfit(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -3142,7 +3151,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'All temple streams are currently off-air. Live Darshan & Aarti will resume during scheduled prayer timings.',
+                        LocalizedApiHelper.parse('All temple streams are currently off-air. Live streams will resume automatically.'),
                         style: GoogleFonts.poppins(
                           fontSize: 13,
                           fontWeight: FontWeight.w400,
@@ -3169,7 +3178,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               icon: const Icon(Icons.explore_rounded, size: 16),
                               label: Text(
-                                'Explore Temples',
+                                LocalizedApiHelper.parse('Explore Temples'),
                                 style: GoogleFonts.outfit(
                                   fontSize: 13.5,
                                   fontWeight: FontWeight.bold,
@@ -3574,7 +3583,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 8),
                     if (title != null)
                       Text(
-                        title,
+                        LocalizedApiHelper.parse(title),
                         style: GoogleFonts.outfit(
                           color: const Color(0xFFFF7700),
                           fontWeight: FontWeight.bold,
@@ -3625,7 +3634,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              label,
+              LocalizedApiHelper.parse(label),
               style: GoogleFonts.outfit(
                 color: const Color(0xFFFF7A00),
                 fontWeight: FontWeight.w600,
@@ -3699,7 +3708,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       right: 50,
                       bottom: showProgressBar ? 24 : 11,
                       child: Text(
-                        title,
+                        LocalizedApiHelper.parse(title),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.outfit(
@@ -4128,7 +4137,7 @@ class _HomeScreenState extends State<HomeScreen> {
               color: themeColor,
               alignment: Alignment.center,
               child: Text(
-                month, // e.g. "Nov"
+                LocalizedApiHelper.parse(month.toLowerCase()), // e.g. "Nov" -> "નવે"
                 style: GoogleFonts.outfit(
                   color: Colors.white,
                   fontSize: 7,
@@ -4156,7 +4165,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 0.5),
                     Text(
-                      day.toUpperCase(), // e.g. "SAT"
+                      LocalizedApiHelper.parse(day.toLowerCase()).toUpperCase(), // e.g. "SAT" -> "શનિ"
                       style: GoogleFonts.outfit(
                         color: themeColor.withValues(alpha: 0.5),
                         fontSize: 5.5,
@@ -4226,7 +4235,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        title,
+                        LocalizedApiHelper.parse(title),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.outfit(
@@ -4500,7 +4509,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           Row(
                             children: [
                               Text(
-                                "Notifications",
+                                LocalizedApiHelper.parse("Notifications"),
                                 style: GoogleFonts.outfit(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
@@ -4516,7 +4525,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Text(
-                                    '$unread New',
+                                    '$unread ${LocalizedApiHelper.parse("New")}',
                                     style: GoogleFonts.outfit(
                                       fontSize: 11,
                                       fontWeight: FontWeight.bold,
@@ -4543,7 +4552,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     setSheetState(() {});
                                   },
                                   child: Text(
-                                    "Mark read",
+                                    LocalizedApiHelper.parse("Mark read"),
                                     style: GoogleFonts.outfit(
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
@@ -4577,7 +4586,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               const Icon(Icons.notifications_none_rounded, size: 36, color: Color(0xFFFF7700)),
                               const SizedBox(height: 8),
                               Text(
-                                "No new notifications right now 🙏",
+                                LocalizedApiHelper.parse("No new notifications right now 🙏"),
                                 style: GoogleFonts.outfit(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
@@ -4636,7 +4645,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                             children: [
                                               Expanded(
                                                 child: Text(
-                                                  n.title,
+                                                  LocalizedApiHelper.parse(n.title),
                                                   maxLines: 1,
                                                   overflow: TextOverflow.ellipsis,
                                                   style: GoogleFonts.outfit(
@@ -4648,7 +4657,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                               ),
                                               const SizedBox(width: 4),
                                               Text(
-                                                n.timeAgo,
+                                                LocalizedApiHelper.parse(n.timeAgo),
                                                 style: GoogleFonts.outfit(
                                                   fontSize: 10,
                                                   color: const Color(0xFF2E2A36).withValues(alpha: 0.45),
@@ -4658,7 +4667,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            n.message,
+                                            LocalizedApiHelper.parse(n.message),
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
                                             style: GoogleFonts.outfit(
@@ -4712,7 +4721,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                "View All Notifications",
+                                LocalizedApiHelper.parse("View All Notifications"),
                                 style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold),
                               ),
                               const SizedBox(width: 6),
@@ -4749,7 +4758,7 @@ class _HomeScreenState extends State<HomeScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  title,
+                  LocalizedApiHelper.parse(title),
                   style: GoogleFonts.outfit(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -4765,7 +4774,8 @@ class _HomeScreenState extends State<HomeScreen> {
             const Divider(color: Color(0xFFEFE6DB), height: 20),
             const SizedBox(height: 8),
             Text(
-              content, style: GoogleFonts.outfit(
+              LocalizedApiHelper.parse(content),
+              style: GoogleFonts.outfit(
                 fontSize: 14,
                 color: const Color(0xFF2E2A36).withValues(alpha: 0.8),
                 height: 1.4,
@@ -4783,7 +4793,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 onPressed: () => Navigator.pop(context),
                 child: Text(
-                  "Mark as Read",
+                  LocalizedApiHelper.parse("Mark as Read"),
                   style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
                 ),
               ),

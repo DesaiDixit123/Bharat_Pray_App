@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/api_service.dart';
+import '../../core/localization/language_manager.dart';
+import '../../core/localization/dynamic_translation_service.dart';
 import '../../core/localization/localized_api_helper.dart';
 import 'deity_temples_screen.dart';
 import 'live_darshan_screen.dart';
@@ -40,12 +42,20 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
   @override
   void initState() {
     super.initState();
+    LanguageManager.instance.addListener(_onLanguageOrTranslationChanged);
+    DynamicTranslationService.instance.addListener(_onLanguageOrTranslationChanged);
     _scrollController.addListener(_onScroll);
     _initData();
   }
 
+  void _onLanguageOrTranslationChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    LanguageManager.instance.removeListener(_onLanguageOrTranslationChanged);
+    DynamicTranslationService.instance.removeListener(_onLanguageOrTranslationChanged);
     _searchController.dispose();
     _scrollController.dispose();
     _debounce?.cancel();
@@ -296,7 +306,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Filter by Location',
+                                LocalizedApiHelper.parse('Filter by Location'),
                                 style: GoogleFonts.outfit(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
@@ -304,7 +314,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                                 ),
                               ),
                               Text(
-                                'Choose state and city to explore temples',
+                                LocalizedApiHelper.parse('Choose state and city to explore temples'),
                                 style: GoogleFonts.outfit(
                                   fontSize: 12,
                                   color: const Color(0xFF2E2A36).withValues(alpha: 0.5),
@@ -331,7 +341,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                       const Icon(Icons.map_rounded, size: 16, color: Color(0xFFFF7700)),
                       const SizedBox(width: 6),
                       Text(
-                        'SELECT STATE',
+                        LocalizedApiHelper.parse('SELECT STATE'),
                         style: GoogleFonts.outfit(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -381,7 +391,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    isAll ? 'All States (Entire India)' : st,
+                                    isAll ? LocalizedApiHelper.parse('All States (Entire India)') : LocalizedApiHelper.parse(st),
                                     style: GoogleFonts.outfit(
                                       fontSize: 14,
                                       fontWeight: st == tempState ? FontWeight.w600 : FontWeight.w400,
@@ -412,7 +422,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                       const Icon(Icons.location_city_rounded, size: 16, color: Color(0xFFFF7700)),
                       const SizedBox(width: 6),
                       Text(
-                        'SELECT CITY / AREA',
+                        LocalizedApiHelper.parse('SELECT CITY / AREA'),
                         style: GoogleFonts.outfit(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -423,7 +433,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                       if (tempState != 'All') ...[
                         const SizedBox(width: 6),
                         Text(
-                          '($tempState)',
+                          '(${LocalizedApiHelper.parse(tempState)})',
                           style: GoogleFonts.outfit(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -466,7 +476,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                             Icon(Icons.info_outline_rounded, size: 16, color: Colors.grey.shade400),
                             const SizedBox(width: 8),
                             Text(
-                              'Select a state first to view cities',
+                              LocalizedApiHelper.parse('Select a state first to view cities'),
                               style: GoogleFonts.outfit(
                                 fontSize: 13,
                                 color: Colors.grey.shade500,
@@ -494,7 +504,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    isAll ? (tempState == 'All' ? 'All Cities' : 'All Cities in $tempState') : ct,
+                                    isAll ? (tempState == 'All' ? LocalizedApiHelper.parse('All Cities') : '${LocalizedApiHelper.parse('All Cities in')} ${LocalizedApiHelper.parse(tempState)}') : LocalizedApiHelper.parse(ct),
                                     style: GoogleFonts.outfit(
                                       fontSize: 14,
                                       fontWeight: ct == tempCity ? FontWeight.w600 : FontWeight.w400,
@@ -540,7 +550,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                             });
                           },
                           child: Text(
-                            'Reset',
+                            LocalizedApiHelper.parse('Reset'),
                             style: GoogleFonts.outfit(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
@@ -569,7 +579,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                             _fetchDeities(page: 1, isRefresh: true);
                           },
                           child: Text(
-                            'Apply Filter',
+                            LocalizedApiHelper.parse('Apply Filter'),
                             style: GoogleFonts.outfit(
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
@@ -650,7 +660,10 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
     final String templeName = (deity['temple'] != null) ? LocalizedApiHelper.parse(deity['temple']['name']) : '';
     final String city = (deity['temple']?['city'] ?? '').toString().trim();
     final String state = (deity['temple']?['state'] ?? '').toString().trim();
-    final String locationText = [city, state].where((s) => s.isNotEmpty).join(', ');
+    final String locationText = [
+      if (city.isNotEmpty) LocalizedApiHelper.parse(city),
+      if (state.isNotEmpty) LocalizedApiHelper.parse(state),
+    ].join(', ');
     final String liveDarshanId = (deity['darshan_id'] ?? deity['_id'])?.toString() ?? '';
 
     return GestureDetector(
@@ -789,7 +802,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                           );
                         },
                         child: Text(
-                          'Start Darshan',
+                          LocalizedApiHelper.parse('Start Darshan'),
                           style: GoogleFonts.outfit(
                             color: const Color(0xFFFF7A00),
                             fontSize: 11,
@@ -842,7 +855,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                       style: GoogleFonts.outfit(color: const Color(0xFF2E2A36)),
                       onChanged: _onSearchChanged,
                       decoration: InputDecoration(
-                        hintText: 'Search gods, temples...',
+                        hintText: LocalizedApiHelper.parse('Search gods, temples...'),
                         hintStyle: GoogleFonts.outfit(
                           color: const Color(0xFF2E2A36).withValues(alpha: 0.4),
                           fontSize: 14,
@@ -931,8 +944,8 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                         const SizedBox(width: 5),
                         Text(
                           _selectedCity != 'All'
-                              ? '$_selectedCity, $_selectedState'
-                              : _selectedState,
+                              ? '${LocalizedApiHelper.parse(_selectedCity)}, ${LocalizedApiHelper.parse(_selectedState)}'
+                              : LocalizedApiHelper.parse(_selectedState),
                           style: GoogleFonts.outfit(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -976,7 +989,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'RECENT SEARCHES',
+                    LocalizedApiHelper.parse('RECENT SEARCHES'),
                     style: GoogleFonts.outfit(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
@@ -987,7 +1000,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                   GestureDetector(
                     onTap: _clearRecentSearches,
                     child: Text(
-                      'Clear All',
+                      LocalizedApiHelper.parse('Clear All'),
                       style: GoogleFonts.outfit(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -1069,7 +1082,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                         const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
                         const SizedBox(height: 12),
                         Text(
-                          'Failed to load Darshan slots.',
+                          LocalizedApiHelper.parse('Failed to load Darshan slots.'),
                           style: GoogleFonts.outfit(fontSize: 16, color: const Color(0xFF2E2A36)),
                         ),
                         const SizedBox(height: 8),
@@ -1081,7 +1094,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                             ),
                           ),
                           onPressed: _initData,
-                          child: Text('Retry', style: GoogleFonts.outfit(color: Colors.white)),
+                          child: Text(LocalizedApiHelper.parse('Retry'), style: GoogleFonts.outfit(color: Colors.white)),
                         )
                       ],
                     ),
@@ -1113,8 +1126,8 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                                   const SizedBox(height: 16),
                                   Text(
                                     _isFilterActive
-                                        ? 'There is not any temple'
-                                        : 'No Darshans found',
+                                        ? LocalizedApiHelper.parse('There is not any temple')
+                                        : LocalizedApiHelper.parse('No Darshans found'),
                                     style: GoogleFonts.outfit(
                                       fontSize: 17,
                                       fontWeight: FontWeight.bold,
@@ -1124,8 +1137,8 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                                   const SizedBox(height: 6),
                                   Text(
                                     _isFilterActive
-                                        ? 'No temples found matching your selected location.'
-                                        : 'No temple darshans currently available.',
+                                        ? LocalizedApiHelper.parse('No temples found matching your selected location.')
+                                        : LocalizedApiHelper.parse('No temple darshans currently available.'),
                                     textAlign: TextAlign.center,
                                     style: GoogleFonts.outfit(
                                       fontSize: 13,
@@ -1142,7 +1155,7 @@ class _DarshanTabContentState extends State<DarshanTabContent> {
                                       ),
                                       icon: const Icon(Icons.refresh_rounded, size: 16, color: Color(0xFFFF7700)),
                                       label: Text(
-                                        'Clear Filter',
+                                        LocalizedApiHelper.parse('Clear Filter'),
                                         style: GoogleFonts.outfit(
                                           fontSize: 13,
                                           fontWeight: FontWeight.bold,

@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/localization/language_manager.dart';
+import '../../core/localization/dynamic_translation_service.dart';
+import '../../core/localization/localized_api_helper.dart';
 import '../../models/jap_models.dart';
 import '../../services/api_service.dart';
 import '../../services/jap_offline_repository.dart';
@@ -125,11 +128,17 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
   @override
   void initState() {
     super.initState();
+    LanguageManager.instance.addListener(_onLanguageOrTranslationChanged);
+    DynamicTranslationService.instance.addListener(_onLanguageOrTranslationChanged);
     _messageCount = YatraPersonalChatService().unreadMessageCount.value;
     YatraPersonalChatService().unreadMessageCount.addListener(_onUnreadMessagesChanged);
-    YatraPersonalChatService().refreshUnreadCount();
+    _loadProfileData();
     _loadJapFavAndSaved();
     _fetchJaps();
+  }
+
+  void _onLanguageOrTranslationChanged() {
+    if (mounted) setState(() {});
   }
 
   void _onUnreadMessagesChanged() {
@@ -138,6 +147,18 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
         _messageCount = YatraPersonalChatService().unreadMessageCount.value;
       });
     }
+  }
+
+  Future<void> _loadProfileData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (mounted) {
+        setState(() {
+          _profileName = prefs.getString('user_name') ?? _profileName;
+          _profilePic = prefs.getString('profile_pic') ?? _profilePic;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _fetchJaps() async {
@@ -345,13 +366,31 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
+    final code = LanguageManager.instance.currentLanguageCode.toLowerCase();
     if (hour < 12) {
+      if (code == 'gu') return 'શુભ પ્રભાત';
+      if (code == 'hi') return 'शुभ प्रभात';
+      if (code == 'mr') return 'शुभ सकाळ';
       return 'Good Morning';
     } else if (hour < 17) {
+      if (code == 'gu') return 'શુભ બપોર';
+      if (code == 'hi') return 'शुभ दोपहर';
+      if (code == 'mr') return 'शुभ दुपार';
       return 'Good Afternoon';
     } else {
+      if (code == 'gu') return 'શુભ સંધ્યા';
+      if (code == 'hi') return 'शुभ संध्या';
+      if (code == 'mr') return 'शुभ संध्याकाळ';
       return 'Good Evening';
     }
+  }
+
+  String _getDivineSalutation() {
+    final code = LanguageManager.instance.currentLanguageCode.toLowerCase();
+    if (code == 'gu') return 'જય શ્રી રામ';
+    if (code == 'hi') return 'जय श्री राम';
+    if (code == 'mr') return 'जय श्री राम';
+    return 'Jai Shree Ram';
   }
 
   String _getGreetingIcon() {
@@ -408,6 +447,8 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
 
   @override
   void dispose() {
+    LanguageManager.instance.removeListener(_onLanguageOrTranslationChanged);
+    DynamicTranslationService.instance.removeListener(_onLanguageOrTranslationChanged);
     YatraPersonalChatService().unreadMessageCount.removeListener(_onUnreadMessagesChanged);
     _searchController.dispose();
     super.dispose();
@@ -877,7 +918,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                 children: [
                   UserAvatar(
                     profilePic: _profilePic,
-                    userName: _profileName,
+                    userName: LocalizedApiHelper.parse(_profileName),
                     size: 48,
                     borderColor: const Color(0xFFFF7700).withValues(alpha: 0.2),
                     borderWidth: 1.5,
@@ -890,7 +931,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                         Row(
                           children: [
                             Text(
-                              'Jai Shree Ram',
+                              _getDivineSalutation(),
                               style: GoogleFonts.outfit(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -903,7 +944,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${_getGreeting()}, $_profileName ${_getGreetingIcon()}',
+                          '${_getGreeting()}, ${LocalizedApiHelper.parse(_profileName)} ${_getGreetingIcon()}',
                           style: GoogleFonts.outfit(
                             fontSize: 13,
                             color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
@@ -1008,7 +1049,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                           color: const Color(0xFFC8A882),
                         ),
                         decoration: InputDecoration(
-                          hintText: 'Search gods, temples, mantras...',
+                          hintText: LocalizedApiHelper.parse('Search gods, temples, mantras...'),
                           hintStyle: GoogleFonts.outfit(
                             fontSize: 13,
                             color: const Color(
@@ -1084,7 +1125,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Create Custom Jap',
+                        LocalizedApiHelper.parse('Create Custom Jap'),
                         style: GoogleFonts.outfit(
                           color: Colors.white,
                           fontWeight: FontWeight.w600,
@@ -1099,7 +1140,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
 
             const SizedBox(height: 12),
 
-            // ── 2 Toggle Buttons: Admin Jap & Your Custom Jap ─────
+            // ── 2 Toggle Buttons: Bharat Pray Jap & Your Custom Jap ─────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Container(
@@ -1121,7 +1162,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                 ),
                 child: Row(
                   children: [
-                    // Button 1: Admin Jap
+                    // Button 1: Bharat Pray Jap
                     Expanded(
                       child: GestureDetector(
                         onTap: () {
@@ -1160,7 +1201,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                'Admin Jap ($_adminJapCount)',
+                                '${LocalizedApiHelper.parse('Bharat Pray Jap')} ($_adminJapCount)',
                                 style: GoogleFonts.outfit(
                                   color: _selectedTab == 0 ? Colors.white : const Color(0xFF6B4226),
                                   fontWeight: _selectedTab == 0 ? FontWeight.bold : FontWeight.w600,
@@ -1212,7 +1253,7 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                'Your Custom Jap ($_customJapCount)',
+                                '${LocalizedApiHelper.parse('Your Custom Jap')} ($_customJapCount)',
                                 style: GoogleFonts.outfit(
                                   color: _selectedTab == 1 ? Colors.white : const Color(0xFF6B4226),
                                   fontWeight: _selectedTab == 1 ? FontWeight.bold : FontWeight.w600,
@@ -1267,8 +1308,8 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                                 const SizedBox(height: 16),
                                 Text(
                                   _selectedTab == 1
-                                      ? 'No Custom Jap Yet'
-                                      : (_searchQuery.isEmpty ? 'No Admin Jap Available' : 'No matching results'),
+                                      ? LocalizedApiHelper.parse('No Custom Jap Yet')
+                                      : (_searchQuery.isEmpty ? LocalizedApiHelper.parse('No Bharat Pray Jap Available') : LocalizedApiHelper.parse('No matching results')),
                                   style: GoogleFonts.outfit(
                                     color: const Color(0xFF2E2A36),
                                     fontWeight: FontWeight.bold,
@@ -1278,8 +1319,8 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
                                 const SizedBox(height: 8),
                                 Text(
                                   _selectedTab == 1
-                                      ? 'Tap "Create Custom Jap" above to add your own deity photo, mantra & chanting target.'
-                                      : 'No chanting entries found matching your query.',
+                                      ? LocalizedApiHelper.parse('Tap "Create Custom Jap" above to add your own deity photo, mantra & chanting target.')
+                                      : LocalizedApiHelper.parse('No chanting entries found matching your query.'),
                                   textAlign: TextAlign.center,
                                   style: GoogleFonts.outfit(
                                     color: const Color(0xFF7A6451),
@@ -1524,9 +1565,9 @@ class _JapCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            entry.name.isNotEmpty
+                            LocalizedApiHelper.parse(entry.name.isNotEmpty
                                 ? entry.name
-                                : (entry.fullName.isNotEmpty ? entry.fullName : entry.displayName),
+                                : (entry.fullName.isNotEmpty ? entry.fullName : entry.displayName)),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.outfit(
@@ -1598,7 +1639,7 @@ class _JapCard extends StatelessWidget {
                                       ),
                                       const SizedBox(width: 8),
                                       Text(
-                                        "Reset Today's Jap",
+                                        LocalizedApiHelper.parse("Reset Today's Jap"),
                                         style: GoogleFonts.outfit(
                                           fontWeight: FontWeight.w600,
                                           fontSize: 13.5,
@@ -1703,7 +1744,7 @@ class _JapCard extends StatelessWidget {
                               ],
                             ),
                             child: Text(
-                              'Chant 📿',
+                              '${LocalizedApiHelper.parse('Chant')} 📿',
                               style: GoogleFonts.outfit(
                                 color: Colors.white,
                                 fontSize: 11.5,
@@ -1739,7 +1780,7 @@ class _JapCard extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  'Effect',
+                                  LocalizedApiHelper.parse('Effect'),
                                   style: GoogleFonts.outfit(
                                     color: const Color(0xFFFF7700),
                                     fontSize: 11.5,

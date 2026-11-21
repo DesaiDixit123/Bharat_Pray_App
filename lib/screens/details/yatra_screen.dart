@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/localization/language_manager.dart';
+import '../../core/localization/dynamic_translation_service.dart';
+import '../../core/localization/localized_api_helper.dart';
 import '../../models/yatra_model.dart';
 import '../../models/journey_models.dart';
 import '../../services/api_service.dart';
@@ -75,12 +78,20 @@ class _YatraScreenState extends State<YatraScreen> {
   @override
   void initState() {
     super.initState();
+    LanguageManager.instance.addListener(_onLanguageOrTranslationChanged);
+    DynamicTranslationService.instance.addListener(_onLanguageOrTranslationChanged);
     _loadProfileData();
     _fetchYatras();
   }
 
+  void _onLanguageOrTranslationChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    LanguageManager.instance.removeListener(_onLanguageOrTranslationChanged);
+    DynamicTranslationService.instance.removeListener(_onLanguageOrTranslationChanged);
     YatraPersonalChatService().unreadMessageCount.removeListener(_onUnreadMessagesChanged);
     super.dispose();
   }
@@ -181,13 +192,31 @@ class _YatraScreenState extends State<YatraScreen> {
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
+    final code = LanguageManager.instance.currentLanguageCode.toLowerCase();
     if (hour < 12) {
+      if (code == 'gu') return 'શુભ પ્રભાત';
+      if (code == 'hi') return 'शुभ प्रभात';
+      if (code == 'mr') return 'शुभ सकाळ';
       return 'Good Morning';
     } else if (hour < 17) {
+      if (code == 'gu') return 'શુભ બપોર';
+      if (code == 'hi') return 'शुभ दोपहर';
+      if (code == 'mr') return 'शुभ दुपार';
       return 'Good Afternoon';
     } else {
+      if (code == 'gu') return 'શુભ સંધ્યા';
+      if (code == 'hi') return 'शुभ संध्या';
+      if (code == 'mr') return 'शुभ संध्याकाळ';
       return 'Good Evening';
     }
+  }
+
+  String _getDivineSalutation() {
+    final code = LanguageManager.instance.currentLanguageCode.toLowerCase();
+    if (code == 'gu') return 'જય શ્રી રામ';
+    if (code == 'hi') return 'जय श्री राम';
+    if (code == 'mr') return 'जय श्री राम';
+    return 'Jai Shree Ram';
   }
 
   String _getGreetingIcon() {
@@ -279,7 +308,7 @@ class _YatraScreenState extends State<YatraScreen> {
             },
             child: UserAvatar(
               profilePic: _profilePic,
-              userName: _profileName,
+              userName: LocalizedApiHelper.parse(_profileName),
               size: 48,
               borderColor: const Color(0xFFFF7A00).withValues(alpha: 0.2),
               borderWidth: 1.5,
@@ -294,7 +323,7 @@ class _YatraScreenState extends State<YatraScreen> {
                 Row(
                   children: [
                     Text(
-                      'Jai Shree Ram',
+                      _getDivineSalutation(),
                       style: GoogleFonts.outfit(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -307,7 +336,7 @@ class _YatraScreenState extends State<YatraScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$greeting, $_profileName $icon',
+                  '$greeting, ${LocalizedApiHelper.parse(_profileName)} $icon',
                   style: GoogleFonts.outfit(
                     fontSize: 13,
                     color: const Color(0xFF2E2A36).withValues(alpha: 0.6),
@@ -405,7 +434,7 @@ class _YatraScreenState extends State<YatraScreen> {
                   color: const Color(0xFF2E2A36),
                 ),
                 decoration: InputDecoration(
-                  hintText: 'Search your yatra destination',
+                  hintText: LocalizedApiHelper.parse('Search your yatra destination'),
                   hintStyle: GoogleFonts.outfit(
                     fontSize: 13,
                     color: const Color(0xFFC8A882).withValues(alpha: 0.6),
@@ -466,7 +495,7 @@ class _YatraScreenState extends State<YatraScreen> {
                     const Icon(Icons.add_rounded, color: Colors.white, size: 20),
                     const SizedBox(width: 6),
                     Text(
-                      'Create Group',
+                      LocalizedApiHelper.parse('Create Group'),
                       style: GoogleFonts.outfit(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -508,7 +537,7 @@ class _YatraScreenState extends State<YatraScreen> {
                   const Icon(Icons.group_outlined, color: Color(0xFFFF7A00), size: 18),
                   const SizedBox(width: 6),
                   Text(
-                    'My Groups',
+                    LocalizedApiHelper.parse('My Groups'),
                     style: GoogleFonts.outfit(
                       color: const Color(0xFFFF7A00),
                       fontWeight: FontWeight.bold,
@@ -578,7 +607,7 @@ class _YatraScreenState extends State<YatraScreen> {
                 GestureDetector(
                   onTap: () => _fetchYatras(forceRefresh: true),
                   child: Text(
-                    'Refresh',
+                    LocalizedApiHelper.parse('Refresh'),
                     style: GoogleFonts.outfit(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -658,7 +687,7 @@ class _YatraScreenState extends State<YatraScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Text(
-              'Continue Yatra',
+              LocalizedApiHelper.parse('Continue Yatra'),
               style: GoogleFonts.outfit(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -765,7 +794,7 @@ class _YatraScreenState extends State<YatraScreen> {
                       alignment: Alignment.center,
                       child: Center(
                         child: Text(
-                          item.tag,
+                          LocalizedApiHelper.parse(item.tag),
                           textAlign: TextAlign.center,
                           style: GoogleFonts.poppins(
                             color: const Color(0xFFFF7A00),
@@ -782,7 +811,7 @@ class _YatraScreenState extends State<YatraScreen> {
                     bottom: 12,
                     left: 16,
                     child: Text(
-                      item.title,
+                      LocalizedApiHelper.parse(item.title),
                       style: GoogleFonts.outfit(
                         color: Colors.white,
                         fontSize: 18,
@@ -825,7 +854,7 @@ class _YatraScreenState extends State<YatraScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Progress',
+                        LocalizedApiHelper.parse('Progress'),
                         style: GoogleFonts.outfit(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
@@ -890,7 +919,7 @@ class _YatraScreenState extends State<YatraScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          isPopular ? 'Start Yatra' : 'Continue Yatra',
+                          isPopular ? LocalizedApiHelper.parse('Start Yatra') : LocalizedApiHelper.parse('Continue Yatra'),
                           style: GoogleFonts.outfit(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -959,6 +988,17 @@ class _YatraScreenState extends State<YatraScreen> {
   }
 
   Widget _buildStatColumn(String svgString, String text) {
+    String localizedText = text;
+    if (text.toLowerCase().contains('steps')) {
+      final num = text.replaceAll(RegExp(r'[^0-9kK. ]'), '').trim();
+      localizedText = '$num ${LocalizedApiHelper.parse('Steps')}';
+    } else if (text.toLowerCase().contains('days')) {
+      final num = text.replaceAll(RegExp(r'[^0-9kK. ]'), '').trim();
+      localizedText = '$num ${LocalizedApiHelper.parse('Days')}';
+    } else {
+      localizedText = LocalizedApiHelper.parse(text);
+    }
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -969,7 +1009,7 @@ class _YatraScreenState extends State<YatraScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          text,
+          localizedText,
           style: GoogleFonts.outfit(
             color: const Color(0xFFC8A882),
             fontSize: 11,
