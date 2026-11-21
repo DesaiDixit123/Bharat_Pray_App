@@ -122,22 +122,37 @@ class _DhupDarshanClimaxViewState extends State<DhupDarshanClimaxView>
                       ),
                     ],
                   ),
-                  child: Row(
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.auto_awesome, color: Color(0xFFFFD54F), size: 20),
-                      const SizedBox(width: 8),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.auto_awesome, color: Color(0xFFFFD54F), size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            widget.title,
+                            style: GoogleFonts.notoSerifDevanagari(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFFFFE082),
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.auto_awesome, color: Color(0xFFFFD54F), size: 20),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
                       Text(
-                        widget.title,
-                        style: GoogleFonts.notoSerifDevanagari(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFFFFE082),
-                          letterSpacing: 1.2,
+                        '${widget.target} / ${widget.target} • माला सम्पूर्ण',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFFFFD54F),
+                          letterSpacing: 0.6,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      const Icon(Icons.auto_awesome, color: Color(0xFFFFD54F), size: 20),
                     ],
                   ),
                 ),

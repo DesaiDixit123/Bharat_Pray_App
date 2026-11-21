@@ -55,14 +55,16 @@ class _CustomJapDarshanVideoState extends State<CustomJapDarshanVideo> {
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
-    if (controller == null) return const SizedBox.shrink();
-    return SizedBox.expand(
-      child: FittedBox(
-        fit: BoxFit.cover,
-        child: SizedBox(
-          width: controller.value.size.width,
-          height: controller.value.size.height,
-          child: VideoPlayer(controller),
+    if (controller == null || !controller.value.isInitialized) return const SizedBox.shrink();
+    return ClipRect(
+      child: SizedBox.expand(
+        child: FittedBox(
+          fit: BoxFit.cover,
+          child: SizedBox(
+            width: controller.value.size.width,
+            height: controller.value.size.height,
+            child: VideoPlayer(controller),
+          ),
         ),
       ),
     );

@@ -2,30 +2,24 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Represents a delicate curling incense smoke wisp.
-class SmokeWispParticle {
+/// Soft billowing smoke puff created at the destination node during the 1-2s dispersal animation.
+class DispersalSmokePuff {
   double x;
   double y;
-  double vx;
-  double vy;
-  double width;
-  double height;
-  final double maxWidth;
-  final double maxHeight;
+  final double vx;
+  final double vy;
+  final double maxRadius;
   final double maxAlpha;
   final double duration;
   double age = 0.0;
   final Color color;
 
-  SmokeWispParticle({
+  DispersalSmokePuff({
     required this.x,
     required this.y,
-    this.vx = 0.0,
-    this.vy = -35.0,
-    required this.width,
-    required this.height,
-    required this.maxWidth,
-    required this.maxHeight,
+    required this.vx,
+    required this.vy,
+    required this.maxRadius,
     required this.maxAlpha,
     required this.duration,
     required this.color,
@@ -34,21 +28,17 @@ class SmokeWispParticle {
   bool update(double dt) {
     age += dt;
     if (age >= duration) return false;
-
-    x += vx * dt;
+    x += (vx * dt) + (math.sin(age * 3.5) * 4.0 * dt);
     y += vy * dt;
-    vy *= 0.985;
-    vx += math.sin(age * 3.5) * 3.0 * dt;
-    width += (maxWidth - width) * (dt / duration) * 1.8;
-    height += (maxHeight - height) * (dt / duration) * 1.8;
-
     return true;
   }
 }
 
 /// Dynamic, living ribbon of sacred dhoop smoke that travels
-/// from the brass Dhup Dani to the target reveal location.
-/// ZERO CIRCLES — draws a smooth, fluid, serpentine ribbon of incense smoke.
+/// from the brass Dhup Dani wick all the way to the target reveal location.
+/// - Full continuous smoke ribbon from wick to target ("akhu e avavu joie").
+/// - Word 'राम' rides at the leading tip of the smoke all the way to the reveal spot.
+/// - Upon arrival, enters a 1-2 second authentic smoke dispersal animation ("smoke type animation ma desapear thavu joei").
 class DirectionalSmokeStream {
   final int step;
   final Offset start;
@@ -59,9 +49,13 @@ class DirectionalSmokeStream {
   double elapsed = 0.0;
   double progress = 0.0;
   bool hasArrived = false;
+
+  // 1-2 second authentic smoke dispersal animation after arrival
+  double dispersalElapsed = 0.0;
+  final double dispersalDuration; // Typically 1.2 to 1.4 seconds smoke dispersal animation
   bool isFinished = false;
 
-  final List<SmokeWispParticle> dissipatingWisps = [];
+  final List<DispersalSmokePuff> dispersalPuffs = [];
   final Offset control1;
   final Offset control2;
 
@@ -70,28 +64,31 @@ class DirectionalSmokeStream {
     required this.start,
     required this.target,
     required this.onArrived,
-    this.duration = 3.8,
+    this.duration = 1.0,
+    this.dispersalDuration = 1.3,
     this.text = 'राम',
-  })  : control1 = _computeControlPoint1(start, target),
-        control2 = _computeControlPoint2(start, target);
+  })  : control1 = _computeControlPoint1(start, target, step),
+        control2 = _computeControlPoint2(start, target, step);
 
-  static Offset _computeControlPoint1(Offset start, Offset target) {
+  static Offset _computeControlPoint1(Offset start, Offset target, int step) {
     final dx = target.dx - start.dx;
     final dy = target.dy - start.dy;
-    // Elegant S-curve initial billow outwards
+    // Add step-based organic curve sway so multiple concurrent streams branch out gracefully
+    final double sway = (((step * 3) % 7) - 3) * 12.0;
     final sign = (dx >= 0) ? -1.0 : 1.0;
     return Offset(
-      start.dx + (dx * 0.20) + (sign * 40.0),
+      start.dx + (dx * 0.20) + (sign * 35.0) + sway,
       start.dy + (dy * 0.45),
     );
   }
 
-  static Offset _computeControlPoint2(Offset start, Offset target) {
+  static Offset _computeControlPoint2(Offset start, Offset target, int step) {
     final dx = target.dx - start.dx;
     final dy = target.dy - start.dy;
+    final double sway = (((step * 5) % 7) - 3) * 10.0;
     final sign = (dx >= 0) ? 1.0 : -1.0;
     return Offset(
-      start.dx + (dx * 0.70) + (sign * 30.0),
+      start.dx + (dx * 0.70) + (sign * 28.0) + sway,
       start.dy + (dy * 0.85),
     );
   }
@@ -113,55 +110,66 @@ class DirectionalSmokeStream {
 
   /// Updates simulation state. Can be driven directly by wall-clock progress.
   bool update(double dt, {double? forcedProgress}) {
-    if (forcedProgress != null) {
-      progress = forcedProgress.clamp(0.0, 1.0);
-      elapsed = progress * duration;
-    } else {
-      elapsed += dt;
-      progress = (elapsed / duration).clamp(0.0, 1.0);
-    }
-
-    // Update dissipating arrival wisps
-    dissipatingWisps.removeWhere((w) => !w.update(dt));
-
-    // When smoke head reaches the target node coordinate:
-    if (progress >= 1.0 && !hasArrived) {
-      hasArrived = true;
-      onArrived();
-
-      // Spawn a few delicate, organic upward curling smoke wisps (NO YELLOW EXPLOSION DISC!)
-      final math.Random random = math.Random();
-      for (int i = 0; i < 6; i++) {
-        final angle = random.nextDouble() * 2 * math.pi;
-        final speed = 12.0 + (random.nextDouble() * 22.0);
-        dissipatingWisps.add(
-          SmokeWispParticle(
-            x: target.dx + (math.cos(angle) * 6.0),
-            y: target.dy + (math.sin(angle) * 6.0),
-            vx: math.cos(angle) * speed * 0.4,
-            vy: -25.0 - (random.nextDouble() * 25.0), // Gently rising
-            width: 8.0,
-            height: 16.0,
-            maxWidth: 24.0 + (random.nextDouble() * 12.0),
-            maxHeight: 40.0 + (random.nextDouble() * 16.0),
-            maxAlpha: 0.45, // Soft, ethereal, non-blinding
-            duration: 1.1 + (random.nextDouble() * 0.5),
-            color: const Color(0xFFFFFDE7),
-          ),
-        );
+    if (!hasArrived) {
+      if (forcedProgress != null) {
+        progress = forcedProgress.clamp(0.0, 1.0);
+        elapsed = progress * duration;
+      } else {
+        elapsed += dt;
+        progress = (elapsed / duration).clamp(0.0, 1.0);
       }
+
+      // When smoke head reaches the target node coordinate:
+      if (progress >= 1.0) {
+        progress = 1.0;
+        hasArrived = true;
+        onArrived();
+
+        // Spawn realistic temple smoke dispersal billows at target
+        _spawnDispersalPuffs();
+      }
+      return true;
     }
 
-    if (hasArrived && dissipatingWisps.isEmpty) {
+    // ── Dispersal Phase (1.2 - 1.4 seconds) ──
+    dispersalElapsed += dt;
+
+    // Update dispersal puffs
+    dispersalPuffs.removeWhere((puff) => !puff.update(dt));
+
+    // Guaranteed complete disappearance: clear puffs and finish immediately once dispersal duration reached
+    if (dispersalElapsed >= dispersalDuration) {
+      dispersalPuffs.clear();
       isFinished = true;
       return false;
     }
 
     return true;
   }
+
+  void _spawnDispersalPuffs() {
+    final rng = math.Random();
+    const int puffCount = 7;
+    for (int i = 0; i < puffCount; i++) {
+      final double angle = (i * (2 * math.pi / puffCount)) + ((rng.nextDouble() - 0.5) * 0.40);
+      final double speed = 10.0 + (rng.nextDouble() * 15.0);
+      dispersalPuffs.add(
+        DispersalSmokePuff(
+          x: target.dx + (math.cos(angle) * 4.0),
+          y: target.dy + (math.sin(angle) * 4.0),
+          vx: math.cos(angle) * speed,
+          vy: -14.0 - (rng.nextDouble() * 18.0), // Gracefully drifts upward
+          maxRadius: 24.0 + (rng.nextDouble() * 16.0), // Softly expands
+          maxAlpha: 0.38 + (rng.nextDouble() * 0.12),
+          duration: 1.0 + (rng.nextDouble() * 0.25), // 1.0 to 1.25 seconds duration
+          color: const Color(0xFFFFFDE7),
+        ),
+      );
+    }
+  }
 }
 
-/// Continuous ambient rising smoke wisp from the Dhup Dani burner.
+/// Continuous ambient rising smoke wisp.
 class AmbientSmokeWisp {
   double x;
   double y;
@@ -203,115 +211,86 @@ class AmbientSmokeWisp {
 }
 
 /// Master Incense Smoke Painter
-/// ZERO CIRCLES:
-/// 1. Directional smoke flight is rendered as an organic, curling, fluid ribbon of incense smoke.
-/// 2. Sacred text 'राम' rises gracefully without any circular yellow disc or background halo.
-/// 3. Ambient smoke wisps are rendered as vertically elongated, rising smoke plumes.
 class DhupSmokePainter extends CustomPainter {
   final List<DirectionalSmokeStream> activeStreams;
   final List<AmbientSmokeWisp> ambientWisps;
   final Offset burnerMouthCenter;
+  final double smokeTime;
+  final double smokeIntensity;
 
   static final Paint _ribbonPaint = Paint()..style = PaintingStyle.fill;
-  static final Paint _ambientPaint = Paint()..style = PaintingStyle.fill;
-  static final Paint _wispPaint = Paint()..style = PaintingStyle.fill;
 
   DhupSmokePainter({
     required this.activeStreams,
-    required this.ambientWisps,
+    this.ambientWisps = const [],
     required this.burnerMouthCenter,
+    this.smokeTime = 0.0,
+    this.smokeIntensity = 1.0,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
 
-    // ── 1. Draw Ambient Rising Smoke from Burner ───────────────────────
-    // Renders elongated vertical plumes (height > width) — NO CIRCULAR BALLS!
-    for (final wisp in ambientWisps) {
-      final double progress = (wisp.age / wisp.duration).clamp(0.0, 1.0);
-      final double alphaCurve = (progress < 0.15)
-          ? (progress / 0.15)
-          : math.pow(1.0 - progress, 1.2).toDouble();
-      final double alpha = (alphaCurve * wisp.maxAlpha).clamp(0.0, 1.0);
-      if (alpha <= 0.01) continue;
-
-      final double width = 8.0 + (wisp.maxRadius * 0.70 * math.pow(progress, 0.70));
-      final double height = 14.0 + (wisp.maxRadius * 1.50 * math.pow(progress, 0.70));
-      final center = Offset(wisp.x, wisp.y);
-
-      // Outer soft smoke plume
-      _ambientPaint.color = wisp.color.withValues(alpha: alpha * 0.40);
-      _ambientPaint.maskFilter = MaskFilter.blur(BlurStyle.normal, width * 0.45);
-      canvas.drawOval(
-        Rect.fromCenter(center: center, width: width * 1.4, height: height * 1.2),
-        _ambientPaint,
-      );
-
-      // Dense visible smoke core
-      _ambientPaint.color = Colors.white.withValues(alpha: alpha * 0.65);
-      _ambientPaint.maskFilter = MaskFilter.blur(BlurStyle.normal, width * 0.25);
-      canvas.drawOval(
-        Rect.fromCenter(center: center, width: width * 0.75, height: height * 0.85),
-        _ambientPaint,
-      );
-    }
-
-    // ── 2. Draw Active Directional Smoke Streams ───────────────────────
     for (final stream in activeStreams) {
-      final progress = stream.progress;
+      if (stream.isFinished) continue;
 
-      // A. Draw the continuous, flowing incense smoke ribbon while in flight
-      if (progress > 0.01 && progress < 1.0) {
-        _drawIncenseSmokeRibbon(canvas, stream, progress);
-      }
+      // ── A. Dynamic, full incense smoke ribbon from wick to target ──
+      _drawIncenseSmokeRibbon(canvas, stream);
 
-      // B. Draw dissipating organic wisps after arrival (NO YELLOW EXPLOSION!)
-      for (final wisp in stream.dissipatingWisps) {
-        final double p = (wisp.age / wisp.duration).clamp(0.0, 1.0);
-        final double alpha = (math.pow(1.0 - p, 1.3) * wisp.maxAlpha).clamp(0.0, 1.0);
+      // ── B. Soft billowing smoke dispersal puffs at the target node ──
+      for (final puff in stream.dispersalPuffs) {
+        final double p = (puff.age / puff.duration).clamp(0.0, 1.0);
+        final double alpha = math.pow(1.0 - p, 1.4) * puff.maxAlpha;
         if (alpha <= 0.01) continue;
 
-        _wispPaint.color = wisp.color.withValues(alpha: alpha);
-        _wispPaint.maskFilter = MaskFilter.blur(BlurStyle.normal, wisp.width * 0.35);
+        // Smoke puff softly billows outward from ~10px to maxRadius
+        final double radius = 10.0 + ((puff.maxRadius - 10.0) * math.sin(p * math.pi * 0.5));
 
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: Offset(wisp.x, wisp.y),
-            width: wisp.width,
-            height: wisp.height,
-          ),
-          _wispPaint,
-        );
+        final puffPaint = Paint()
+          ..style = PaintingStyle.fill
+          ..color = puff.color.withValues(alpha: (alpha * 0.40).clamp(0.0, 1.0))
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, radius * 0.45);
+
+        canvas.drawCircle(Offset(puff.x, puff.y), radius, puffPaint);
       }
 
-      // C. Draw traveling sacred text 'राम' at the head of the smoke ribbon
-      // ZERO CIRCULAR BACKGROUND AURA!
-      if (!stream.hasArrived &&
-          stream == activeStreams.lastWhere((s) => !s.hasArrived, orElse: () => stream)) {
-        final headPos = stream.getHeadPosition(progress);
+      // ── C. Sacred text 'राम' riding the smoke to the reveal spot ──
+      // In flight: 100% visible, arrives right ON the target point!
+      // After arrival: softly pulses and dissolves over ~0.8s into the revealed darshan
+      if (stream.text.isNotEmpty) {
+        double textAlpha = 1.0;
+        double textScale = 1.0;
+        Offset textCenter = Offset.zero;
 
-        if (stream.text.isNotEmpty) {
-          final double textAlpha = (progress < 0.12)
-              ? (progress / 0.12)
-              : (progress > 0.85 ? ((1.0 - progress) / 0.15) : 1.0);
-          final double textScale = 0.90 + (0.25 * math.sin(progress * math.pi));
+        if (!stream.hasArrived) {
+          // In flight: text flies at the leading tip of the smoke
+          textCenter = stream.getHeadPosition(stream.progress);
+          textAlpha = (stream.progress < 0.10) ? (stream.progress / 0.10) : 1.0;
+          textScale = 0.95 + (0.20 * math.sin(stream.progress * math.pi));
+        } else {
+          // At target: smoothly dissolves over 0.5 seconds into the image
+          textCenter = stream.target;
+          final double p = (stream.dispersalElapsed / 0.50).clamp(0.0, 1.0);
+          textAlpha = (1.0 - p);
+          textScale = 1.0 + (0.18 * math.sin(p * math.pi));
+        }
 
+        if (textAlpha > 0.01) {
           final textSpan = TextSpan(
             text: stream.text,
             style: GoogleFonts.notoSerifDevanagari(
-              fontSize: 22.0 * textScale,
-              fontWeight: FontWeight.w900,
-              color: const Color(0xFFFFFDE7).withValues(alpha: textAlpha.clamp(0.0, 1.0)),
+              fontSize: 24 * textScale,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFFFFD54F).withValues(alpha: textAlpha.clamp(0.0, 1.0)),
               shadows: [
                 Shadow(
-                  color: const Color(0xFFFF9900).withValues(alpha: (textAlpha * 0.85).clamp(0.0, 1.0)),
-                  blurRadius: 10.0,
+                  color: const Color(0xFFFF8F00).withValues(alpha: 0.85 * textAlpha),
+                  blurRadius: 14.0,
                 ),
                 Shadow(
-                  color: Colors.black87.withValues(alpha: (textAlpha * 0.70).clamp(0.0, 1.0)),
-                  blurRadius: 4.0,
-                  offset: const Offset(0, 1.0),
+                  color: const Color(0xFFFF3D00).withValues(alpha: 0.50 * textAlpha),
+                  blurRadius: 22.0,
                 ),
               ],
             ),
@@ -323,10 +302,9 @@ class DhupSmokePainter extends CustomPainter {
           );
           textPainter.layout();
 
-          // Center traveling text precisely at headPos
           final textOffset = Offset(
-            headPos.dx - (textPainter.width / 2),
-            headPos.dy - (textPainter.height / 2),
+            textCenter.dx - (textPainter.width / 2),
+            textCenter.dy - (textPainter.height / 2),
           );
           textPainter.paint(canvas, textOffset);
         }
@@ -335,24 +313,46 @@ class DhupSmokePainter extends CustomPainter {
   }
 
   /// Constructs and renders a continuous, silky ribbon of sacred incense smoke
-  /// along the cubic Bezier path from burner mouth to head position.
-  /// ZERO CIRCLES — purely fluid ribbon geometry!
+  /// along the cubic Bezier path from the diya wick all the way to the target node.
+  /// Full smoke from wick to target while in flight; evaporates from bottom to top on dispersal.
   void _drawIncenseSmokeRibbon(
     Canvas canvas,
     DirectionalSmokeStream stream,
-    double progress,
   ) {
+    final double progress = stream.progress;
+    if (progress <= 0.01) return;
+
+    double tailT = 0.0;
+    double headT = progress;
+    double ribbonAlpha = 1.0;
+
+    if (!stream.hasArrived) {
+      // Full smoke from the burner wick all the way to current head position
+      tailT = 0.0;
+      headT = progress;
+      ribbonAlpha = (progress < 0.10) ? (progress / 0.10) : 1.0;
+    } else {
+      // Dispersal phase: ribbon trail evaporates from burner upward over dispersalDuration
+      final double p = (stream.dispersalElapsed / stream.dispersalDuration).clamp(0.0, 1.0);
+      if (p >= 1.0) return; // fully evaporated
+      tailT = p;
+      headT = 1.0;
+      ribbonAlpha = math.pow(1.0 - p, 1.4).toDouble();
+    }
+
+    if (headT <= tailT || ribbonAlpha <= 0.01) return;
+
     const int segments = 24;
     final List<Offset> points = [];
     final List<Offset> normals = [];
     final List<double> widths = [];
 
     for (int i = 0; i <= segments; i++) {
-      final double t = (i / segments) * progress;
+      final double normI = i / segments;
+      final double t = tailT + (normI * (headT - tailT));
       final pt = stream.getHeadPosition(t);
       points.add(pt);
 
-      // Approximate tangent vector
       final double deltaT = 0.01;
       final ptNext = stream.getHeadPosition((t + deltaT).clamp(0.0, 1.0));
       final double dx = ptNext.dx - pt.dx;
@@ -360,21 +360,18 @@ class DhupSmokePainter extends CustomPainter {
       final double len = math.sqrt((dx * dx) + (dy * dy));
 
       if (len > 0.001) {
-        // Normal perpendicular to tangent (-dy, dx)
         normals.add(Offset(-dy / len, dx / len));
       } else {
         normals.add(const Offset(1, 0));
       }
 
-      // Ribbon width expands naturally as smoke wafts upward: ~4px at burner to ~16px near head
-      final double normT = i / segments;
-      final double w = 4.0 + (12.0 * math.pow(normT, 0.75)) + (math.sin(normT * 10.0) * 2.0);
+      // Beautiful fluid smoke ribbon width (broader near target, slender at burner)
+      final double w = 3.5 + (12.0 * math.pow(t, 0.70)) + (math.sin(normI * 9.0) * 1.8);
       widths.add(w);
     }
 
     if (points.length < 2) return;
 
-    // Construct left boundary (forward) and right boundary (backward)
     final leftPath = Path();
     leftPath.moveTo(
       points[0].dx + (normals[0].dx * widths[0]),
@@ -387,7 +384,6 @@ class DhupSmokePainter extends CustomPainter {
       leftPath.lineTo(lx, ly);
     }
 
-    // Right boundary backwards
     for (int i = segments; i >= 0; i--) {
       final rx = points[i].dx - (normals[i].dx * widths[i]);
       final ry = points[i].dy - (normals[i].dy * widths[i]);
@@ -395,14 +391,14 @@ class DhupSmokePainter extends CustomPainter {
     }
     leftPath.close();
 
-    // 1. Soft outer incense smoke mist
-    _ribbonPaint.color = const Color(0xFFFFFDE7).withValues(alpha: 0.35);
-    _ribbonPaint.maskFilter = const MaskFilter.blur(BlurStyle.normal, 8.0);
+    // Soft outer incense mist
+    _ribbonPaint.color = const Color(0xFFFFFDE7).withValues(alpha: (0.32 * ribbonAlpha).clamp(0.0, 1.0));
+    _ribbonPaint.maskFilter = const MaskFilter.blur(BlurStyle.normal, 7.0);
     canvas.drawPath(leftPath, _ribbonPaint);
 
-    // 2. Bright dense central smoke thread
-    _ribbonPaint.color = Colors.white.withValues(alpha: 0.60);
-    _ribbonPaint.maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.5);
+    // Visible core smoke thread
+    _ribbonPaint.color = Colors.white.withValues(alpha: (0.55 * ribbonAlpha).clamp(0.0, 1.0));
+    _ribbonPaint.maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0);
     canvas.drawPath(leftPath, _ribbonPaint);
   }
 

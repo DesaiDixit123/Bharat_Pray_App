@@ -49,19 +49,20 @@ class _DhupJapScreenState extends State<DhupJapScreen>
   bool _isChantingActive = false; // True during single chant flight (button shows ||)
   bool _isPaused = false;
 
-  // Exact reveal nodes from RamPathCalculator
-  List<RevealNode> _revealedNodes = [];
-  RevealNode? _newestNode;
+  // Exact reveal nodes for dhoop smoke reveal
+  List<DhupRevealNode> _allTargetNodes = [];
+  List<DhupRevealNode> _revealedNodes = [];
+  DhupRevealNode? _newestNode;
+  int _launchedCount = 0; // Tracks launched streams for simultaneous/concurrent Jap taps
 
   // Directional & Ambient Smoke Simulation
   final List<DirectionalSmokeStream> _activeStreams = [];
   final List<AmbientSmokeWisp> _ambientWisps = [];
   Offset _burnerEmissionPoint = Offset.zero;
-  double _smokeSpawnTimer = 0.0;
-  final math.Random _random = math.Random();
 
   // Animation Controllers
   late final AnimationController _ambientController;
+  late final AnimationController _diyaController;
   late final AnimationController _shimmerController;
   late final AnimationController _completionController;
   late final AnimationController _tapButtonController;
@@ -122,13 +123,15 @@ class _DhupJapScreenState extends State<DhupJapScreen>
     _completedMalas = widget.entry.progress ~/ _target;
     _isCompleted = false;
 
-    if (_count > 0) {
-      _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count, target: _target);
-      _newestNode = _revealedNodes.isNotEmpty ? _revealedNodes.last : null;
-    } else {
-      _revealedNodes = [];
-      _newestNode = null;
-    }
+    // Initialize randomized target nodes across the portrait
+    _initTargetNodes();
+
+    // Diya ignition controller ("divo sarje") on chant tap
+    _diyaController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 550),
+      reverseDuration: const Duration(milliseconds: 700),
+    );
 
     // Audio setup
     _audioPlayer = AudioPlayer();
@@ -151,34 +154,21 @@ class _DhupJapScreenState extends State<DhupJapScreen>
     // Audio completion listener: smoothly returns button to Play ▶ when chant audio finishes
     _audioPlayer.onPlayerComplete.listen((_) {
       if (!mounted) return;
-      if (_isChantingActive) {
+      final anyInFlight = _activeStreams.any((s) => !s.hasArrived);
+      if (!anyInFlight && _isChantingActive) {
         setState(() {
           _isChantingActive = false;
           _isPaused = false;
         });
+        _diyaController.reverse();
       }
     });
 
-    // Flight controller strictly synchronized with voice audio (5280ms duration)
+    // Flight controller synchronized with chant duration
     _flightController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 5280),
+      duration: const Duration(milliseconds: 1800),
     );
-
-    _flightController.addListener(() {
-      if (!_isChantingActive || _isPaused) return;
-      // When sound is enabled, arrival is at 0.72 (~3.8s, matching "जय जय राम")
-      // When sound is disabled (muted), arrival is at 0.78 (~740ms)
-      final double arrivalFraction = _isSoundEnabled ? 0.72 : 0.78;
-      final double flightVal = _flightController.value;
-      final double streamProgress = (flightVal / arrivalFraction).clamp(0.0, 1.0);
-
-      for (final s in _activeStreams) {
-        if (!s.hasArrived) {
-          s.update(0.016, forcedProgress: streamProgress);
-        }
-      }
-    });
 
     _flightController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
@@ -187,6 +177,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
           _isChantingActive = false;
           _isPaused = false;
         });
+        _diyaController.reverse();
       }
     });
 
@@ -247,6 +238,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
     _syncDebounceTimer?.cancel();
     _ambientController.removeListener(_onAmbientTick);
     _ambientController.dispose();
+    _diyaController.dispose();
     _shimmerController.dispose();
     _completionController.dispose();
     _tapButtonController.dispose();
@@ -256,29 +248,80 @@ class _DhupJapScreenState extends State<DhupJapScreen>
     super.dispose();
   }
 
+  // ── Randomized Target & Organic Shape Generation ──────────────────────
+
+  void _initTargetNodes() {
+    final int seed = (widget.entry.id.hashCode ^ (_completedMalas * 7919) ^ 0x5A5A5A5A);
+    final math.Random rng = math.Random(seed);
+
+    // 108 master anchor nodes from RamPathCalculator:
+    // 0..95: Non-face anchors (halo, lotus, robes, jewels, arms, background)
+    // 96..107: Climax face anchors (revealed gracefully at the conclusion)
+    final nonFaceIndices = List.generate(96, (i) => i)..shuffle(rng);
+    final faceIndices = List.generate(12, (i) => 96 + i)..shuffle(rng);
+    final allShuffled = [...nonFaceIndices, ...faceIndices];
+
+    final double baseScale = (_target < 108)
+        ? math.pow(108.0 / _target, 0.68).clamp(1.0, 9.0).toDouble()
+        : 1.0;
+
+    _allTargetNodes = List.generate(_target, (step) {
+      final int anchorIdx = (_target == 108)
+          ? allShuffled[step]
+          : allShuffled[(step * 108 ~/ _target).clamp(0, 107)];
+      final anchor = RamPathCalculator.revealNodes[anchorIdx];
+
+      // Subtle random spatial jitter across the entire sacred deity portrait
+      final double uJitter = (rng.nextDouble() - 0.5) * 0.035;
+      final double vJitter = (rng.nextDouble() - 0.5) * 0.035;
+      // Naturally distribute across the full portrait from halo/crown peak (0.04) down to lotus feet (0.94)
+      final double u = (anchor.u + uJitter).clamp(0.04, 0.96);
+      final double v = (anchor.v + vJitter).clamp(0.04, 0.94);
+
+      // Bespoke random cloud shape parameters (random lobes, aspect, rotation, scale)
+      final int nodeSeed = rng.nextInt(1000000000);
+      final int numLobes = 6 + rng.nextInt(5); // 6 to 10 lobes
+      final double rotation = rng.nextDouble() * 2 * math.pi;
+      final double aspectX = 0.88 + (rng.nextDouble() * 0.28);
+      final double aspectY = 0.95 + (rng.nextDouble() * 0.35);
+      final double radiusMultiplier = 1.05 + (rng.nextDouble() * 0.30);
+
+      return DhupRevealNode(
+        step: step,
+        u: u,
+        v: v,
+        radiusNorm: anchor.radiusNorm * baseScale,
+        seed: nodeSeed,
+        numLobes: numLobes,
+        rotation: rotation,
+        aspectX: aspectX,
+        aspectY: aspectY,
+        radiusMultiplier: radiusMultiplier,
+        label: anchor.label,
+      );
+    });
+
+    if (_count > 0 && _count <= _allTargetNodes.length) {
+      _revealedNodes = _allTargetNodes.sublist(0, _count);
+      _newestNode = _revealedNodes.isNotEmpty ? _revealedNodes.last : null;
+    } else {
+      _revealedNodes = [];
+      _newestNode = null;
+    }
+    _launchedCount = _count;
+  }
+
   // ── Incense Smoke Simulation Ticker ──────────────────────────────────
 
   void _onAmbientTick() {
     const double dt = 0.016; // ~60fps step
-    _smokeSpawnTimer += dt;
 
-    // Prune finished directional streams and update active ones
-    if (!_isPaused) {
-      _activeStreams.removeWhere((stream) => stream.isFinished);
+    // Advance and prune all active directional incense streams
+    if (!_isPaused && _activeStreams.isNotEmpty) {
       for (final s in _activeStreams) {
-        if (s.hasArrived) {
-          s.update(dt);
-        }
+        s.update(dt);
       }
-    }
-
-    // Prune expired ambient wisps and update active ones
-    _ambientWisps.removeWhere((wisp) => !wisp.update(dt));
-
-    // Spawn peaceful continuous ambient smoke wisps from burner (~3 per second)
-    if (_smokeSpawnTimer >= 0.28) {
-      _smokeSpawnTimer = 0.0;
-      _spawnAmbientSmokeWisp();
+      _activeStreams.removeWhere((stream) => stream.isFinished);
     }
 
     if (mounted) {
@@ -286,29 +329,8 @@ class _DhupJapScreenState extends State<DhupJapScreen>
     }
   }
 
-  void _spawnAmbientSmokeWisp() {
-    final Size size = MediaQuery.of(context).size;
-    final double originX = _burnerEmissionPoint.dx != 0 ? _burnerEmissionPoint.dx : (size.width * 0.50);
-    final double originY = _burnerEmissionPoint.dy != 0 ? _burnerEmissionPoint.dy : (size.height * 0.76);
-
-    // Subtle jitter from different incense sticks
-    final double sx = originX + ((_random.nextDouble() - 0.5) * 22.0);
-    final double sy = originY + ((_random.nextDouble() - 0.5) * 8.0);
-
-    _ambientWisps.add(
-      AmbientSmokeWisp(
-        startX: sx,
-        startY: sy,
-        vy: -75.0 - (_random.nextDouble() * 50.0), // Calm upward drift
-        waveFreq: 0.8 + (_random.nextDouble() * 0.6),
-        waveAmp: 26.0 + (_random.nextDouble() * 26.0),
-        wavePhase: _random.nextDouble() * 2 * math.pi,
-        maxRadius: 40.0 + (_random.nextDouble() * 28.0),
-        maxAlpha: 0.65, // Highly visible rich smoke
-        duration: 3.5 + (_random.nextDouble() * 2.0),
-        color: const Color(0xFFFFFDE7),
-      ),
-    );
+  void _spawnBurstSmokePuffs() {
+    // Realistic fluid smoke tendrils are dynamically rendered by DhupSmokePainter
   }
 
   // ── Core Chanting Actions (Play/Pause, Directional Smoke & Sacred Text 'राम') ──
@@ -317,34 +339,8 @@ class _DhupJapScreenState extends State<DhupJapScreen>
 
   void _onTapChant() {
     if (_isCompleted) return;
-
-    if (_isChantingActive) {
-      if (!_isPaused) {
-        // Voice is playing -> Tap pauses playback!
-        setState(() {
-          _isPaused = true;
-        });
-        _flightController.stop();
-        if (_isSoundEnabled) {
-          _audioPlayer.pause().catchError((_) {});
-        }
-        HapticFeedback.selectionClick();
-      } else {
-        // Paused -> Tap resumes playback!
-        setState(() {
-          _isPaused = false;
-        });
-        _flightController.forward();
-        if (_isSoundEnabled) {
-          _audioPlayer.resume().catchError((_) {});
-        }
-        HapticFeedback.selectionClick();
-      }
-    } else {
-      // Idle -> Tap starts single chant & keeps play button active as long as voice plays!
-      _isPaused = false;
-      _startFlightChant();
-    }
+    // Every click on Play triggers a Jap chant ("jetlli var karu etli var thavu joie")
+    _startFlightChant();
   }
 
   void _startFlightChant() {
@@ -353,18 +349,22 @@ class _DhupJapScreenState extends State<DhupJapScreen>
       return;
     }
 
-    // 1. Finalize any lingering in-flight stream so strictly ONE 'राम' text is on screen
-    if (_activeStreams.isNotEmpty) {
-      for (final s in _activeStreams) {
-        if (!s.hasArrived) {
-          s.hasArrived = true;
-          s.onArrived();
-        }
-      }
-      _activeStreams.clear();
+    // Support simultaneous/concurrent Jap taps so multiple streams fly and reveal together
+    if (_launchedCount < _count) {
+      _launchedCount = _count;
+    }
+    if (_launchedCount >= _target) {
+      return;
     }
 
-    // 2. Set chanting state active (button turns to || "pause" during voice playback)
+    final int stepToReveal = _launchedCount;
+    _launchedCount++;
+
+    final targetNode = (stepToReveal < _allTargetNodes.length)
+        ? _allTargetNodes[stepToReveal]
+        : _allTargetNodes.last;
+
+    // 2. Set chanting state active
     setState(() {
       _isChantingActive = true;
       _isPaused = false;
@@ -379,11 +379,15 @@ class _DhupJapScreenState extends State<DhupJapScreen>
     // 4. Play chant audio (if sound enabled)
     _playChantAudio();
 
-    final Size screenSize = MediaQuery.of(context).size;
-    final int stepToReveal = _count; // Current Jap step to reveal
-    final targetNode = RamPathCalculator.getNodeForStep(stepToReveal, target: _target);
+    // 4b. Ignite diya flame immediately on chant click ("divo sarje")
+    _diyaController.forward();
 
-    // 5. Derive exact target coordinate on aspect-ratio fitted portrait
+    // 4c. Spawn immediate rich burst of incense smoke puffs ("dhuoop aave")
+    _spawnBurstSmokePuffs();
+
+    final Size screenSize = MediaQuery.of(context).size;
+
+    // 5. Derive exact random target coordinate on aspect-ratio fitted portrait ("random jagya ae jaay")
     final dstRect = RamPathCalculator.computeDstRect(screenSize);
     final targetPoint = Offset(
       dstRect.left + (targetNode.u * dstRect.width),
@@ -393,28 +397,32 @@ class _DhupJapScreenState extends State<DhupJapScreen>
     final defaultBurnerCenter = Offset(screenSize.width * 0.50, screenSize.height * 0.76);
     final startPoint = _burnerEmissionPoint.dx != 0 ? _burnerEmissionPoint : defaultBurnerCenter;
 
-    // 6. Launch single dynamic stream with strictly ONE glowing 'राम' text
-    // Synchronized with voice: when sound is enabled, travels for 3.8s (matching "जय जय राम" crescendo)
-    // When sound is disabled (muted/test), travels 0.75s for fast responsive tapping
-    final double streamDuration = _isSoundEnabled ? 3.8 : 0.75;
+    // Fast responsive and synchronized flight duration: ~1.0s (sound on) or ~0.65s (muted)
+    final double streamDuration = _isSoundEnabled ? 1.0 : 0.65;
 
     final stream = DirectionalSmokeStream(
       step: stepToReveal,
       start: startPoint,
       target: targetPoint,
       duration: streamDuration,
+      dispersalDuration: 1.3,
       text: japMantraText,
       onArrived: () {
         if (!mounted) return;
 
         setState(() {
-          _count = math.min(_target, stepToReveal + 1);
+          _count = math.min(_target, _count + 1);
           _newestNode = targetNode;
-          _revealedNodes = RamPathCalculator.getRevealedNodesForCount(_count, target: _target);
-          // If sound is muted, chant finishes immediately upon arrival
+          _revealedNodes = _allTargetNodes.sublist(0, _count);
+
+          // If sound is muted and all active streams have arrived, reset chanting state
           if (!_isSoundEnabled) {
-            _isChantingActive = false;
-            _isPaused = false;
+            final anyInFlight = _activeStreams.any((s) => !s.hasArrived);
+            if (!anyInFlight) {
+              _isChantingActive = false;
+              _isPaused = false;
+              _diyaController.reverse();
+            }
           }
         });
 
@@ -424,7 +432,14 @@ class _DhupJapScreenState extends State<DhupJapScreen>
 
         // Check for 108 Jap Completion
         if (_count >= _target) {
-          _handle108Completion();
+          _persistProgress();
+          // Delay transition by 1.2s so the devotee clearly sees "108 / 108",
+          // full unmasking of the deity portrait, and glorious golden shimmer bloom!
+          Future.delayed(const Duration(milliseconds: 1200), () {
+            if (mounted && _count >= _target && !_isCompleted) {
+              _handle108Completion();
+            }
+          });
         } else {
           _persistProgress();
         }
@@ -435,10 +450,10 @@ class _DhupJapScreenState extends State<DhupJapScreen>
       _activeStreams.add(stream);
     });
 
-    // Drive flight controller duration: 5280ms when sound on, 950ms when sound muted
+    // Drive flight controller duration: 1800ms when sound on, 1100ms when sound muted
     _flightController.duration = _isSoundEnabled
-        ? const Duration(milliseconds: 5280)
-        : const Duration(milliseconds: 950);
+        ? const Duration(milliseconds: 1800)
+        : const Duration(milliseconds: 1100);
     _flightController.forward(from: 0.0);
   }
 
@@ -476,7 +491,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
       _isPaused = false;
       _isCompleted = true;
       _completedMalas++;
-      _revealedNodes = RamPathCalculator.revealNodes; // 100% full reveal
+      _revealedNodes = _allTargetNodes; // 100% full reveal
     });
     refreshJapDarshanVideo(notifyIfPending: true);
 
@@ -494,6 +509,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
   void _performReset() {
     _audioPlayer.stop().catchError((_) {});
     _flightController.reset();
+    _diyaController.reset();
     setState(() {
       _count = 0;
       _completedMalas = 0;
@@ -503,6 +519,8 @@ class _DhupJapScreenState extends State<DhupJapScreen>
       _revealedNodes = [];
       _newestNode = null;
       _activeStreams.clear();
+      _ambientWisps.clear();
+      _initTargetNodes();
     });
 
     _shimmerController.reset();
@@ -515,14 +533,18 @@ class _DhupJapScreenState extends State<DhupJapScreen>
   void _startNextMala() {
     _audioPlayer.stop().catchError((_) {});
     _flightController.reset();
+    _diyaController.reset();
     setState(() {
       _count = 0;
+      _completedMalas += 1;
       _isCompleted = false;
       _isChantingActive = false;
       _isPaused = false;
       _revealedNodes = [];
       _newestNode = null;
       _activeStreams.clear();
+      _ambientWisps.clear();
+      _initTargetNodes();
     });
     _completionController.reset();
     _persistProgress();
@@ -610,6 +632,8 @@ class _DhupJapScreenState extends State<DhupJapScreen>
                   activeStreams: _activeStreams,
                   ambientWisps: _ambientWisps,
                   burnerMouthCenter: _burnerEmissionPoint,
+                  smokeTime: _ambientController.value * 2 * math.pi,
+                  smokeIntensity: (_isChantingActive && !_isPaused) ? _diyaController.value : 0.0,
                 ),
               ),
             ),
@@ -619,15 +643,20 @@ class _DhupJapScreenState extends State<DhupJapScreen>
               left: 0,
               right: 0,
               bottom: 155,
-              child: DhupBurnerWidget(
-                emberGlow: _ambientController.value,
-                onBurnerMouthPositioned: (pos) {
-                  if (_burnerEmissionPoint != pos) {
-                    setState(() {
-                      _burnerEmissionPoint = pos;
-                    });
-                  }
-                },
+              child: AnimatedBuilder(
+                animation: _diyaController,
+                builder: (context, _) => DhupBurnerWidget(
+                  emberGlow: _ambientController.value,
+                  diyaIntensity: _diyaController.value,
+                  isChantingActive: _isChantingActive && !_isPaused,
+                  onBurnerMouthPositioned: (pos) {
+                    if (_burnerEmissionPoint != pos) {
+                      setState(() {
+                        _burnerEmissionPoint = pos;
+                      });
+                    }
+                  },
+                ),
               ),
             ),
 
@@ -747,7 +776,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
                       _count = updated % _target;
                       _completedMalas = updated ~/ _target;
                       _isCompleted = _count >= _target;
-                      _revealedNodes = _count > 0 ? RamPathCalculator.getRevealedNodesForCount(_count, target: _target) : [];
+                      _initTargetNodes();
                     });
                   }
                 },
@@ -794,7 +823,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
                       _count = updated % _target;
                       _completedMalas = updated ~/ _target;
                       _isCompleted = _count >= _target;
-                      _revealedNodes = _count > 0 ? RamPathCalculator.getRevealedNodesForCount(_count, target: _target) : [];
+                      _initTargetNodes();
                     });
                   }
                 },
@@ -841,7 +870,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
                       _count = updated % _target;
                       _completedMalas = updated ~/ _target;
                       _isCompleted = _count >= _target;
-                      _revealedNodes = _count > 0 ? RamPathCalculator.getRevealedNodesForCount(_count, target: _target) : [];
+                      _initTargetNodes();
                     });
                   }
                 },
@@ -981,60 +1010,49 @@ class _DhupJapScreenState extends State<DhupJapScreen>
             },
           ),
 
-          // Center: Glowing Orange/Gold Play Button (shows || "pause" while chanting)
+          // Center: Glowing Orange/Gold Play Button (chants on every tap, "jetlli var karu etli var thavu joie")
           ScaleTransition(
             scale: _tapButtonController,
             child: GestureDetector(
               onTap: _onTapChant,
               behavior: HitTestBehavior.opaque,
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: 68,
-                height: 68,
+                duration: const Duration(milliseconds: 180),
+                width: 70,
+                height: 70,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    center: const Alignment(-0.25, -0.3),
+                  gradient: const RadialGradient(
+                    center: Alignment(-0.25, -0.3),
                     radius: 0.9,
-                    colors: (_isChantingActive && !_isPaused)
-                        ? const [
-                            Color(0xFFFFB300),
-                            Color(0xFFFF6D00),
-                            Color(0xFFD84315),
-                          ]
-                        : const [
-                            Color(0xFFFFD54F),
-                            Color(0xFFFF9900),
-                            Color(0xFFE65100),
-                          ],
-                    stops: const [0.0, 0.55, 1.0],
+                    colors: [
+                      Color(0xFFFFD54F),
+                      Color(0xFFFF9900),
+                      Color(0xFFE65100),
+                    ],
+                    stops: [0.0, 0.55, 1.0],
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFFF7700).withValues(alpha: (_isChantingActive && !_isPaused) ? 0.85 : 0.65),
-                      blurRadius: (_isChantingActive && !_isPaused) ? 26.0 : 20.0,
-                      spreadRadius: (_isChantingActive && !_isPaused) ? 4.0 : 2.0,
+                      color: const Color(0xFFFF7700).withValues(alpha: _isChantingActive ? 0.90 : 0.65),
+                      blurRadius: _isChantingActive ? 28.0 : 20.0,
+                      spreadRadius: _isChantingActive ? 4.0 : 2.0,
                     ),
-                    BoxShadow(
-                      color: const Color(0xFFFFD54F).withValues(alpha: 0.45),
+                    const BoxShadow(
+                      color: Color(0xFFFFD54F),
                       blurRadius: 12.0,
                     ),
                   ],
                   border: Border.all(
                     color: const Color(0xFFFFF3E0),
-                    width: 2.0,
+                    width: 2.2,
                   ),
                 ),
-                child: Center(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 180),
-                    transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
-                    child: Icon(
-                      (_isChantingActive && !_isPaused) ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                      key: ValueKey<bool>(_isChantingActive && !_isPaused),
-                      color: Colors.white,
-                      size: 40,
-                    ),
+                child: const Center(
+                  child: Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 44,
                   ),
                 ),
               ),

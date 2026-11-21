@@ -1,15 +1,22 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 /// Renders the traditional brass Dhup Dani (incense burner) with glowing embers,
-/// burning incense sticks, flanking brass diyas, and scattered red rose petals on the altar.
+/// scattered red rose petals on the altar, and a realistic sacred diya flame.
+/// - The baked flame has been removed from the brass burner image so it is unlit by default.
+/// - When chanting is clicked, an authentic, realistic living flame ignites on the wick spout.
 class DhupBurnerWidget extends StatelessWidget {
   final double emberGlow;
+  final double diyaIntensity; // 0.0 (dormant/unlit) to 1.0+ (bright flaming)
+  final bool isChantingActive;
   final ValueChanged<Offset>? onBurnerMouthPositioned;
 
   const DhupBurnerWidget({
     super.key,
     required this.emberGlow,
+    this.diyaIntensity = 0.0,
+    this.isChantingActive = false,
     this.onBurnerMouthPositioned,
   });
 
@@ -20,18 +27,20 @@ class DhupBurnerWidget extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Calculate smoke emission point in global or parent coordinates
+        // Calculate smoke emission point in global coordinates (at the tip of the flame)
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final renderBox = context.findRenderObject() as RenderBox?;
           if (renderBox != null && renderBox.hasSize && onBurnerMouthPositioned != null) {
             final localCenter = Offset(
-              renderBox.size.width * 0.50,
-              renderBox.size.height * 0.32,
+              (renderBox.size.width * 0.50) + (burnerSize * 0.198),
+              renderBox.size.height - (burnerSize * 0.678) - 16,
             );
             final globalCenter = renderBox.localToGlobal(localCenter);
             onBurnerMouthPositioned!(globalCenter);
           }
         });
+
+        final double clampedIntensity = diyaIntensity.clamp(0.0, 1.3);
 
         return SizedBox(
           width: double.infinity,
@@ -98,57 +107,7 @@ class DhupBurnerWidget extends StatelessWidget {
                 ),
               ),
 
-              // 2. Left Altar Diya Lamp
-              Positioned(
-                bottom: 12,
-                left: screenW * 0.15,
-                child: _buildAltarDiya(emberGlow, isLeft: true),
-              ),
-
-              // 3. Right Altar Diya Lamp
-              Positioned(
-                bottom: 12,
-                right: screenW * 0.15,
-                child: _buildAltarDiya(emberGlow, isLeft: false),
-              ),
-
-              // 4. Warm Ember Glow behind/in Dhup Dani
-              Positioned(
-                bottom: 45,
-                child: Container(
-                  width: burnerSize * 0.65,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFFF5500).withValues(
-                          alpha: 0.45 + (0.25 * math.sin(emberGlow * math.pi)),
-                        ),
-                        blurRadius: 28,
-                        spreadRadius: 8,
-                      ),
-                      BoxShadow(
-                        color: const Color(0xFFFFD54F).withValues(
-                          alpha: 0.35 + (0.15 * math.cos(emberGlow * math.pi)),
-                        ),
-                        blurRadius: 18,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // 5. Burning Incense Sticks (Agarbatti) radiating from burner bowl
-              Positioned(
-                bottom: 55,
-                child: CustomPaint(
-                  size: Size(burnerSize * 0.60, 48),
-                  painter: _IncenseSticksPainter(emberGlow: emberGlow),
-                ),
-              ),
-
-              // 6. Brass Dhup Dani Image
+              // 2. Unlit Brass Dhup Dani Image
               Positioned(
                 bottom: 0,
                 child: Image.asset(
@@ -159,63 +118,21 @@ class DhupBurnerWidget extends StatelessWidget {
                   errorBuilder: (context, error, stackTrace) => _buildFallbackDhupDani(burnerSize),
                 ),
               ),
+
+              // 3. Realistic Sacred Central Diya Flame positioned strictly ON the wick spout
+              if (clampedIntensity > 0.01)
+                Positioned(
+                  bottom: (burnerSize * 0.678) - 5,
+                  left: (screenW / 2) + (burnerSize * 0.198) - 13,
+                  child: RealisticDiyaFlame(
+                    emberGlow: emberGlow,
+                    intensity: clampedIntensity,
+                  ),
+                ),
             ],
           ),
         );
       },
-    );
-  }
-
-  Widget _buildAltarDiya(double emberGlow, {required bool isLeft}) {
-    final double flicker = 0.85 + (0.15 * math.sin(emberGlow * math.pi * 2 + (isLeft ? 0.0 : 1.2)));
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Flame
-        Container(
-          width: 12,
-          height: 18,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFFFD54F).withValues(alpha: 0.60 * flicker),
-                blurRadius: 14,
-                spreadRadius: 4,
-              ),
-              BoxShadow(
-                color: const Color(0xFFFF7700).withValues(alpha: 0.40 * flicker),
-                blurRadius: 22,
-                spreadRadius: 6,
-              ),
-            ],
-          ),
-          child: Center(
-            child: Container(
-              width: 6,
-              height: 12,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFF9C4),
-                borderRadius: BorderRadius.circular(6),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 2),
-        // Brass Diya Lamp Image
-        Image.asset(
-          'assets/images/devotional/diya_lamp.png',
-          width: 44,
-          height: 36,
-          fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) => const Icon(
-            Icons.local_fire_department_rounded,
-            color: Color(0xFFFFB300),
-            size: 28,
-          ),
-        ),
-      ],
     );
   }
 
@@ -233,49 +150,192 @@ class DhupBurnerWidget extends StatelessWidget {
   }
 }
 
-class _IncenseSticksPainter extends CustomPainter {
+/// Authentic, realistic temple oil lamp flame (દીવાની જ્યોત)
+/// - Teardrop organic flame envelope with golden amber and saffron tones
+/// - Radiant golden aura (પ્રભા) casting warm divine glow on the brass lamp
+/// - Vivid golden-yellow core and white-hot spark center (શુદ્ધ શ્વેત જ્યોત)
+/// - Delicate cyan-blue combustion base at the charred cotton wick (વાટ)
+/// - Living organic micro-flicker and tip sway
+class RealisticDiyaFlame extends StatelessWidget {
   final double emberGlow;
+  final double intensity;
 
-  _IncenseSticksPainter({required this.emberGlow});
+  const RealisticDiyaFlame({
+    super.key,
+    required this.emberGlow,
+    required this.intensity,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (intensity <= 0.01) return const SizedBox.shrink();
+
+    // Natural multi-frequency living flicker
+    final double flicker = 0.94 +
+        (0.06 * math.sin(emberGlow * math.pi * 7.0)) +
+        (0.03 * math.sin(emberGlow * math.pi * 15.0));
+    final double tipSway = 1.6 * math.sin(emberGlow * math.pi * 5.0);
+    final double scale = (intensity * flicker).clamp(0.0, 1.4);
+
+    return Transform.scale(
+      scale: scale,
+      alignment: Alignment.bottomCenter,
+      child: CustomPaint(
+        size: const Size(26, 40),
+        painter: _RealisticFlamePainter(
+          flicker: flicker,
+          tipSway: tipSway,
+          intensity: intensity.clamp(0.0, 1.0),
+        ),
+      ),
+    );
+  }
+}
+
+class _RealisticFlamePainter extends CustomPainter {
+  final double flicker;
+  final double tipSway;
+  final double intensity;
+
+  _RealisticFlamePainter({
+    required this.flicker,
+    required this.tipSway,
+    required this.intensity,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final stickPaint = Paint()
-      ..color = const Color(0xFF3E2723)
-      ..strokeWidth = 2.0
+    if (intensity <= 0.01) return;
+
+    final w = size.width;
+    final h = size.height;
+    final centerX = w * 0.50;
+    final baseY = h - 2.0;
+
+    // 1. Broad Ambient Golden/Saffron Aura (Soft Warm Glow)
+    final auraPaint = Paint()
+      ..shader = ui.Gradient.radial(
+        Offset(centerX, h * 0.55),
+        w * 1.5,
+        [
+          const Color(0xFFFFD54F).withValues(alpha: 0.65 * intensity),
+          const Color(0xFFFF8F00).withValues(alpha: 0.35 * intensity),
+          const Color(0xFFE65100).withValues(alpha: 0.15 * intensity),
+          Colors.transparent,
+        ],
+        [0.0, 0.40, 0.75, 1.0],
+      )
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8.0);
+    canvas.drawCircle(Offset(centerX, h * 0.55), w * 1.4, auraPaint);
+
+    // 2. Charred Cotton Wick Base (વાટ)
+    final wickPaint = Paint()
+      ..color = const Color(0xFF261C14).withValues(alpha: intensity)
+      ..strokeWidth = 2.4
       ..strokeCap = StrokeCap.round;
+    canvas.drawLine(Offset(centerX - 0.5, baseY), Offset(centerX, baseY - 5.0), wickPaint);
 
-    final emberPaint = Paint()..style = PaintingStyle.fill;
+    // 3. Outer Flame Body (Organic Teardrop Bezier)
+    final outerPath = Path();
+    final tipX = centerX + tipSway;
+    final tipY = 1.0;
 
-    final baseCenter = Offset(size.width / 2.0, size.height);
+    outerPath.moveTo(centerX, baseY - 2.0);
+    // Left belly
+    outerPath.cubicTo(
+      centerX - (w * 0.46), baseY - (h * 0.28),
+      centerX - (w * 0.38), h * 0.38,
+      tipX, tipY,
+    );
+    // Right belly
+    outerPath.cubicTo(
+      centerX + (w * 0.38), h * 0.38,
+      centerX + (w * 0.46), baseY - (h * 0.28),
+      centerX, baseY - 2.0,
+    );
+    outerPath.close();
 
-    // 5 Agarbatti incense sticks splayed out gently
-    final angles = [-0.32, -0.16, 0.0, 0.16, 0.32];
-    final stickLengths = [size.height * 0.95, size.height * 1.05, size.height * 1.10, size.height * 1.05, size.height * 0.95];
+    final outerFlamePaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(centerX, baseY),
+        Offset(tipX, tipY),
+        [
+          const Color(0xFFFF5722).withValues(alpha: 0.90 * intensity),
+          const Color(0xFFFF9800).withValues(alpha: 0.95 * intensity),
+          const Color(0xFFFFD600).withValues(alpha: 0.98 * intensity),
+          const Color(0xFFFFEB3B).withValues(alpha: 0.90 * intensity),
+          const Color(0xFFFF9100).withValues(alpha: 0.85 * intensity),
+        ],
+        [0.0, 0.25, 0.60, 0.85, 1.0],
+      )
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.0);
+    canvas.drawPath(outerPath, outerFlamePaint);
 
-    for (int i = 0; i < angles.length; i++) {
-      final angle = angles[i];
-      final len = stickLengths[i];
-      final tipX = baseCenter.dx + (len * math.sin(angle));
-      final tipY = baseCenter.dy - (len * math.cos(angle));
-      final tip = Offset(tipX, tipY);
+    // 4. Inner Radiant Core (Golden-Yellow Teardrop)
+    final innerPath = Path();
+    final innerTipY = h * 0.18;
+    innerPath.moveTo(centerX, baseY - 4.0);
+    innerPath.cubicTo(
+      centerX - (w * 0.26), baseY - (h * 0.32),
+      centerX - (w * 0.20), h * 0.45,
+      centerX + (tipSway * 0.5), innerTipY,
+    );
+    innerPath.cubicTo(
+      centerX + (w * 0.20), h * 0.45,
+      centerX + (w * 0.26), baseY - (h * 0.32),
+      centerX, baseY - 4.0,
+    );
+    innerPath.close();
 
-      // Draw stick
-      canvas.drawLine(baseCenter, tip, stickPaint);
+    final innerFlamePaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(centerX, baseY),
+        Offset(centerX, innerTipY),
+        [
+          const Color(0xFFFFD54F).withValues(alpha: 0.95 * intensity),
+          const Color(0xFFFFF59D).withValues(alpha: 0.98 * intensity),
+          const Color(0xFFFFFFFF).withValues(alpha: 0.95 * intensity),
+        ],
+        [0.0, 0.50, 1.0],
+      );
+    canvas.drawPath(innerPath, innerFlamePaint);
 
-      // Glowing ember tip
-      final double flicker = 0.70 + (0.30 * math.sin(emberGlow * math.pi * 3 + (i * 1.2)));
-      emberPaint.color = const Color(0xFFFF3D00).withValues(alpha: flicker);
-      canvas.drawCircle(tip, 2.5, emberPaint);
+    // 5. White-Hot Spark Center (શુદ્ધ શ્વેત જ્યોત)
+    final corePath = Path();
+    final coreTipY = h * 0.34;
+    corePath.moveTo(centerX, baseY - 5.0);
+    corePath.cubicTo(
+      centerX - (w * 0.12), baseY - (h * 0.30),
+      centerX - (w * 0.08), h * 0.52,
+      centerX + (tipSway * 0.2), coreTipY,
+    );
+    corePath.cubicTo(
+      centerX + (w * 0.08), h * 0.52,
+      centerX + (w * 0.12), baseY - (h * 0.30),
+      centerX, baseY - 5.0,
+    );
+    corePath.close();
 
-      // Warm glow halo on tip
-      final tipGlowPaint = Paint()
-        ..color = const Color(0xFFFFAB00).withValues(alpha: flicker * 0.6)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.5);
-      canvas.drawCircle(tip, 4.0, tipGlowPaint);
-    }
+    final corePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.98 * intensity)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.6);
+    canvas.drawPath(corePath, corePaint);
+
+    // 6. Base Cyan-Blue Crescent (Authentic Combustion Zone)
+    final blueBasePaint = Paint()
+      ..shader = ui.Gradient.radial(
+        Offset(centerX, baseY - 1.0),
+        w * 0.28,
+        [
+          const Color(0xFF2979FF).withValues(alpha: 0.60 * intensity),
+          const Color(0xFF1565C0).withValues(alpha: 0.35 * intensity),
+          Colors.transparent,
+        ],
+        [0.0, 0.65, 1.0],
+      );
+    canvas.drawCircle(Offset(centerX, baseY - 1.5), w * 0.25, blueBasePaint);
   }
 
   @override
-  bool shouldRepaint(covariant _IncenseSticksPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _RealisticFlamePainter oldDelegate) => true;
 }

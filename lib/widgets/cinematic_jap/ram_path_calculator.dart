@@ -39,6 +39,9 @@ class RevealNode {
 class RamPathCalculator {
   static const int targetJapCount = 108;
 
+  /// Face protection box: Lord Ram's divine face region.
+  static const Rect faceBox = Rect.fromLTRB(0.36, 0.25, 0.64, 0.40);
+
   /// Builds a natural, asymmetric, vertically elongated incense smoke plume path.
   /// The step seeds the contour, so every reveal gets its own irregular shape.
   static Path buildOrganicRevealPath(Offset center, double baseRadius, int step) {

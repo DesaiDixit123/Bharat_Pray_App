@@ -93,7 +93,7 @@ class _CustomJapPreviewSheetState extends State<CustomJapPreviewSheet>
     final progress = count / _previewChants;
     if (_isDhup) {
       return DhupIncenseRevealWidget(
-        revealedNodes: nodes,
+        revealedNodes: nodes.map((n) => DhupRevealNode.fromRevealNode(n)).toList(),
         shimmerProgress: 1.0,
         isCompleted: isCompleted,
         completionGlowProgress: isCompleted ? 1.0 : 0.0,
