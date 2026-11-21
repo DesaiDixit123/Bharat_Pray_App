@@ -985,8 +985,8 @@ class UtsavService {
       ? [ApiService.baseUrl]
       : [
           ApiService.baseUrl,
-          'http://192.168.29.209:3020',
           'http://192.168.29.73:3020',
+          'http://192.168.29.209:3020',
           'http://192.168.29.227:3020',
           'http://192.168.29.74:3020',
           'http://127.0.0.1:3020',

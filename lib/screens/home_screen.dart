@@ -22,7 +22,6 @@ import 'details/granth_chapter_reader_screen.dart';
 import 'details/yatra_live_sangha_screen.dart';
 import 'details/yatra_completed_screen.dart';
 import 'details/deity_detail_screen.dart';
-import 'details/festival_detail_screen.dart';
 import 'details/darshan_tab_content.dart';
 import 'details/deity_temples_screen.dart';
 import 'details/festivals_home_tab_content.dart';
@@ -2496,48 +2495,40 @@ class _HomeScreenState extends State<HomeScreen> {
             if (_festivalCards.isNotEmpty) ...[
               const SizedBox(height: 12),
               // 6. Festivals Horizontal Slider (Dynamic from Backend / Admin)
-              SizedBox(
-                height: 286,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  itemCount: _festivalCards.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (context, index) {
-                    final fest = _festivalCards[index];
-                    final title = (fest['title'] ?? fest['name'] ?? '').toString();
-                    final banner = (fest['imageUrl'] ?? fest['banner'] ?? fest['image'] ?? '').toString();
-                    final cardColor = fest['cardColor']?.toString();
-                    final startDate = (fest['date'] ?? fest['startDate'])?.toString();
-                    final dateText = fest['dateText']?.toString();
-                    final formattedDate = fest['formattedDate']?.toString();
+              RepaintBoundary(
+                child: SizedBox(
+                  height: 286,
+                  child: ListView.separated(
+                    key: const PageStorageKey<String>('home_festivals_slider'),
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                    itemCount: _festivalCards.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    itemBuilder: (context, index) {
+                      final fest = _festivalCards[index];
+                      final title = (fest['title'] ?? fest['name'] ?? '').toString();
+                      final banner = (fest['imageUrl'] ?? fest['banner'] ?? fest['image'] ?? '').toString();
+                      final cardColor = fest['cardColor']?.toString();
+                      final startDate = (fest['date'] ?? fest['startDate'])?.toString();
+                      final dateText = fest['dateText']?.toString();
+                      final formattedDate = fest['formattedDate']?.toString();
 
-                    return SizedBox(
-                      width: 208,
-                      child: _buildFestivalCard(
-                        title: title.isNotEmpty ? title : 'Festival',
-                        dateText: dateText,
-                        rawDate: startDate,
-                        formattedDate: formattedDate,
-                        imageUrl: banner,
-                        cardColorHex: cardColor,
-                        height: 286,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => FestivalDetailScreen(
-                                festivalName: title,
-                                imageUrl: banner,
-                                festivalData: fest,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    );
-                  },
+                      return SizedBox(
+                        width: 208,
+                        child: _buildFestivalCard(
+                          title: title.isNotEmpty ? title : 'Festival',
+                          dateText: dateText,
+                          rawDate: startDate,
+                          formattedDate: formattedDate,
+                          imageUrl: banner,
+                          cardColorHex: cardColor,
+                          height: 286,
+                          onTap: null,
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
             ],
@@ -2934,9 +2925,7 @@ class _HomeScreenState extends State<HomeScreen> {
       controller: _pageController,
       physics: const BouncingScrollPhysics(),
       onPageChanged: (index) {
-        setState(() {
-          _currentPage = index;
-        });
+        _currentPage = index;
         _startCarouselTimer();
       },
       itemCount: _liveDarshanBanners.length,
@@ -4039,48 +4028,62 @@ class _HomeScreenState extends State<HomeScreen> {
     return const Color(0xFFFF7700);
   }
 
+  static final Map<String, Uint8List> _base64FestivalImageCache = {};
+
   Widget _buildFestivalImage(String imageUrl) {
     if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
       return Image.network(
         imageUrl,
         fit: BoxFit.cover,
+        gaplessPlayback: true,
         errorBuilder: (_, __, ___) => Image.asset(
           'assets/images/new_year_card.png',
           fit: BoxFit.cover,
+          gaplessPlayback: true,
         ),
       );
     } else if (imageUrl.startsWith('data:image')) {
       try {
-        final commaIdx = imageUrl.indexOf(',');
-        final base64Str = commaIdx != -1 ? imageUrl.substring(commaIdx + 1) : imageUrl;
-        final bytes = base64Decode(base64Str);
+        Uint8List? bytes = _base64FestivalImageCache[imageUrl];
+        if (bytes == null) {
+          final commaIdx = imageUrl.indexOf(',');
+          final base64Str = commaIdx != -1 ? imageUrl.substring(commaIdx + 1) : imageUrl;
+          bytes = base64Decode(base64Str);
+          _base64FestivalImageCache[imageUrl] = bytes;
+        }
         return Image.memory(
           bytes,
           fit: BoxFit.cover,
+          gaplessPlayback: true,
           errorBuilder: (_, __, ___) => Image.asset(
             'assets/images/new_year_card.png',
             fit: BoxFit.cover,
+            gaplessPlayback: true,
           ),
         );
       } catch (_) {
         return Image.asset(
           'assets/images/new_year_card.png',
           fit: BoxFit.cover,
+          gaplessPlayback: true,
         );
       }
     } else if (imageUrl.isNotEmpty) {
       return Image.asset(
         imageUrl,
         fit: BoxFit.cover,
+        gaplessPlayback: true,
         errorBuilder: (_, __, ___) => Image.asset(
           'assets/images/new_year_card.png',
           fit: BoxFit.cover,
+          gaplessPlayback: true,
         ),
       );
     } else {
       return Image.asset(
         'assets/images/new_year_card.png',
         fit: BoxFit.cover,
+        gaplessPlayback: true,
       );
     }
   }

@@ -15,8 +15,8 @@ class ApiService {
   static const bool isLive = false;
 
   // Local backend configuration:
-  // Active Wi-Fi IP = 192.168.29.209, Port = 3020
-  static const String _localIp = '192.168.29.209';
+  // Active Wi-Fi IP = 192.168.29.73, Port = 3020
+  static const String _localIp = '192.168.29.73';
   static const int _localPort = 3020;
 
   static String get baseUrl {
