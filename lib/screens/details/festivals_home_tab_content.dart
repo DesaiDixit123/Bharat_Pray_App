@@ -12,7 +12,6 @@ import 'mandal_leaderboard_tab_content.dart';
 import 'mandal_profile_screen.dart';
 import '../../services/utsav_service.dart';
 import '../../core/localization/localized_api_helper.dart';
-import '../../core/localization/localization_constants.dart';
 
 
 const String _kBackArrowSvg =
@@ -40,13 +39,13 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
   Map<String, dynamic>? _myRegistration;
 
   List<Map<String, dynamic>> _activeFestivals = [];
-  List<Map<String, dynamic>> _upcomingFestivals = [];
+  List<Map<String, dynamic>> _registerOpenFestivals = [];
   List<Map<String, dynamic>> _topMandals = [];
   bool _isLoading = true;
 
   List<Map<String, dynamic>> get _currentList {
     if (_segment == 0) return _activeFestivals;
-    if (_segment == 1) return _upcomingFestivals;
+    if (_segment == 1) return _registerOpenFestivals;
     // Segment 2: Top Mandals — If no active festival, top mandals should be empty!
     if (_activeFestivals.isEmpty) return [];
     return _topMandals;
@@ -63,8 +62,37 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
   Future<void> _loadUtsavData() async {
     try {
       final all = await UtsavService.getFestivals(status: 'ALL');
-      final active = all.where((f) => (f['status'] ?? '').toString().toLowerCase() == 'active').toList();
-      final upcoming = all.where((f) => (f['status'] ?? '').toString().toLowerCase() == 'upcoming').toList();
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      bool isNotCompleted(Map<String, dynamic> f) {
+        final status = (f['status'] ?? '').toString().toLowerCase();
+        if (status == 'completed') return false;
+
+        final endStr = f['endDate']?.toString();
+        if (endStr != null && endStr.isNotEmpty) {
+          final end = DateTime.tryParse(endStr);
+          if (end != null) {
+            final endDay = DateTime(end.year, end.month, end.day);
+            if (today.isAfter(endDay)) return false;
+          }
+        }
+        return true;
+      }
+
+      final active = all.where((f) {
+        final st = (f['status'] ?? '').toString().toLowerCase();
+        return st == 'active' && isNotCompleted(f);
+      }).toList();
+
+      final registerOpen = all.where((f) {
+        if (!isNotCompleted(f)) return false;
+        final regStatus = (f['registrationStatus'] ?? '').toString().toLowerCase();
+        if (regStatus == 'closed') return false;
+        return true;
+      }).toList();
+
       final mandals = await UtsavService.getMandals();
       
       Map<String, dynamic>? myReg;
@@ -78,7 +106,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
       if (mounted) {
         setState(() {
           _activeFestivals = active;
-          _upcomingFestivals = upcoming;
+          _registerOpenFestivals = registerOpen;
           _topMandals = mandals;
           _myRegistration = myReg;
           _hasRegisteredMandal = hasRegistered;
@@ -87,13 +115,11 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
       }
     } catch (e) {
       debugPrint('[UtsavHome] Error loading utsav data: $e');
-      final fallbackFestivals = await UtsavService.getFestivals(status: 'ALL');
-      final fallbackMandals = await UtsavService.getMandals();
       if (mounted) {
         setState(() {
-          _activeFestivals = fallbackFestivals.where((f) => (f['status'] ?? '').toString().toLowerCase() == 'active').toList();
-          _upcomingFestivals = fallbackFestivals.where((f) => (f['status'] ?? '').toString().toLowerCase() == 'upcoming').toList();
-          _topMandals = fallbackMandals;
+          _activeFestivals = [];
+          _registerOpenFestivals = [];
+          _topMandals = [];
           _isLoading = false;
         });
       }
@@ -300,8 +326,16 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
   }
 
   List<Map<String, dynamic>> get _bannerItems {
-    final list = [..._activeFestivals, ..._upcomingFestivals];
-    return list.map((f) => {
+    final seen = <String>{};
+    final uniqueList = <Map<String, dynamic>>[];
+    for (final f in [..._activeFestivals, ..._registerOpenFestivals]) {
+      final id = (f['_id'] ?? f['customId'] ?? f['name'] ?? '').toString();
+      if (id.isNotEmpty && !seen.contains(id)) {
+        seen.add(id);
+        uniqueList.add(f);
+      }
+    }
+    return uniqueList.map((f) => {
       'title': LocalizedApiHelper.parse(f['name'], defaultValue: 'Festival'),
       'subtitle': LocalizedApiHelper.parse(f['slogan'] ?? f['description'], defaultValue: 'Connect. Devotion. Win.'),
       'tag': '${f['status'] ?? 'Active'} Utsav',
@@ -475,7 +509,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
             children: [
               _buildSegmentTab('Active', 0),
               const SizedBox(width: 8),
-              _buildSegmentTab('Upcoming', 1),
+              _buildSegmentTab('Register Open', 1),
               const SizedBox(width: 8),
               _buildSegmentTab('Top Mandals', 2),
             ],
@@ -537,6 +571,14 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
     }
     final isOpen = regStatus == 'open';
 
+    // Check if this festival has user's registration
+    final regFest = (_myRegistration?['festival'] ?? _myRegistration?['festivalName'] ?? _myRegistration?['category'])?.toString().toLowerCase() ?? '';
+    final currFest = name.toLowerCase();
+    final bool isRegisteredForThis = _myRegistration != null && regFest.isNotEmpty && currFest.isNotEmpty &&
+        (currFest.contains(regFest) || regFest.contains(currFest) ||
+         (currFest.contains('navratri') && regFest.contains('navratri')) ||
+         (currFest.contains('diwali') && regFest.contains('diwali')));
+
     final isClickable = _segment == 0 || isOpen;
 
     return Container(
@@ -560,14 +602,6 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
           borderRadius: BorderRadius.circular(16),
           onTap: isClickable
               ? () async {
-                  // Check if this festival has user's registration
-                  final regFest = (_myRegistration?['festival'] ?? _myRegistration?['festivalName'] ?? _myRegistration?['category'])?.toString().toLowerCase() ?? '';
-                  final currFest = name.toLowerCase();
-                  final bool isRegisteredForThis = _myRegistration != null && regFest.isNotEmpty && currFest.isNotEmpty &&
-                      (currFest.contains(regFest) || regFest.contains(currFest) ||
-                       (currFest.contains('navratri') && regFest.contains('navratri')) ||
-                       (currFest.contains('diwali') && regFest.contains('diwali')));
-
                   if (isRegisteredForThis) {
                     final st = (_myRegistration!['status'] ?? 'Pending').toString().toLowerCase();
                     if (st == 'pending' || st == 'rejected') {
@@ -596,7 +630,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
                     );
                     _loadUtsavData();
                   } else {
-                    // Upcoming → Register flow
+                    // Register Open → Register flow
                     await Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -658,14 +692,63 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
                 ),
                 const SizedBox(width: 8),
 
-                // Arrow (Only visible if clickable)
-                isClickable
-                    ? const Icon(
-                        Icons.arrow_forward_ios_rounded,
-                        size: 14,
-                        color: Color(0xFFFF8A1E),
-                      )
-                    : const SizedBox(width: 14),
+                // Register Button (ONLY in Register Open tab) or Arrow
+                if (_segment == 1 && isOpen && !isRegisteredForThis)
+                  GestureDetector(
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => FestivalDetailScreen(
+                            festivalName: name,
+                            imageUrl: imageUrl,
+                            isMandal: true,
+                            festivalData: festival,
+                          ),
+                        ),
+                      );
+                      _loadUtsavData();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFF8A1E), Color(0xFFFF5500)],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFFF7700).withValues(alpha: 0.3),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.app_registration_rounded, size: 14, color: Colors.white),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Register',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else if (isClickable)
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 14,
+                    color: Color(0xFFFF8A1E),
+                  )
+                else
+                  const SizedBox(width: 14),
               ],
             ),
           ),
@@ -920,7 +1003,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
     } else if (_segment == 2) {
       content = _buildTopMandalsEmptyContent();
     } else {
-      content = _buildUpcomingEmptyContent();
+      content = _buildRegisterOpenEmptyContent();
     }
 
     final bottomInset = 90.0 + MediaQuery.of(context).padding.bottom;
@@ -960,7 +1043,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
         ),
         const SizedBox(height: 16),
         Text(
-          'No Active Festivals Today',
+          'હાલમાં કોઈ ઉત્સવ ઉપલબ્ધ નથી',
           textAlign: TextAlign.center,
           style: GoogleFonts.outfit(
             fontSize: 18,
@@ -970,7 +1053,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Maha Navratri Garba Utsav starts on 11 Oct 2026.\nRegistrations are open now in Upcoming!',
+          'No Active Festivals Today\nનવા ઉત્સવની વિગતો અહીં ટૂંક સમયમાં જોવા મળશે.',
           textAlign: TextAlign.center,
           style: GoogleFonts.outfit(
             fontSize: 13.5,
@@ -985,7 +1068,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
           },
           icon: const Icon(Icons.app_registration_rounded, size: 18, color: Colors.white),
           label: Text(
-            'View Upcoming & Register Mandal',
+            'View Register Open Festivals',
             style: GoogleFonts.outfit(
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -1005,7 +1088,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
     );
   }
 
-  Widget _buildUpcomingEmptyContent() {
+  Widget _buildRegisterOpenEmptyContent() {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1020,7 +1103,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
         ),
         const SizedBox(height: 16),
         Text(
-          'No Upcoming Festivals',
+          'હાલમાં કોઈ રજિસ્ટ્રેશન ઓપન નથી',
           textAlign: TextAlign.center,
           style: GoogleFonts.outfit(
             fontSize: 18,
@@ -1030,7 +1113,7 @@ class _FestivalsHomeTabContentState extends State<FestivalsHomeTabContent> {
         ),
         const SizedBox(height: 8),
         Text(
-          'New festival schedules and registration dates will appear here soon.',
+          'No Registrations Open Currently\nનવા ઉત્સવનું રજિસ્ટ્રેશન શરૂ થશે ત્યારે તે અહીં જોવા મળશે.',
           textAlign: TextAlign.center,
           style: GoogleFonts.outfit(
             fontSize: 13.5,

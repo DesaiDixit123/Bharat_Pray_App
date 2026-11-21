@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/localization/language_manager.dart';
-import '../core/localization/localized_api_helper.dart';
 import 'api_service.dart';
 
 class UtsavService {
@@ -316,39 +316,34 @@ class UtsavService {
   // ─── Festivals ─────────────────────────────────────────────────────────────
 
   static Future<List<Map<String, dynamic>>> getFestivals({String status = 'ALL'}) async {
-    for (final host in _backendHosts) {
-      try {
-        final uri = Uri.parse('$host/api/utsav/festivals?status=ALL');
-        final response = await http.get(uri, headers: _defaultHeaders()).timeout(const Duration(seconds: 4));
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          if (data['IsSuccess'] == true && data['Data'] is List) {
-            final list = (data['Data'] as List).cast<Map<String, dynamic>>();
-            if (list.isNotEmpty) {
-              final computed = list.map(_withDynamicStatus).toList();
-              final prefs = await SharedPreferences.getInstance();
-              final langCode = LanguageManager.instance.currentLanguageCode;
-              await prefs.setString('utsav_cached_festivals_$langCode', jsonEncode(list));
-              if (status == 'ALL') return computed;
-              return computed.where((f) => (f['status'] ?? '').toString().toLowerCase() == status.toLowerCase()).toList();
-            }
-          }
+    try {
+      final uri = Uri.parse('${ApiService.baseUrl}/api/utsav/festivals?status=ALL');
+      final response = await http.get(uri, headers: _defaultHeaders()).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['IsSuccess'] == true && data['Data'] is List) {
+          final list = (data['Data'] as List).cast<Map<String, dynamic>>();
+          final computed = list.map(_withDynamicStatus).toList();
+          final prefs = await SharedPreferences.getInstance();
+          final langCode = LanguageManager.instance.currentLanguageCode;
+          await prefs.setString('utsav_cached_festivals_$langCode', jsonEncode(list));
+          if (status == 'ALL') return computed;
+          return computed.where((f) => (f['status'] ?? '').toString().toLowerCase() == status.toLowerCase()).toList();
         }
-      } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('[UtsavService] getFestivals error: $e');
     }
 
-    // Fallback to cached data
+    // Fallback to cached data ONLY if network failed
     final prefs = await SharedPreferences.getInstance();
     final langCode = LanguageManager.instance.currentLanguageCode;
     final saved = prefs.getString('utsav_cached_festivals_$langCode') ?? prefs.getString('utsav_cached_festivals');
-    List<Map<String, dynamic>> all = _kInitialFestivals;
+    List<Map<String, dynamic>> all = [];
     if (saved != null) {
       try {
         final decoded = jsonDecode(saved) as List;
-        final list = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-        if (list.isNotEmpty && list.any((f) => (f['name'] ?? '').toString().toLowerCase().contains('pre'))) {
-          all = list;
-        }
+        all = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       } catch (_) {}
     }
 
@@ -381,12 +376,10 @@ class UtsavService {
         final data = jsonDecode(response.body);
         if (data['IsSuccess'] == true && data['Data'] is List) {
           final list = (data['Data'] as List).cast<Map<String, dynamic>>();
-          if (list.isNotEmpty) {
-            final prefs = await SharedPreferences.getInstance();
-            final langCode = LanguageManager.instance.currentLanguageCode;
-            await prefs.setString('utsav_cached_mandals_$langCode', jsonEncode(list));
-            return list;
-          }
+          final prefs = await SharedPreferences.getInstance();
+          final langCode = LanguageManager.instance.currentLanguageCode;
+          await prefs.setString('utsav_cached_mandals_$langCode', jsonEncode(list));
+          return list;
         }
       }
     } catch (_) {}
@@ -981,17 +974,7 @@ class UtsavService {
 
   // ─── Backend Connectivity Helpers ─────────────────────────────────────────
 
-  static List<String> get _backendHosts => ApiService.isLive
-      ? [ApiService.baseUrl]
-      : [
-          ApiService.baseUrl,
-          'http://192.168.29.73:3020',
-          'http://192.168.29.209:3020',
-          'http://192.168.29.227:3020',
-          'http://192.168.29.74:3020',
-          'http://127.0.0.1:3020',
-          'http://10.0.2.2:3020',
-        ];
+  static List<String> get _backendHosts => [ApiService.baseUrl];
 
   static String resolveImageUrl(String? url, {String fallback = 'assets/images/devotional/navratri_garba_festival.jpg'}) {
     if (url == null || url.trim().isEmpty) return fallback;
