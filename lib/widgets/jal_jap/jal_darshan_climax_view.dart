@@ -124,99 +124,32 @@ class _JalDarshanClimaxViewState extends State<JalDarshanClimaxView>
             },
           ),
 
-          // ── 3. Bottom Controls & Devotional Blessing Banner ──────────
-          SafeArea(
-            child: Align(
-              alignment: Alignment.bottomCenter,
+          // ── 3. Subtle Top-Left Back Button (Pure Live Darshan, matching Divine Reveal) ──
+          Positioned(
+            top: 0,
+            left: 0,
+            child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Blessing Banner
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.70),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: const Color(0xFFFFB300),
-                          width: 1.2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFFFF9900).withValues(alpha: 0.45),
-                            blurRadius: 18,
-                            spreadRadius: 2,
-                          ),
-                        ],
-                      ),
-                      child: Text(
-                        '🙏 जय श्री राम — दिव्य जल दर्शन 🙏',
-                        style: GoogleFonts.notoSerifDevanagari(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFFFFD54F),
-                          shadows: const [
-                            Shadow(color: Color(0xFFFF7700), blurRadius: 10),
-                          ],
-                        ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: widget.onExit,
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.30),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFFFFD54F).withValues(alpha: 0.35),
+                        width: 1.0,
                       ),
                     ),
-
-                    const SizedBox(height: 18),
-
-                    // Actions: [Next Mala 📿] and [Darshan Exit]
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Next Mala Button
-                        ElevatedButton.icon(
-                          onPressed: widget.onNextMala,
-                          icon: const Icon(Icons.refresh_rounded, color: Colors.white, size: 18),
-                          label: Text(
-                            'Next Mala',
-                            style: GoogleFonts.outfit(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: Colors.white,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFFF7700),
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(22),
-                            ),
-                            elevation: 6,
-                          ),
-                        ),
-
-                        const SizedBox(width: 14),
-
-                        // Exit Button
-                        OutlinedButton(
-                          onPressed: widget.onExit,
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Color(0xFFFFD54F), width: 1.2),
-                            backgroundColor: Colors.black45,
-                            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(22),
-                            ),
-                          ),
-                          child: Text(
-                            'Exit',
-                            style: GoogleFonts.outfit(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: const Color(0xFFFFD54F),
-                            ),
-                          ),
-                        ),
-                      ],
+                    child: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      color: Color(0xFFFFE082),
+                      size: 18,
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),

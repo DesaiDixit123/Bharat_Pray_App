@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/jap_models.dart';
 import '../../widgets/jap/jap_voice_selection.dart';
@@ -11,6 +12,7 @@ import '../../models/jap_theme_config.dart';
 import '../../services/api_service.dart';
 import '../../services/jap_offline_repository.dart';
 import '../../services/jap_background_dhun_service.dart';
+import '../../services/jap_video_preloader.dart';
 import '../../services/saved_items_service.dart';
 import '../../widgets/cinematic_jap/ram_path_calculator.dart';
 import '../../widgets/cinematic_jap/single_ram_flight_widget.dart';
@@ -206,6 +208,32 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
   bool _isCompleted = false;
 
   Timer? _syncDebounceTimer;
+  VideoPlayerController? _preloadedDarshanController;
+  bool _isWarmingDarshanVideo = false;
+
+  Future<void> _warmUpDarshanController() async {
+    if (_preloadedDarshanController != null || _isWarmingDarshanVideo) return;
+    _isWarmingDarshanVideo = true;
+    try {
+      final ctrl = await JapVideoPreloader.createInitializedController(
+        videoUrl: japDarshanVideoUrl,
+        fallbackAsset: _getLocalDarshanVideoAsset(),
+        isSoundEnabled: _isSoundEnabled,
+      );
+      if (!mounted) {
+        await ctrl?.dispose();
+        return;
+      }
+      if (ctrl != null) {
+        _preloadedDarshanController = ctrl;
+        if (_isCompleted) {
+          setState(() {});
+        }
+      }
+    } finally {
+      _isWarmingDarshanVideo = false;
+    }
+  }
 
   int get _totalProgress => (_completedMalas * _target) + _count;
 
@@ -223,6 +251,15 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
     prepareJapVoice();
     _loadFavAndSavedState();
     refreshJapDarshanVideo();
+    // Immediately prefetch MongoDB GridFS video & pre-initialize controller on screen open
+    // so ANY admin targetCount (5, 11, 35, 108, etc.) plays Live Darshan in 0ms on completion!
+    if (japDarshanVideoUrl.isNotEmpty) {
+      JapVideoPreloader.prefetch(japDarshanVideoUrl).then((_) {
+        if (mounted) _warmUpDarshanController();
+      });
+    } else {
+      _warmUpDarshanController();
+    }
 
     // 3. Full-screen immersive devotional mode
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -396,6 +433,8 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
     _pulseController.dispose();
     _completionController.dispose();
     _uiFadeController.dispose();
+    _preloadedDarshanController?.dispose();
+    _preloadedDarshanController = null;
     _stopAllAudio();
     _dhunService.dispose();
     for (final p in _voicePlayers) {
@@ -494,6 +533,11 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
 
     // 5. Play exact matching voice chant audio
     _playRamVoiceChant();
+
+    // 5B. Pre-initialize Live Darshan video controller 5 chants before 108/108 so completion is 0ms INSTANT!
+    if (_count >= (_target - 5).clamp(1, _target) && _preloadedDarshanController == null) {
+      _warmUpDarshanController();
+    }
 
     // 6. Check for Jap Completion Sequence
     if (_count >= _target) {
@@ -1325,6 +1369,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
                         imageAsset: _effectiveImageAsset,
                         videoAsset: _getLocalDarshanVideoAsset(),
                         videoUrl: japDarshanVideoUrl,
+                        preloadedController: _preloadedDarshanController,
                         showDeityHighlights: !widget.entry.isCustom,
                         isSoundEnabled: _isSoundEnabled,
                         onExitRequested: () {

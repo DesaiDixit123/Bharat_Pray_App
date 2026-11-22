@@ -97,144 +97,34 @@ class _DhupDarshanClimaxViewState extends State<DhupDarshanClimaxView>
           },
         ),
 
-        // 2. Divine Completion Banner & Actions (Floating over the darshan)
-        SafeArea(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Top celebratory title
-              Padding(
-                padding: const EdgeInsets.only(top: 24),
+        // 2. Subtle Top-Left Back Button (Pure Live Darshan, matching Divine Reveal)
+        Positioned(
+          top: 0,
+          left: 0,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.onExit,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.65),
-                    borderRadius: BorderRadius.circular(30),
+                    color: Colors.black.withValues(alpha: 0.30),
+                    shape: BoxShape.circle,
                     border: Border.all(
-                      color: const Color(0xFFFFB300).withValues(alpha: 0.70),
-                      width: 1.4,
+                      color: const Color(0xFFFFD54F).withValues(alpha: 0.35),
+                      width: 1.0,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFFF9900).withValues(alpha: 0.35),
-                        blurRadius: 18,
-                        spreadRadius: 2,
-                      ),
-                    ],
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.auto_awesome, color: Color(0xFFFFD54F), size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            widget.title,
-                            style: GoogleFonts.notoSerifDevanagari(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFFFFE082),
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.auto_awesome, color: Color(0xFFFFD54F), size: 20),
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '${widget.target} / ${widget.target} • माला सम्पूर्ण',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFFFFD54F),
-                          letterSpacing: 0.6,
-                        ),
-                      ),
-                    ],
+                  child: const Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: Color(0xFFFFE082),
+                    size: 18,
                   ),
                 ),
               ),
-
-              // Bottom Actions: [Complete & Exit] and [Chant Next Mala]
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
-                child: Row(
-                  children: [
-                    // Exit Darshan
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: widget.onExit,
-                        child: Container(
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.70),
-                            borderRadius: BorderRadius.circular(26),
-                            border: Border.all(
-                              color: const Color(0xFFC8A882).withValues(alpha: 0.60),
-                              width: 1.2,
-                            ),
-                          ),
-                          child: Center(
-                            child: Text(
-                              'Done',
-                              style: GoogleFonts.outfit(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    // Next 108 Mala
-                    Expanded(
-                      flex: 2,
-                      child: GestureDetector(
-                        onTap: widget.onNextMala,
-                        child: Container(
-                          height: 52,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFFF9900), Color(0xFFFF5500)],
-                            ),
-                            borderRadius: BorderRadius.circular(26),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFFFF7700).withValues(alpha: 0.45),
-                                blurRadius: 16,
-                                spreadRadius: 2,
-                              ),
-                            ],
-                          ),
-                          child: Center(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Next ${widget.target} Mala',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ],

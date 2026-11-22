@@ -10,6 +10,7 @@ import 'jap_counter_screen.dart';
 import 'live_darshan_screen.dart';
 import 'yatra_screen.dart';
 import 'granth_screen.dart';
+import 'festivals_home_tab_content.dart';
 import '../profile/notification_settings_screen.dart';
 
 class NotificationScreen extends StatefulWidget {
@@ -197,6 +198,28 @@ class _NotificationScreenState extends State<NotificationScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const GranthScreen()),
+      );
+    } else if (screen == 'festival_detail' || cat == 'utsav') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => Scaffold(
+            backgroundColor: const Color(0xFFFBF6EF),
+            appBar: AppBar(
+              backgroundColor: const Color(0xFFFBF6EF),
+              elevation: 0,
+              title: Text(
+                'Utsav & Mandals',
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF2E2A36),
+                ),
+              ),
+              iconTheme: const IconThemeData(color: Color(0xFF2E2A36)),
+            ),
+            body: const FestivalsHomeTabContent(),
+          ),
+        ),
       );
     }
   }

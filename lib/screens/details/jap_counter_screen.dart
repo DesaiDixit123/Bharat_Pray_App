@@ -10,6 +10,7 @@ import '../../core/localization/localized_api_helper.dart';
 import '../../models/jap_models.dart';
 import '../../services/api_service.dart';
 import '../../services/jap_offline_repository.dart';
+import '../../services/jap_video_preloader.dart';
 import 'upload_god_photo_screen.dart';
 import 'notification_screen.dart';
 import 'messages_screen.dart';
@@ -189,6 +190,11 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
     try {
       final data = await ApiService.getJapList(_token);
       remoteJaps = data.map((e) => JapConfig.fromJson(e)).toList();
+      // Background prefetch all deity videos from MongoDB GridFS into local phone cache
+      // so tapping Live Darshan or completing 108/108 plays with ZERO buffering delay!
+      JapVideoPreloader.prefetchAll(
+        remoteJaps.map((j) => j.darshanVideoUrl).where((u) => u.isNotEmpty),
+      );
     } catch (e) {
       debugPrint('[JapCounterScreen] Error fetching remote japs: $e');
     }

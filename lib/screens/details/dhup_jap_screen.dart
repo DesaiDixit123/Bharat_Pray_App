@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/jap_models.dart';
 import '../../widgets/jap/jap_voice_selection.dart';
 import '../../services/api_service.dart';
+import '../../services/jap_video_preloader.dart';
 import '../../services/jap_offline_repository.dart';
 import '../../widgets/cinematic_jap/ram_path_calculator.dart';
 import '../../widgets/dhup_jap/dhup_incense_reveal_painter.dart';
@@ -114,6 +115,9 @@ class _DhupJapScreenState extends State<DhupJapScreen>
     super.initState();
     prepareJapVoice();
     refreshJapDarshanVideo();
+    if (japDarshanVideoUrl.isNotEmpty) {
+      JapVideoPreloader.prefetch(japDarshanVideoUrl);
+    }
 
     // Devotional full-screen immersive mode
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -615,9 +619,7 @@ class _DhupJapScreenState extends State<DhupJapScreen>
                     shimmerProgress: _shimmerController.value,
                     isCompleted: _isCompleted,
                     completionGlowProgress: _completionController.value,
-                    imageAsset: widget.entry.isCustom && widget.entry.darshanImageUrl.isNotEmpty
-                        ? widget.entry.darshanImageUrl
-                        : 'assets/images/lord_shri_ram_darshan.png',
+                    imageAsset: japEffectiveImageAsset,
                     revealProgress: _target > 0 ? (_count / _target).clamp(0.0, 1.0) : 0.0,
                   );
                 },

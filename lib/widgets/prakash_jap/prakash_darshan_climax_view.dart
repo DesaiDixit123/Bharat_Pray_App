@@ -74,142 +74,33 @@ class _PrakashDarshanClimaxViewState extends State<PrakashDarshanClimaxView>
           ),
         ),
 
-        // 2. Celebratory Content (Top Banner & Bottom Actions)
-        SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: Column(
-              children: [
-                const Spacer(flex: 2),
-
-                // Radiant Completion Badge "જય શ્રી રામ"
-                ScaleTransition(
-                  scale: _scaleAnimation,
-                  child: FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 28,
-                        vertical: 14,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E130B).withValues(alpha: 0.90),
-                        borderRadius: BorderRadius.circular(30),
-                        border: Border.all(
-                          color: const Color(0xFFFFD54F),
-                          width: 2.0,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFFFF9900).withValues(alpha: 0.60),
-                            blurRadius: 28,
-                            spreadRadius: 4,
-                          ),
-                          BoxShadow(
-                            color: const Color(0xFFFFF9C4).withValues(alpha: 0.35),
-                            blurRadius: 14,
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'જય શ્રી રામ',
-                            style: GoogleFonts.notoSerifDevanagari(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFFFFF9C4),
-                              shadows: const [
-                                Shadow(
-                                  color: Color(0xFFFF7700),
-                                  blurRadius: 16,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '૧૦૮ જાપ પૂર્ણ — દિવ્ય પ્રકાશ દર્શન',
-                            style: GoogleFonts.outfit(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFFFFD54F),
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ],
-                      ),
+        // 2. Subtle Top-Left Back Button (Pure Live Darshan, matching Divine Reveal)
+        Positioned(
+          top: 0,
+          left: 0,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.onExit,
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.30),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFFFFD54F).withValues(alpha: 0.35),
+                      width: 1.0,
                     ),
                   ),
-                ),
-
-                const Spacer(flex: 7),
-
-                // Bottom Action Buttons
-                FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // "Start Next Mala" Button
-                      ElevatedButton.icon(
-                        onPressed: widget.onNextMala,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFF9900),
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 14,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          elevation: 8,
-                          shadowColor: const Color(0xFFFF9900),
-                        ),
-                        icon: const Icon(Icons.replay_rounded, size: 20),
-                        label: Text(
-                          'Next Mala',
-                          style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-
-                      // "Complete / Exit" Button
-                      OutlinedButton(
-                        onPressed: widget.onExit,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(
-                            color: Color(0xFFFFD54F),
-                            width: 1.5,
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 22,
-                            vertical: 14,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                        ),
-                        child: Text(
-                          'Complete',
-                          style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFFFFD54F),
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: const Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: Color(0xFFFFE082),
+                    size: 18,
                   ),
                 ),
-                const SizedBox(height: 16),
-              ],
+              ),
             ),
           ),
         ),

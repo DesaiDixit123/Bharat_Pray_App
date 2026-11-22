@@ -920,7 +920,14 @@ class UtsavService {
 
     // Notify backend
     try {
-      final body = {'mandalName': mandalName, 'change': delta};
+      final userId = prefs.getString('user_id') ?? prefs.getString('userId') ?? '';
+      final userName = prefs.getString('user_name') ?? prefs.getString('name') ?? '';
+      final body = {
+        'mandalName': mandalName,
+        'change': delta,
+        if (userId.isNotEmpty) 'userId': userId,
+        if (userName.isNotEmpty) 'userName': userName,
+      };
       _postToBackends('/api/utsav/mandal/like', body);
     } catch (_) {}
 
@@ -949,7 +956,14 @@ class UtsavService {
 
     // Notify backend in MongoDB
     try {
-      final body = {'mandalName': mandalName, 'change': 1};
+      final userId = prefs.getString('user_id') ?? prefs.getString('userId') ?? '';
+      final userName = prefs.getString('user_name') ?? prefs.getString('name') ?? '';
+      final body = {
+        'mandalName': mandalName,
+        'change': 1,
+        if (userId.isNotEmpty) 'userId': userId,
+        if (userName.isNotEmpty) 'userName': userName,
+      };
       _postToBackends('/api/utsav/mandal/share', body);
     } catch (_) {}
 
@@ -978,8 +992,8 @@ class UtsavService {
       ? [ApiService.baseUrl]
       : [
           ApiService.baseUrl,
-          'http://192.168.29.178:3020',
           'http://192.168.29.209:3020',
+          'http://192.168.29.178:3020',
           'http://192.168.29.73:3020',
           'http://192.168.29.227:3020',
           'http://192.168.29.74:3020',

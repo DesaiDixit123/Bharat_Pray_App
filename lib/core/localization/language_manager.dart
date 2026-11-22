@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'language_model.dart';
 import 'dynamic_translation_service.dart';
+import '../../services/api_service.dart';
 
 class LanguageManager extends ChangeNotifier {
   LanguageManager._internal();
@@ -49,7 +50,20 @@ class LanguageManager extends ChangeNotifier {
     } finally {
       _isInitialized = true;
       notifyListeners();
+      _syncLanguageToBackend(_currentLocale.languageCode);
     }
+  }
+
+  /// Syncs active language code ('en' | 'hi' | 'gu' | 'mr') to backend
+  /// so ALL push & in-app notifications are delivered in this exact language.
+  Future<void> _syncLanguageToBackend(String langCode) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? prefs.getString('token') ?? '';
+      if (token.isNotEmpty) {
+        await ApiService.syncPreferredLanguage(token, langCode);
+      }
+    } catch (_) {}
   }
 
   /// Change active language and immediately notify UI across whole app
@@ -69,6 +83,7 @@ class LanguageManager extends ChangeNotifier {
 
     DynamicTranslationService.instance.onLanguageChanged(_currentLocale.languageCode);
     notifyListeners();
+    _syncLanguageToBackend(_currentLocale.languageCode);
   }
 
   /// Convenience method to change language by string code

@@ -134,10 +134,42 @@ class JapVoiceService {
     }
   }
 
+  /// Maps deity mantra text (Gujarati/English/Hindi) to exact Devanagari with
+  /// explicit Halant (`्`) endings so Google Cloud `hi-IN-Chirp3-HD-*` voices
+  /// never add an extra trailing "-a" vowel (e.g. "Shiv" not "Shiva",
+  /// "Hanuman" not "Hanumana", "Ganesh" not "Ganesha",
+  /// "Swaminarayan" not "Saminarayana", "Shyam" not "Shyama").
+  static String normalizePronunciation(String mantraText) {
+    final cleaned = mantraText.trim();
+    final lower = cleaned.toLowerCase();
+
+    if (cleaned == 'શિવ' || cleaned == 'शिव' || lower == 'shiva' || lower == 'shiv') {
+      return 'शिव्';
+    }
+    if (cleaned == 'હનુમાન' || cleaned == 'हनुमान' || lower == 'hanuman' || lower == 'hanumana') {
+      return 'हनुमान्';
+    }
+    if (cleaned == 'ગણેશ' || cleaned == 'गणेश' || lower == 'ganesh' || lower == 'ganesha') {
+      return 'गणेश्';
+    }
+    if (cleaned == 'સ્વામિનારાયણ' ||
+        cleaned == 'स्वामिनारायण' ||
+        cleaned == 'स्वामीनारायण' ||
+        lower == 'swaminarayan' ||
+        lower == 'swaminarayana') {
+      return 'स्वामीनारायण्';
+    }
+    if (cleaned == 'શ્યામ' || cleaned == 'श्याम' || lower == 'shyam' || lower == 'shyama' || lower == 'khatu' || lower == 'khatu shyam') {
+      return 'श्याम्';
+    }
+    return cleaned;
+  }
+
   /// Returns the audio URL of the mantra spoken in the given voice.
   Future<String?> synthesizeMantra(String mantraText, String voiceId) {
+    final spokenText = normalizePronunciation(mantraText);
     return TtsService().synthesizeScriptureAudio(
-      text: mantraText,
+      text: spokenText,
       language: 'Hindi',
       voiceId: voiceId,
       speakingRate: _chantRate,
@@ -150,15 +182,16 @@ class JapVoiceService {
   /// not be fetched (the screen then falls back to its bundled clip).
   Future<String?> prepareChantClip(String mantraText, String voiceId) async {
     try {
+      final spokenText = normalizePronunciation(mantraText);
       final dir = await getTemporaryDirectory();
       final clipDir = Directory('${dir.path}/jap_voice');
       if (!clipDir.existsSync()) clipDir.createSync(recursive: true);
 
-      final mantraKey = base64Url.encode(utf8.encode(mantraText));
-      final clip = File('${clipDir.path}/v2_${voiceId}_$mantraKey.mp3');
+      final mantraKey = base64Url.encode(utf8.encode(spokenText));
+      final clip = File('${clipDir.path}/v3_${voiceId}_$mantraKey.mp3');
       if (clip.existsSync() && clip.lengthSync() > 0) return clip.path;
 
-      final url = await synthesizeMantra(mantraText, voiceId);
+      final url = await synthesizeMantra(spokenText, voiceId);
       if (url == null) return null;
 
       final response = await http

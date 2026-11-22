@@ -541,7 +541,7 @@ class _JalJapScreenState extends State<JalJapScreen>
                     ambientTime: _ambientController.value,
                     isCompleted: _isCompleted,
                     completionGlow: _completionController.value,
-                    imageAsset: 'assets/images/ram_deity_transparent.png',
+                    imageAsset: japEffectiveImageAsset,
                   );
                 },
               ),
@@ -621,6 +621,7 @@ class _JalJapScreenState extends State<JalJapScreen>
             // ── LAYER 6: Final 108 Live Darshan Climax ────────────────────────
             if (_isCompleted)
               JalDarshanClimaxView(
+                imageAsset: japEffectiveImageAsset,
                 onNextMala: _startNextMala,
                 onExit: () {
                   _persistProgress();

@@ -12,11 +12,11 @@ import 'fcm_notification_service.dart';
 
 class ApiService {
   // Set to true to use the live production server, false for local testing
-  static const bool isLive = false;
+  static const bool isLive = true;
 
   // Local backend configuration:
-  // Active Wi-Fi IP = 192.168.29.178, Port = 3020
-  static const String _localIp = '192.168.29.178';
+  // Active Wi-Fi IP = 192.168.29.209, Port = 3020
+  static const String _localIp = '192.168.29.209';
   static const int _localPort = 3020;
 
   static String get baseUrl {
@@ -103,11 +103,25 @@ class ApiService {
     trimmed = trimmed.replaceAll('http://10.192.149.19:3021', baseUrl);
     trimmed = trimmed.replaceAll('http://10.192.149.19:3020', baseUrl);
 
+    // Rewrite any private LAN IP or localhost backend URL (:3020 / :3021) to active baseUrl
+    // so moving the project to another PC's Wi-Fi IP works automatically!
+    trimmed = trimmed.replaceAll(
+      RegExp(r'https?://(?:192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+|localhost|127\.0\.0\.1):(?:3020|3021)'),
+      baseUrl,
+    );
+
     // Clean up any double slashes in the path
     trimmed = trimmed.replaceAll('//uploads/', '/uploads/');
+    trimmed = trimmed.replaceAll('//api/', '/api/');
 
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       return trimmed;
+    }
+
+    // Keep API stream endpoints (like /api/jap-videos/<filename>) directly under baseUrl
+    if (trimmed.startsWith('/api/') || trimmed.startsWith('api/')) {
+      final pathPrefix = trimmed.startsWith('/') ? '' : '/';
+      return '$baseUrl$pathPrefix$trimmed';
     }
 
     final isUploads = trimmed.contains('uploads/');
@@ -117,7 +131,7 @@ class ApiService {
 
   static final List<String> _fallbackHosts = isLive
       ? const ['api.bharatpray.com']
-      : const ['192.168.29.178', '192.168.29.209', '192.168.29.73', '192.168.29.227', '192.168.29.74', '127.0.0.1', '10.0.2.2', 'api.bharatpray.com'];
+      : const ['192.168.29.209', '192.168.29.178', '192.168.29.73', '192.168.29.227', '192.168.29.74', '127.0.0.1', '10.0.2.2', 'api.bharatpray.com'];
 
   static Map<String, String> _withDefaultHeaders([Map<String, String>? headers]) {
     final langCode = LanguageManager.instance.currentLanguageCode;
@@ -531,6 +545,7 @@ class ApiService {
     final queryParams = <String, String>{
       'page': page.toString(),
       'limit': limit.toString(),
+      'lang': LanguageManager.instance.currentLanguageCode,
     };
     if (category.isNotEmpty && category.toLowerCase() != 'all') {
       queryParams['category'] = category.toLowerCase();
@@ -545,6 +560,21 @@ class ApiService {
       headers: _jsonHeaders(token: token),
     );
     return _processResponse(response)['Data'] ?? {};
+  }
+
+  // POST /user/notifications/language
+  static Future<void> syncPreferredLanguage(String token, String langCode) async {
+    if (token.isEmpty || langCode.isEmpty) return;
+    try {
+      final uri = Uri.parse('$baseUrl/user/notifications/language');
+      await _safePost(
+        uri,
+        headers: _jsonHeaders(token: token),
+        body: jsonEncode({'language': langCode}),
+      );
+    } catch (e) {
+      print('[ApiService] syncPreferredLanguage notice: $e');
+    }
   }
 
   // POST /user/notifications/mark-read

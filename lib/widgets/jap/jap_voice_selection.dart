@@ -26,6 +26,18 @@ mixin JapVoiceSelection<T extends StatefulWidget> on State<T> {
 
   String get japMantraText => japEntry.mantraText.isNotEmpty ? japEntry.mantraText : _japTheme.mantraText;
 
+  /// Returns the exact deity cover/darshan image for this Jap entry (never hardcoded to Ram).
+  String get japEffectiveImageAsset {
+    if (japEntry.isCustom && japEntry.darshanImageUrl.isNotEmpty) {
+      return japEntry.darshanImageUrl;
+    }
+    if (japEntry.darshanImageUrl.isNotEmpty &&
+        japEntry.darshanImageUrl.startsWith('assets/')) {
+      return japEntry.darshanImageUrl;
+    }
+    return _japTheme.coverAsset;
+  }
+
   late String japDarshanVideoUrl = japEntry.darshanVideoUrl;
 
   /// Looks up this custom Jap's generated live darshan video, if it is ready yet.

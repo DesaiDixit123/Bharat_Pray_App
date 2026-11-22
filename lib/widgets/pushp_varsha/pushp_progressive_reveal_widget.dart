@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../cinematic_jap/reveal_image_loader.dart';
 import 'package:flutter/services.dart';
 import '../cinematic_jap/ram_path_calculator.dart';
 
@@ -58,9 +59,8 @@ class _PushpProgressiveRevealWidgetState
 
   Future<void> _loadImage() async {
     try {
-      final ByteData data = await rootBundle.load(widget.imageAsset);
-      final ui.Codec codec =
-          await ui.instantiateImageCodec(data.buffer.asUint8List());
+      final bytes = await loadRevealImageBytes(widget.imageAsset);
+      final ui.Codec codec = await ui.instantiateImageCodec(bytes);
       final ui.FrameInfo frameInfo = await codec.getNextFrame();
       if (mounted) {
         setState(() {

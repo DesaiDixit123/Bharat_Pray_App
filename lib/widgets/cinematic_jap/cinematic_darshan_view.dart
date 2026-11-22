@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import '../../services/jap_video_preloader.dart';
 
 /// Full-Screen Pure Divine Lord Shri Ram Live Darshan View.
 ///
@@ -16,6 +17,7 @@ class CinematicDarshanView extends StatefulWidget {
   final String imageAsset;
   final String? videoAsset;
   final String? videoUrl;
+  final VideoPlayerController? preloadedController;
   final bool isSoundEnabled;
   final VoidCallback? onExitRequested;
   final bool showDeityHighlights; // Eye and jewel glints placed for the bundled Shri Ram image
@@ -25,6 +27,7 @@ class CinematicDarshanView extends StatefulWidget {
     this.imageAsset = 'assets/images/lord_shri_ram_darshan.png',
     this.videoAsset = 'assets/videos/lord_shri_ram_live_darshan.mp4',
     this.videoUrl,
+    this.preloadedController,
     this.isSoundEnabled = true,
     this.onExitRequested,
     this.showDeityHighlights = true,
@@ -47,6 +50,7 @@ class _CinematicDarshanViewState extends State<CinematicDarshanView>
 
   VideoPlayerController? _videoController;
   bool _isVideoInitialized = false;
+  bool _ownsVideoController = true;
 
   final List<_GoldenParticle> _particles = [];
   final List<_RosePetal> _petals = [];
@@ -128,8 +132,15 @@ class _CinematicDarshanViewState extends State<CinematicDarshanView>
       );
     }
 
-    // 10. Initialize Full Live Darshan Video Player
-    if (widget.videoAsset != null || widget.videoUrl != null) {
+    // 10. Initialize Full Live Darshan Video Player (0ms instant if preloadedController is ready!)
+    if (widget.preloadedController != null && widget.preloadedController!.value.isInitialized) {
+      _videoController = widget.preloadedController;
+      _ownsVideoController = false;
+      _isVideoInitialized = true;
+      _videoController!.setLooping(true);
+      _videoController!.setVolume(widget.isSoundEnabled ? 1.0 : 0.0);
+      _videoController!.play();
+    } else if (widget.videoAsset != null || widget.videoUrl != null) {
       _initVideoPlayer();
     }
   }
@@ -137,6 +148,19 @@ class _CinematicDarshanViewState extends State<CinematicDarshanView>
   @override
   void didUpdateWidget(covariant CinematicDarshanView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (_videoController == null &&
+        widget.preloadedController != null &&
+        widget.preloadedController!.value.isInitialized) {
+      setState(() {
+        _videoController = widget.preloadedController;
+        _ownsVideoController = false;
+        _isVideoInitialized = true;
+      });
+      _videoController!.setLooping(true);
+      _videoController!.setVolume(widget.isSoundEnabled ? 1.0 : 0.0);
+      _videoController!.play();
+      return;
+    }
     final url = widget.videoUrl;
     if (url != null && url.isNotEmpty && url != oldWidget.videoUrl && _videoController == null) {
       _initVideoPlayer();
@@ -157,38 +181,32 @@ class _CinematicDarshanViewState extends State<CinematicDarshanView>
   }
 
   Future<void> _initVideoPlayer() async {
-    VideoPlayerController? ctrl;
-    if (widget.videoUrl != null && widget.videoUrl!.isNotEmpty) {
-      try {
-        final netCtrl = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl!));
-        await netCtrl.initialize();
-        ctrl = netCtrl;
-      } catch (e) {
-        debugPrint('[CinematicDarshanView] Network video initialization failed: $e, trying asset fallback');
-      }
-    }
-    if (ctrl == null && widget.videoAsset != null && widget.videoAsset!.isNotEmpty) {
-      try {
-        final assetCtrl = VideoPlayerController.asset(widget.videoAsset!);
-        await assetCtrl.initialize();
-        ctrl = assetCtrl;
-      } catch (e) {
-        debugPrint('[CinematicDarshanView] Asset video initialization failed: $e');
-      }
-    }
+    final ctrl = await JapVideoPreloader.createInitializedController(
+      videoUrl: widget.videoUrl,
+      fallbackAsset: widget.videoAsset,
+      isSoundEnabled: widget.isSoundEnabled,
+    );
     if (ctrl == null) return;
+    if (!mounted) {
+      await ctrl.dispose();
+      return;
+    }
     try {
-      await ctrl.setLooping(true);
-      await ctrl.setVolume(widget.isSoundEnabled ? 1.0 : 0.0);
       await ctrl.play();
       if (mounted) {
         setState(() {
           _videoController = ctrl;
+          _ownsVideoController = true;
           _isVideoInitialized = true;
         });
+      } else {
+        await ctrl.dispose();
       }
     } catch (e) {
       debugPrint('[CinematicDarshanView] Video playback setup error: $e');
+      try {
+        await ctrl.dispose();
+      } catch (_) {}
     }
   }
 
@@ -217,7 +235,9 @@ class _CinematicDarshanViewState extends State<CinematicDarshanView>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _videoController?.pause();
-    _videoController?.dispose();
+    if (_ownsVideoController) {
+      _videoController?.dispose();
+    }
     _entryFadeController.dispose();
     _cameraController.dispose();
     _breathingController.dispose();
@@ -309,14 +329,17 @@ class _CinematicDarshanViewState extends State<CinematicDarshanView>
 
                 // When live darshan video is ready, render it full-screen with seamless BoxFit.cover
                 if (_isVideoInitialized && _videoController != null) {
+                  final vSize = _videoController!.value.size;
+                  final double vWidth = vSize.width > 0 ? vSize.width : 720.0;
+                  final double vHeight = vSize.height > 0 ? vSize.height : 1280.0;
                   return Opacity(
                     opacity: entryOpacity,
                     child: SizedBox.expand(
                       child: FittedBox(
                         fit: BoxFit.cover,
                         child: SizedBox(
-                          width: _videoController!.value.size.width,
-                          height: _videoController!.value.size.height,
+                          width: vWidth,
+                          height: vHeight,
                           child: VideoPlayer(_videoController!),
                         ),
                       ),

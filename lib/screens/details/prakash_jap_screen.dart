@@ -420,7 +420,7 @@ class _PrakashJapScreenState extends State<PrakashJapScreen>
                     shimmerProgress: _shimmerController.value,
                     isCompleted: _isCompleted,
                     completionGlow: _completionController.value,
-                    imageAsset: 'assets/images/ram_deity_transparent.png',
+                    imageAsset: japEffectiveImageAsset,
                   );
                 },
               ),
