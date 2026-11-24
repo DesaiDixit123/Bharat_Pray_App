@@ -11,6 +11,7 @@ import 'phone_login_screen.dart';
 import 'register_screen.dart';
 import 'otp_verification_screen.dart';
 import '../services/api_service.dart';
+import '../services/utsav_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -177,11 +178,20 @@ class _LoginScreenState extends State<LoginScreen> {
       debugPrint('👤 Google Sign-In User Data (ID): $userData');
 
       final prefs = await SharedPreferences.getInstance();
+      final oldPhone = prefs.getString('user_phone') ?? '';
+      final newPhone = userData['mobile'] ?? '';
+      if (oldPhone.isNotEmpty && oldPhone != newPhone) {
+        await UtsavService.clearAllMandalLocalData();
+      }
+      final uid = (userData['_id'] ?? userData['id'])?.toString();
+      if (uid != null && uid.isNotEmpty) {
+        await prefs.setString('user_id', uid);
+      }
       await prefs.setBool('is_logged_in', true);
       await prefs.setString('auth_token', token);
       await prefs.setString('user_name', userData['name'] ?? gName);
       await prefs.setString('user_email', userData['email'] ?? gEmail);
-      await prefs.setString('user_phone', userData['mobile'] ?? '');
+      await prefs.setString('user_phone', newPhone);
       await prefs.setString('profile_pic', userData['profile_pic'] ?? gPic);
 
       if (mounted) {

@@ -320,12 +320,38 @@ class _JapDetailScreenState extends State<JapDetailScreen>
   void _initVideoAnimation() {
     _currentVideoAsset = _resolveAnimationVideo();
     _videoController?.dispose();
-    _videoController = VideoPlayerController.asset(_currentVideoAsset)
-      ..initialize().then((_) {
-        if (mounted) setState(() {});
-      })
-      ..setLooping(false);
-    _videoController?.setVolume(0.0);
+
+    final fileName = _currentVideoAsset.split('/').last;
+    final networkUrl = '${ApiService.baseUrl}/uploads/$fileName';
+
+    // 1. Try Network stream from Database / Server first
+    final netCtrl = VideoPlayerController.networkUrl(
+      Uri.parse(networkUrl),
+      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+    );
+
+    netCtrl.initialize().timeout(const Duration(seconds: 4)).then((_) {
+      if (mounted) {
+        _videoController = netCtrl;
+        _videoController!.setLooping(false);
+        _videoController!.setVolume(0.0);
+        setState(() {});
+      }
+    }).catchError((_) {
+      // 2. OR fallback to local asset if network is unavailable
+      final assetCtrl = VideoPlayerController.asset(
+        _currentVideoAsset,
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+      );
+      assetCtrl.initialize().then((_) {
+        if (mounted) {
+          _videoController = assetCtrl;
+          _videoController!.setLooping(false);
+          _videoController!.setVolume(0.0);
+          setState(() {});
+        }
+      }).catchError((_) {});
+    });
   }
 
   String _resolveAnimationVideo() {

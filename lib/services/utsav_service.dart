@@ -1209,6 +1209,15 @@ class UtsavService {
 
   static Future<Map<String, dynamic>?> getMyMandalRegistration({String? festivalName, String? festivalId}) async {
     final prefs = await SharedPreferences.getInstance();
+    final userPhone = prefs.getString('user_phone') ?? prefs.getString('auth_mobile') ?? '';
+    final cleanUserPhone = userPhone.replaceAll(RegExp(r'\D'), '');
+    final loggedInLast10 = cleanUserPhone.length >= 10 ? cleanUserPhone.substring(cleanUserPhone.length - 10) : cleanUserPhone;
+
+    // If user is not logged in or has no phone, they have no personal mandal profile
+    if (loggedInLast10.isEmpty) {
+      return null;
+    }
+
     final cleanFestKey = festivalName != null && festivalName.trim().isNotEmpty
         ? festivalName.trim().toLowerCase()
         : null;
@@ -1219,115 +1228,101 @@ class UtsavService {
     }
     saved ??= prefs.getString('my_mandal_registration');
 
-    String? phone;
     Map<String, dynamic>? localData;
 
     if (saved != null && saved.isNotEmpty) {
       try {
         localData = Map<String, dynamic>.from(jsonDecode(saved) as Map);
-        phone = localData['mobile']?.toString();
-        final mName = (localData['mandalName'] ?? '').toString();
+        final localMobile = (localData['mobile'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+        final localLast10 = localMobile.length >= 10 ? localMobile.substring(localMobile.length - 10) : localMobile;
 
-        // Purge old dummy Ganesh registrations
-        if (mName.contains('Lalbaug') || mName.contains('Ganesh') || localData['registrationId'] == 'REG-2026-DUMMY') {
-          if (cleanFestKey != null) {
-            await prefs.remove('my_mandal_registration_$cleanFestKey');
+        // If saved registration belongs to a DIFFERENT user (e.g. Dixit vs Rushabh), wipe it!
+        if (localLast10.isNotEmpty && localLast10 != loggedInLast10) {
+          await clearAllMandalLocalData();
+          localData = null;
+          saved = null;
+        } else {
+          final mName = (localData['mandalName'] ?? '').toString();
+          // Purge old dummy Ganesh registrations
+          if (mName.contains('Lalbaug') || mName.contains('Ganesh') || localData['registrationId'] == 'REG-2026-DUMMY') {
+            await clearAllMandalLocalData();
+            return null;
           }
-          await prefs.remove('my_mandal_registration');
-          await prefs.remove('is_mandal_registered');
-          await prefs.remove('is_mandal_leader');
+        }
+      } catch (_) {
+        localData = null;
+        saved = null;
+      }
+    }
+
+    try {
+      String queryUrl = '/api/utsav/mandal/my-registration?mobile=$loggedInLast10';
+      if (festivalName != null && festivalName.trim().isNotEmpty) {
+        queryUrl += '&festival=${Uri.encodeComponent(festivalName.trim())}';
+      }
+      if (festivalId != null && festivalId.trim().isNotEmpty) {
+        queryUrl += '&festivalId=${Uri.encodeComponent(festivalId.trim())}';
+      }
+
+      final remoteData = await _fetchMyRegistrationRemote(queryUrl);
+      if (remoteData != null) {
+        if (remoteData['_isDeletedOrNotFoundOnServer'] == true) {
+          // No registration on server for this user
+          await clearAllMandalLocalData();
           return null;
         }
-      } catch (_) {}
-    }
-    phone ??= prefs.getString('user_phone') ?? prefs.getString('auth_mobile');
 
-    if (phone != null && phone.isNotEmpty) {
-      try {
-        final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
-        final last10 = cleanPhone.length >= 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
-        String queryUrl = '/api/utsav/mandal/my-registration?mobile=$last10';
-        if (festivalName != null && festivalName.trim().isNotEmpty) {
-          queryUrl += '&festival=${Uri.encodeComponent(festivalName.trim())}';
-        }
-        if (festivalId != null && festivalId.trim().isNotEmpty) {
-          queryUrl += '&festivalId=${Uri.encodeComponent(festivalId.trim())}';
+        // Verify remoteData mobile strictly matches this logged in user
+        final rMobile = (remoteData['mobile'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+        final rLast10 = rMobile.length >= 10 ? rMobile.substring(rMobile.length - 10) : rMobile;
+        if (rLast10.isNotEmpty && rLast10 != loggedInLast10) {
+          await clearAllMandalLocalData();
+          return null;
         }
 
-        final remoteData = await _fetchMyRegistrationRemote(queryUrl);
-        if (remoteData != null) {
-          if (remoteData['_isDeletedOrNotFoundOnServer'] == true) {
-            if (localData != null) {
-              localData['status'] = 'deleted';
-              localData['deletionReason'] = 'Your Mandal account was deleted by Bharat Pray Admin.';
-              if (cleanFestKey != null) {
-                await prefs.setString('my_mandal_registration_$cleanFestKey', jsonEncode(localData));
-              }
-              await prefs.setString('my_mandal_registration', jsonEncode(localData));
-              await prefs.setBool('is_mandal_registered', false);
-              await prefs.setBool('is_mandal_leader', false);
-              return localData;
-            } else {
-              if (cleanFestKey != null) {
-                await prefs.remove('my_mandal_registration_$cleanFestKey');
-              }
-              await prefs.remove('my_mandal_registration');
-              await prefs.setBool('is_mandal_registered', false);
-              await prefs.setBool('is_mandal_leader', false);
-              return null;
+        if (localData != null) {
+          if ((remoteData['logo'] == null || remoteData['logo'].toString().isEmpty) && localData['logo'] != null) {
+            remoteData['logo'] = localData['logo'];
+          }
+          if ((remoteData['cover'] == null || remoteData['cover'].toString().isEmpty) && localData['cover'] != null) {
+            remoteData['cover'] = localData['cover'];
+          }
+          if (localData['status'] == 'Pending' && remoteData['status'] == 'Rejected') {
+            final localDate = DateTime.tryParse(localData['createdAt']?.toString() ?? '');
+            final remoteUpdated = DateTime.tryParse(remoteData['updatedAt']?.toString() ?? remoteData['createdAt']?.toString() ?? '');
+            if (localDate != null && remoteUpdated != null && localDate.isAfter(remoteUpdated)) {
+              remoteData['status'] = 'Pending';
+              remoteData['rejectionReason'] = '';
             }
           }
-          // If remote server has logo or cover, strictly prioritize the server image!
-          if (localData != null) {
-            if ((remoteData['logo'] == null || remoteData['logo'].toString().isEmpty) && localData['logo'] != null) {
-              remoteData['logo'] = localData['logo'];
-            }
-            if ((remoteData['cover'] == null || remoteData['cover'].toString().isEmpty) && localData['cover'] != null) {
-              remoteData['cover'] = localData['cover'];
-            }
-            if (localData['status'] == 'Pending' && remoteData['status'] == 'Rejected') {
-              final localDate = DateTime.tryParse(localData['createdAt']?.toString() ?? '');
-              final remoteUpdated = DateTime.tryParse(remoteData['updatedAt']?.toString() ?? remoteData['createdAt']?.toString() ?? '');
-              if (localDate != null && remoteUpdated != null && localDate.isAfter(remoteUpdated)) {
-                remoteData['status'] = 'Pending';
-                remoteData['rejectionReason'] = '';
-              } else if (localData['mandalName'] != null && localData['mandalName'] != remoteData['mandalName']) {
-                remoteData['status'] = 'Pending';
-                remoteData['rejectionReason'] = '';
-              }
-            }
-          }
-
-          final rStatus = remoteData['status']?.toString().toLowerCase();
-          if (rStatus == 'deleted') {
-            if (cleanFestKey != null) {
-              await prefs.setString('my_mandal_registration_$cleanFestKey', jsonEncode(remoteData));
-            }
-            await prefs.setString('my_mandal_registration', jsonEncode(remoteData));
-            await prefs.setBool('is_mandal_registered', false);
-            await prefs.setBool('is_mandal_leader', false);
-            return remoteData;
-          }
-
-          if (cleanFestKey != null) {
-            await prefs.setString('my_mandal_registration_$cleanFestKey', jsonEncode(remoteData));
-          }
-          await prefs.setString('my_mandal_registration', jsonEncode(remoteData));
-          await prefs.setBool('is_mandal_registered', true);
-          if (remoteData['status']?.toString().toLowerCase() == 'approved') {
-            await prefs.setBool('is_mandal_leader', true);
-          } else {
-            await prefs.setBool('is_mandal_leader', false);
-          }
-          return remoteData;
         }
-      } catch (_) {}
+
+        final rStatus = remoteData['status']?.toString().toLowerCase();
+        if (rStatus == 'deleted') {
+          await clearAllMandalLocalData();
+          return null;
+        }
+
+        if (cleanFestKey != null) {
+          await prefs.setString('my_mandal_registration_$cleanFestKey', jsonEncode(remoteData));
+        }
+        await prefs.setString('my_mandal_registration', jsonEncode(remoteData));
+        await prefs.setBool('is_mandal_registered', true);
+        await prefs.setBool('is_mandal_leader', rStatus == 'approved');
+        return remoteData;
+      }
+    } catch (_) {}
+
+    // If remote check was offline, only return localData if it strictly belongs to this logged-in user
+    if (localData != null) {
+      final localMobile = (localData['mobile'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+      final localLast10 = localMobile.length >= 10 ? localMobile.substring(localMobile.length - 10) : localMobile;
+      if (localLast10 == loggedInLast10) {
+        return localData;
+      }
     }
 
-    if (saved == null || saved.isEmpty) {
-      return null;
-    }
-    return localData;
+    return null;
   }
 
   static Future<void> clearMyMandalRegistration({String? festivalName}) async {
@@ -1341,29 +1336,41 @@ class UtsavService {
     await prefs.remove('is_mandal_leader');
   }
 
+  static Future<void> clearAllMandalLocalData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys().toList();
+    for (final k in keys) {
+      if (k.startsWith('my_mandal_') || k == 'is_mandal_registered' || k == 'is_mandal_leader') {
+        await prefs.remove(k);
+      }
+    }
+  }
+
   static Future<List<Map<String, dynamic>>> getMyMandalRegistrations() async {
     final List<Map<String, dynamic>> results = [];
     final prefs = await SharedPreferences.getInstance();
-    final phone = prefs.getString('user_phone') ?? prefs.getString('auth_mobile');
+    final phone = prefs.getString('user_phone') ?? prefs.getString('auth_mobile') ?? '';
+    final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+    final last10 = cleanPhone.length >= 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
 
-    // 1. Fetch from remote backend /api/utsav/mandal/my-registrations
-    if (phone != null && phone.isNotEmpty) {
-      try {
-        final clean = phone.replaceAll(RegExp(r'\D'), '');
-        final last10 = clean.length >= 10 ? clean.substring(clean.length - 10) : clean;
-        final uri = Uri.parse('${ApiService.baseUrl}/api/utsav/mandal/my-registrations?mobile=$last10');
-        final response = await http.get(uri, headers: _defaultHeaders()).timeout(const Duration(seconds: 4));
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          if (data['IsSuccess'] == true && data['Data'] is List) {
-            final list = (data['Data'] as List).cast<Map<String, dynamic>>();
-            results.addAll(list);
-          }
-        }
-      } catch (_) {}
+    if (last10.isEmpty) {
+      return [];
     }
 
-    // 2. Also merge local cached registrations
+    // 1. Fetch from remote backend /api/utsav/mandal/my-registrations
+    try {
+      final uri = Uri.parse('${ApiService.baseUrl}/api/utsav/mandal/my-registrations?mobile=$last10');
+      final response = await http.get(uri, headers: _defaultHeaders()).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['IsSuccess'] == true && data['Data'] is List) {
+          final list = (data['Data'] as List).cast<Map<String, dynamic>>();
+          results.addAll(list);
+        }
+      }
+    } catch (_) {}
+
+    // 2. Also merge local cached registrations ONLY if they belong to this logged-in phone
     try {
       final keys = prefs.getKeys();
       for (final key in keys) {
@@ -1371,12 +1378,20 @@ class UtsavService {
           final raw = prefs.getString(key);
           if (raw != null && raw.isNotEmpty) {
             final map = Map<String, dynamic>.from(jsonDecode(raw) as Map);
-            final mName = (map['mandalName'] ?? '').toString().trim();
-            if (mName.isNotEmpty &&
-                !results.any((r) =>
-                    (r['mandalName'] ?? r['name'])?.toString().trim().toLowerCase() ==
-                    mName.toLowerCase())) {
-              results.add(map);
+            final mPhone = (map['mobile'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+            final mPhoneLast10 = mPhone.length >= 10 ? mPhone.substring(mPhone.length - 10) : mPhone;
+
+            if (mPhoneLast10 == last10) {
+              final mName = (map['mandalName'] ?? '').toString().trim();
+              if (mName.isNotEmpty &&
+                  !results.any((r) =>
+                      (r['mandalName'] ?? r['name'])?.toString().trim().toLowerCase() ==
+                      mName.toLowerCase())) {
+                results.add(map);
+              }
+            } else {
+              // Stale registration from a different user - remove!
+              await prefs.remove(key);
             }
           }
         }

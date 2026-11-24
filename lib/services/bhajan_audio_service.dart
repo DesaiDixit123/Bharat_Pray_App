@@ -365,8 +365,24 @@ class BhajanAudioService {
         return;
       }
 
-      // Also check if track.audioUrl itself points to a local file on disk
+      // Also check if track.audioUrl itself points to a bundled asset
       final rawUrl = track.audioUrl ?? '';
+      if (rawUrl.startsWith('assets/')) {
+        final cleanAsset = rawUrl.replaceFirst('assets/', '');
+        await _audioPlayer.stop();
+        await _audioPlayer.setSource(AssetSource(cleanAsset));
+        if (savedPos.inSeconds > 1) {
+          await _audioPlayer.seek(savedPos);
+        }
+        playerStateNotifier.value = PlayerState.playing;
+        await _audioPlayer.resume();
+        isBufferingNotifier.value = false;
+        _recordPlay(track.id);
+        _updateMediaNotification();
+        return;
+      }
+
+      // Also check if track.audioUrl itself points to a local file on disk
       if (rawUrl.isNotEmpty && !rawUrl.startsWith('http') && File(rawUrl).existsSync()) {
         await _audioPlayer.stop();
         await _audioPlayer.setSource(DeviceFileSource(rawUrl));

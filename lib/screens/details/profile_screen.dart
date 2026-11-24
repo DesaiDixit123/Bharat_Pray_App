@@ -329,6 +329,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // Refresh live profile data
       try {
         final userModel = await ApiService.getProfile(token);
+        if (userModel.id.isNotEmpty) {
+          await prefs.setString('user_id', userModel.id);
+        }
         if (userModel.name.isNotEmpty) {
           await prefs.setString('user_name', userModel.name);
         }
@@ -585,7 +588,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               await prefs.remove('user_name');
               await prefs.remove('user_email');
               await prefs.remove('user_phone');
+              await prefs.remove('user_id');
+              await prefs.remove('userId');
               await prefs.remove('profile_pic');
+              await UtsavService.clearAllMandalLocalData();
 
               if (context.mounted) {
                 Navigator.pop(context);

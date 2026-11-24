@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'home_screen.dart';
 import '../services/api_service.dart';
+import '../services/utsav_service.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   final String phoneNumber;
@@ -160,11 +161,20 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       debugPrint('👤 OTP Verified User Data (ID): $userData');
 
       final prefs = await SharedPreferences.getInstance();
+      final oldPhone = prefs.getString('user_phone') ?? '';
+      final newPhone = userData['mobile'] ?? widget.phoneNumber;
+      if (oldPhone.isNotEmpty && oldPhone != newPhone) {
+        await UtsavService.clearAllMandalLocalData();
+      }
+      final uid = (userData['_id'] ?? userData['id'])?.toString();
+      if (uid != null && uid.isNotEmpty) {
+        await prefs.setString('user_id', uid);
+      }
       await prefs.setBool('is_logged_in', true);
       await prefs.setString('auth_token', token ?? '');
       await prefs.setString('user_name', userData['name'] ?? '');
       await prefs.setString('user_email', userData['email'] ?? '');
-      await prefs.setString('user_phone', userData['mobile'] ?? '');
+      await prefs.setString('user_phone', newPhone ?? '');
       await prefs.setString('profile_pic', userData['profile_pic'] ?? '');
 
       if (mounted) {

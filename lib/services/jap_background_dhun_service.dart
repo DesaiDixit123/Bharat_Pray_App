@@ -21,7 +21,11 @@ class JapBackgroundDhunService {
 
   Source _buildSource(String track) {
     final trimmed = track.trim();
-    // Prefer bundled local asset when track matches one of our 4 core temple dhuns
+    // 1. Prefer Live Database / Server URL when available
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return UrlSource(trimmed);
+    }
+    // 2. OR local asset fallback if offline
     for (final name in const [
       'temple_peaceful_dhun.wav',
       'ram_mandir_dhun.wav',
@@ -31,9 +35,6 @@ class JapBackgroundDhunService {
       if (trimmed.contains(name)) {
         return AssetSource('audio/$name');
       }
-    }
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      return UrlSource(trimmed);
     }
     final cleanAsset = trimmed.startsWith('assets/') ? trimmed.substring(7) : trimmed;
     return AssetSource(cleanAsset);

@@ -262,54 +262,9 @@ class _JapCounterScreenState extends State<JapCounterScreen> {
     ];
     try {
       await JapOfflineRepository.ensureDailyReset();
-      final prefs = await SharedPreferences.getInstance();
-      final hasResetRamV6 = prefs.getBool('has_reset_ram_v6') ?? false;
-      if (!hasResetRamV6) {
-        for (final jap in combined) {
-          if (jap.name.toLowerCase().contains('ram') || jap.id.toLowerCase().contains('ram')) {
-            jap.progress = 0;
-            await JapOfflineRepository.saveProgress(
-              japId: jap.id,
-              count: 0,
-              completedMalas: 0,
-              targetCount: jap.targetCount,
-            );
-            await JapOfflineRepository.saveProgress(
-              japId: '${jap.id}_jal',
-              count: 0,
-              completedMalas: 0,
-              targetCount: jap.targetCount,
-            );
-            await JapOfflineRepository.saveProgress(
-              japId: '${jap.id}_dhup',
-              count: 0,
-              completedMalas: 0,
-              targetCount: jap.targetCount,
-            );
-            await JapOfflineRepository.saveProgress(
-              japId: '${jap.id}_prakash',
-              count: 0,
-              completedMalas: 0,
-              targetCount: jap.targetCount,
-            );
-            await JapOfflineRepository.saveProgress(
-              japId: '${jap.id}_pushp',
-              count: 0,
-              completedMalas: 0,
-              targetCount: jap.targetCount,
-            );
-          }
-        }
-        await prefs.setBool('has_reset_ram_v6', true);
-      }
+      await JapOfflineRepository.cleanupLegacyUnscopedKeys();
 
       for (final jap in combined) {
-        if (!hasResetRamV6 &&
-            (jap.name.toLowerCase().contains('ram') ||
-                jap.id.toLowerCase().contains('ram'))) {
-          jap.progress = 0;
-          continue;
-        }
         final cached = await JapOfflineRepository.getProgress(
           jap.id,
           defaultTarget: jap.targetCount,

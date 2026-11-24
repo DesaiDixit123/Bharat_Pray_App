@@ -139,7 +139,7 @@ class JapOfflineSessionRecord {
   }
 }
 
-/// Offline-first repository handling local caching, corrupted data recovery, and sync queue
+/// Offline-first repository handling local caching, corrupted data recovery, and sync queue (strictly user-scoped)
 class JapOfflineRepository {
   static const String _prefixSession = 'jap_session_v2_';
   static const String _prefixCount = 'jap_count_';
@@ -147,31 +147,58 @@ class JapOfflineRepository {
   static const String _prefixDirty = 'jap_dirty_';
   static const String _customJapsKey = 'user_custom_japs_list';
 
-  /// Saves a complete structured session record to SharedPreferences
+  /// Resolves a unique key prefix per user so different logins never share Jap counts
+  static Future<String> _userSuffix([String? explicitUserId]) async {
+    if (explicitUserId != null && explicitUserId.trim().isNotEmpty) {
+      return 'u_${explicitUserId.trim()}';
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final uid = prefs.getString('user_id') ?? prefs.getString('userId');
+    if (uid != null && uid.trim().isNotEmpty) {
+      return 'u_${uid.trim()}';
+    }
+    final phone = prefs.getString('user_phone') ?? prefs.getString('auth_mobile');
+    if (phone != null && phone.trim().isNotEmpty) {
+      final digits = phone.replaceAll(RegExp(r'\D'), '');
+      final clean = digits.length >= 10 ? digits.substring(digits.length - 10) : digits;
+      if (clean.isNotEmpty) {
+        return 'p_$clean';
+      }
+    }
+    final email = prefs.getString('user_email');
+    if (email != null && email.trim().isNotEmpty) {
+      final cleanEmail = email.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+      return 'e_$cleanEmail';
+    }
+    return 'guest';
+  }
+
+  /// Saves a complete structured session record to SharedPreferences (user-scoped)
   static Future<void> saveSession(JapOfflineSessionRecord record) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final uSuffix = await _userSuffix(record.userId);
 
       // 1. Save full JSON record
       final jsonStr = json.encode(record.toJson());
-      await prefs.setString('$_prefixSession${record.japId}', jsonStr);
+      await prefs.setString('${_prefixSession}${uSuffix}_${record.japId}', jsonStr);
 
-      // 2. Mirror legacy keys for backward compatibility
-      await prefs.setInt('$_prefixCount${record.japId}', record.currentCount);
-      await prefs.setInt('$_prefixMalas${record.japId}', record.completedMalas);
+      // 2. Count & Malas keys (user-scoped)
+      await prefs.setInt('${_prefixCount}${uSuffix}_${record.japId}', record.currentCount);
+      await prefs.setInt('${_prefixMalas}${uSuffix}_${record.japId}', record.completedMalas);
       if (record.currentCount > 0) {
         final baseId = record.japId.replaceAll(RegExp(r'_(jal|dhup|prakash|pushp)$'), '');
-        await prefs.setString('last_active_jap_id', baseId);
+        await prefs.setString('last_active_jap_id_$uSuffix', baseId);
       }
       if (record.isDirty) {
-        await prefs.setBool('$_prefixDirty${record.japId}', true);
+        await prefs.setBool('${_prefixDirty}${uSuffix}_${record.japId}', true);
       }
     } catch (e) {
       debugPrint('[JapOfflineRepository] Error saving structured session: $e');
     }
   }
 
-  /// Retrieves structured session record with resilient corrupted data recovery
+  /// Retrieves structured session record with resilient corrupted data recovery (user-scoped)
   static Future<JapOfflineSessionRecord> getSession(
     String japId, {
     int defaultTarget = 108,
@@ -179,9 +206,10 @@ class JapOfflineRepository {
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final uSuffix = await _userSuffix(userId);
 
       // 1. Try structured JSON session key
-      final jsonStr = prefs.getString('$_prefixSession$japId');
+      final jsonStr = prefs.getString('${_prefixSession}${uSuffix}_$japId');
       if (jsonStr != null && jsonStr.trim().isNotEmpty) {
         try {
           final decoded = json.decode(jsonStr) as Map<String, dynamic>;
@@ -191,17 +219,17 @@ class JapOfflineRepository {
           );
         } catch (e) {
           debugPrint(
-            '[JapOfflineRepository] Corrupted session JSON for "$japId": $e. Recovering from legacy store.',
+            '[JapOfflineRepository] Corrupted session JSON for "$japId": $e.',
           );
         }
       }
 
-      // 2. Fallback: Recover from legacy count & malas keys
-      final legacyCount = prefs.getInt('$_prefixCount$japId') ?? 0;
-      final legacyMalas = prefs.getInt('$_prefixMalas$japId') ?? 0;
+      // 2. Fallback: Recover from count & malas keys for this user
+      final legacyCount = prefs.getInt('${_prefixCount}${uSuffix}_$japId') ?? 0;
+      final legacyMalas = prefs.getInt('${_prefixMalas}${uSuffix}_$japId') ?? 0;
       final target = defaultTarget > 0 ? defaultTarget : 108;
       final count = legacyCount.clamp(0, target);
-      final isDirty = prefs.getBool('$_prefixDirty$japId') ?? false;
+      final isDirty = prefs.getBool('${_prefixDirty}${uSuffix}_$japId') ?? false;
 
       final now = DateTime.now();
       final status = count >= target
@@ -209,7 +237,7 @@ class JapOfflineRepository {
           : (count > 0 ? JapLifecycle.inProgress : JapLifecycle.idle);
 
       return JapOfflineSessionRecord(
-        sessionId: 'session_${japId}_recovered_${now.millisecondsSinceEpoch}',
+        sessionId: 'session_${japId}_${now.millisecondsSinceEpoch}',
         userId: userId,
         japId: japId,
         currentCount: count,
@@ -233,7 +261,7 @@ class JapOfflineRepository {
     }
   }
 
-  /// Save current active progress to disk cache
+  /// Save current active progress to disk cache (user-scoped)
   static Future<void> saveProgress({
     required String japId,
     required int count,
@@ -260,16 +288,45 @@ class JapOfflineRepository {
     await saveSession(record);
   }
 
-  /// Completely resets progress for a specific Jap back to 0
-  static Future<void> resetProgress(String japId) async {
+  /// Completely resets progress for a specific Jap back to 0 for the active user
+  static Future<void> resetProgress(String japId, {String? userId}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('$_prefixSession$japId');
-      await prefs.remove('$_prefixCount$japId');
-      await prefs.remove('$_prefixMalas$japId');
-      await prefs.remove('$_prefixDirty$japId');
+      final uSuffix = await _userSuffix(userId);
+      await prefs.remove('${_prefixSession}${uSuffix}_$japId');
+      await prefs.remove('${_prefixCount}${uSuffix}_$japId');
+      await prefs.remove('${_prefixMalas}${uSuffix}_$japId');
+      await prefs.remove('${_prefixDirty}${uSuffix}_$japId');
     } catch (e) {
       debugPrint('[JapOfflineRepository] Error resetting progress for "$japId": $e');
+    }
+  }
+
+  /// Purges old un-scoped legacy keys from earlier versions so they never bleed into user accounts
+  static Future<void> cleanupLegacyUnscopedKeys() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final hasDoneClean = prefs.getBool('legacy_japs_cleaned_v4') ?? false;
+      if (hasDoneClean) return;
+
+      final allKeys = prefs.getKeys().toList();
+      for (final k in allKeys) {
+        if (k.startsWith(_prefixSession) ||
+            k.startsWith(_prefixCount) ||
+            k.startsWith(_prefixMalas) ||
+            k.startsWith(_prefixDirty)) {
+          // If it doesn't contain user-scoped tags (_u_, _p_, _e_, _guest_)
+          if (!k.contains('_u_') && !k.contains('_p_') && !k.contains('_e_') && !k.contains('guest')) {
+            await prefs.remove(k);
+          }
+        }
+      }
+      await prefs.remove('user_custom_japs_list');
+      await prefs.remove('has_reset_ram_v6');
+      await prefs.setBool('legacy_japs_cleaned_v4', true);
+      debugPrint('[JapOfflineRepository] Legacy unscoped keys successfully purged.');
+    } catch (e) {
+      debugPrint('[JapOfflineRepository] Error purging legacy unscoped keys: $e');
     }
   }
 
@@ -309,54 +366,59 @@ class JapOfflineRepository {
     }
   }
 
-  /// Retrieve locally cached progress map
+  /// Retrieve locally cached progress map (user-scoped)
   static Future<Map<String, int>> getProgress(
     String japId, {
     int defaultTarget = 108,
+    String? userId,
   }) async {
-    final session = await getSession(japId, defaultTarget: defaultTarget);
+    final session = await getSession(japId, defaultTarget: defaultTarget, userId: userId);
     return {
       'count': session.currentCount,
       'completedMalas': session.completedMalas,
     };
   }
 
-  /// Mark progress as synced to cloud
-  static Future<void> markSynced(String japId) async {
+  /// Mark progress as synced to cloud (user-scoped)
+  static Future<void> markSynced(String japId, {String? userId}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('$_prefixDirty$japId');
+      final uSuffix = await _userSuffix(userId);
+      await prefs.remove('${_prefixDirty}${uSuffix}_$japId');
 
-      final sessionStr = prefs.getString('$_prefixSession$japId');
+      final sessionStr = prefs.getString('${_prefixSession}${uSuffix}_$japId');
       if (sessionStr != null) {
         final decoded = json.decode(sessionStr) as Map<String, dynamic>;
         decoded['isDirty'] = false;
-        await prefs.setString('$_prefixSession$japId', json.encode(decoded));
+        await prefs.setString('${_prefixSession}${uSuffix}_$japId', json.encode(decoded));
       }
     } catch (e) {
       debugPrint('[JapOfflineRepository] Error clearing dirty flag: $e');
     }
   }
 
-  /// Check if a Jap has unsynced local counts
-  static Future<bool> isDirty(String japId) async {
+  /// Check if a Jap has unsynced local counts (user-scoped)
+  static Future<bool> isDirty(String japId, {String? userId}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      return prefs.getBool('$_prefixDirty$japId') ?? false;
+      final uSuffix = await _userSuffix(userId);
+      return prefs.getBool('${_prefixDirty}${uSuffix}_$japId') ?? false;
     } catch (e) {
       return false;
     }
   }
 
-  /// Get all pending dirty Jap records for background batch sync
-  static Future<List<JapOfflineSessionRecord>> getPendingSyncRecords() async {
+  /// Get all pending dirty Jap records for background batch sync (user-scoped)
+  static Future<List<JapOfflineSessionRecord>> getPendingSyncRecords({String? userId}) async {
     List<JapOfflineSessionRecord> list = [];
     try {
       final prefs = await SharedPreferences.getInstance();
-      final keys = prefs.getKeys().where((k) => k.startsWith(_prefixSession));
+      final uSuffix = await _userSuffix(userId);
+      final searchPrefix = '${_prefixSession}${uSuffix}_';
+      final keys = prefs.getKeys().where((k) => k.startsWith(searchPrefix));
       for (final sessionKey in keys) {
-        final japId = sessionKey.replaceFirst(_prefixSession, '');
-        final record = await getSession(japId);
+        final japId = sessionKey.replaceFirst(searchPrefix, '');
+        final record = await getSession(japId, userId: userId);
         if (record.isDirty) {
           list.add(record);
         }
@@ -370,8 +432,8 @@ class JapOfflineRepository {
   }
 
   /// Legacy helper for pending syncs
-  static Future<List<Map<String, dynamic>>> getPendingSyncs() async {
-    final records = await getPendingSyncRecords();
+  static Future<List<Map<String, dynamic>>> getPendingSyncs({String? userId}) async {
+    final records = await getPendingSyncRecords(userId: userId);
     return records
         .map(
           (r) => {
@@ -384,43 +446,49 @@ class JapOfflineRepository {
         .toList();
   }
 
-  /// Save a user custom Jap locally
-  static Future<void> saveCustomJap(Map<String, dynamic> customJapJson) async {
+  /// Save a user custom Jap locally (user-scoped)
+  static Future<void> saveCustomJap(Map<String, dynamic> customJapJson, {String? userId}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final existingStr = prefs.getString(_customJapsKey);
+      final uSuffix = await _userSuffix(userId);
+      final key = '${_customJapsKey}_$uSuffix';
+      final existingStr = prefs.getString(key);
       List<dynamic> list = existingStr != null ? json.decode(existingStr) : [];
       final newId = customJapJson['id'] ?? customJapJson['_id'];
       if (newId != null) {
         list.removeWhere((item) => (item['id'] ?? item['_id']) == newId);
       }
       list.insert(0, customJapJson);
-      await prefs.setString(_customJapsKey, json.encode(list));
+      await prefs.setString(key, json.encode(list));
     } catch (e) {
       debugPrint('[JapOfflineRepository] Error saving custom Jap: $e');
     }
   }
 
-  /// Remove a user custom Jap locally by ID
-  static Future<void> removeCustomJap(String id) async {
+  /// Remove a user custom Jap locally by ID (user-scoped)
+  static Future<void> removeCustomJap(String id, {String? userId}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final existingStr = prefs.getString(_customJapsKey);
+      final uSuffix = await _userSuffix(userId);
+      final key = '${_customJapsKey}_$uSuffix';
+      final existingStr = prefs.getString(key);
       if (existingStr != null) {
         List<dynamic> list = json.decode(existingStr);
         list.removeWhere((item) => (item['id'] ?? item['_id']) == id);
-        await prefs.setString(_customJapsKey, json.encode(list));
+        await prefs.setString(key, json.encode(list));
       }
     } catch (e) {
       debugPrint('[JapOfflineRepository] Error removing custom Jap: $e');
     }
   }
 
-  /// Get all user custom Japs
-  static Future<List<Map<String, dynamic>>> getCustomJaps() async {
+  /// Get all user custom Japs (user-scoped)
+  static Future<List<Map<String, dynamic>>> getCustomJaps({String? userId}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final existingStr = prefs.getString(_customJapsKey);
+      final uSuffix = await _userSuffix(userId);
+      final key = '${_customJapsKey}_$uSuffix';
+      final existingStr = prefs.getString(key);
       if (existingStr != null) {
         final decoded = json.decode(existingStr) as List;
         return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
@@ -431,16 +499,17 @@ class JapOfflineRepository {
     return [];
   }
 
-  /// Remove/clear all user custom Japs completely
-  static Future<void> clearAllCustomJaps() async {
+  /// Remove/clear all user custom Japs completely (user-scoped)
+  static Future<void> clearAllCustomJaps({String? userId}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_customJapsKey);
-      final customKeys = prefs.getKeys().where((k) => k.contains('custom_')).toList();
+      final uSuffix = await _userSuffix(userId);
+      await prefs.remove('${_customJapsKey}_$uSuffix');
+      final customKeys = prefs.getKeys().where((k) => k.contains('custom_') && k.contains(uSuffix)).toList();
       for (final key in customKeys) {
         await prefs.remove(key);
       }
-      debugPrint('[JapOfflineRepository] Cleared all local custom japs and keys successfully');
+      debugPrint('[JapOfflineRepository] Cleared local custom japs for $uSuffix successfully');
     } catch (e) {
       debugPrint('[JapOfflineRepository] Error clearing custom Japs: $e');
     }

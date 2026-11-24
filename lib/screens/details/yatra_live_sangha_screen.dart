@@ -97,81 +97,83 @@ class _YatraLiveSanghaScreenState extends State<YatraLiveSanghaScreen>
       duration: const Duration(milliseconds: 1400),
     );
 
-    // Video 1: 1st_Scene.mp4 — native 0-gap looping without crossfade animation (MUTED)
-    _walkingVideoController = VideoPlayerController.asset(
-      'assets/images/1st_Scene.mp4',
-    )..initialize().then((_) {
-        if (mounted) {
-          _walkingVideoController!.setVolume(0.0);
-          _walkingVideoController!.setLooping(true);
-          setState(() {});
-        }
-      }).catchError((_) {
-        _walkingVideoController = VideoPlayerController.asset('assets/images/New_walking.mp4')
-          ..initialize().then((_) {
-            if (mounted) {
-              _walkingVideoController!.setVolume(0.0);
-              _walkingVideoController!.setLooping(true);
-              setState(() {});
-            }
-          });
-      });
+    // Video 1: 1st_Scene.mp4 — Network from server first OR fallback to local asset (MUTED looping)
+    _initSceneVideoController(
+      remoteFileName: '1st_Scene.mp4',
+      localAssetPath: 'assets/images/1st_Scene.mp4',
+      isLooping: true,
+    ).then((ctrl) {
+      if (mounted) {
+        setState(() => _walkingVideoController = ctrl);
+      }
+    });
 
-    // Video 2: 2nd_Scene.mp4 — plays once on temple/destination arrival then shows popup/completion (MUTED)
-    _templeReachingVideoController = VideoPlayerController.asset(
-      'assets/images/2nd_Scene.mp4',
-    )..initialize().then((_) {
-        if (mounted) {
-          _templeReachingVideoController!.setVolume(0.0);
-          _templeReachingVideoController!.setLooping(false);
-          _templeReachingVideoController!.addListener(_onTempleReachingStatusChanged);
-          _templeReachingVideoController!.addListener(() {
-            if (mounted) setState(() {});
-          });
-          setState(() {});
-        }
-      }).catchError((_) {
-        _templeReachingVideoController = VideoPlayerController.asset('assets/images/Temple_reaching.mp4')
-          ..initialize().then((_) {
-            if (mounted) {
-              _templeReachingVideoController!.setVolume(0.0);
-              _templeReachingVideoController!.setLooping(false);
-              _templeReachingVideoController!.addListener(_onTempleReachingStatusChanged);
-              _templeReachingVideoController!.addListener(() {
-                if (mounted) setState(() {});
-              });
-              setState(() {});
-            }
-          });
-      });
+    // Video 2: 2nd_Scene.mp4 — Network from server first OR fallback to local asset
+    _initSceneVideoController(
+      remoteFileName: '2nd_Scene.mp4',
+      localAssetPath: 'assets/images/2nd_Scene.mp4',
+      isLooping: false,
+      onStatusChanged: _onTempleReachingStatusChanged,
+    ).then((ctrl) {
+      if (mounted) {
+        setState(() => _templeReachingVideoController = ctrl);
+      }
+    });
 
-    // Video 3: 3rd_Scene.mp4 — plays when user taps View Darshan (MUTED)
-    _templeEntranceVideoController = VideoPlayerController.asset(
-      'assets/images/3rd_Scene.mp4',
-    )..initialize().then((_) {
-        if (mounted) {
-          _templeEntranceVideoController!.setVolume(0.0);
-          _templeEntranceVideoController!.setLooping(false);
-          _templeEntranceVideoController!.addListener(_onTempleEntranceStatusChanged);
-          _templeEntranceVideoController!.addListener(() {
-            if (mounted) setState(() {});
-          });
-          setState(() {});
-        }
-      }).catchError((_) {
-        _templeEntranceVideoController = VideoPlayerController.asset('assets/images/Temple_entrarance.mp4')
-          ..initialize().then((_) {
-            if (mounted) {
-              _templeEntranceVideoController!.setVolume(0.0);
-              _templeEntranceVideoController!.setLooping(false);
-              _templeEntranceVideoController!.addListener(_onTempleEntranceStatusChanged);
-              _templeEntranceVideoController!.addListener(() {
-                if (mounted) setState(() {});
-              });
-              setState(() {});
-            }
-          });
+    // Video 3: 3rd_Scene.mp4 — Network from server first OR fallback to local asset
+    _initSceneVideoController(
+      remoteFileName: '3rd_Scene.mp4',
+      localAssetPath: 'assets/images/3rd_Scene.mp4',
+      isLooping: false,
+      onStatusChanged: _onTempleEntranceStatusChanged,
+    ).then((ctrl) {
+      if (mounted) {
+        setState(() => _templeEntranceVideoController = ctrl);
+      }
+    });
+  }
+
+  /// Initializer that loads from Database / Server first, OR falls back to local asset if needed
+  Future<VideoPlayerController> _initSceneVideoController({
+    required String remoteFileName,
+    required String localAssetPath,
+    required bool isLooping,
+    VoidCallback? onStatusChanged,
+  }) async {
+    final options = VideoPlayerOptions(mixWithOthers: true);
+
+    // 1. Try Network URL from Database / Backend Server
+    try {
+      final networkUri = Uri.parse('${ApiService.baseUrl}/uploads/$remoteFileName');
+      final netCtrl = VideoPlayerController.networkUrl(networkUri, videoPlayerOptions: options);
+      await netCtrl.initialize().timeout(const Duration(seconds: 5));
+      await netCtrl.setVolume(0.0);
+      await netCtrl.setLooping(isLooping);
+      if (onStatusChanged != null) {
+        netCtrl.addListener(onStatusChanged);
+      }
+      netCtrl.addListener(() {
+        if (mounted) setState(() {});
       });
+      return netCtrl;
+    } catch (e) {
+      debugPrint('[YatraSceneVideo] Network load failed for $remoteFileName: $e. Falling back to local asset.');
+    }
+
+    // 2. OR fallback to local asset if offline or network unavailable
+    final assetCtrl = VideoPlayerController.asset(localAssetPath, videoPlayerOptions: options);
+    try {
+      await assetCtrl.initialize();
+      await assetCtrl.setVolume(0.0);
+      await assetCtrl.setLooping(isLooping);
+      if (onStatusChanged != null) {
+        assetCtrl.addListener(onStatusChanged);
+      }
+      assetCtrl.addListener(() {
+        if (mounted) setState(() {});
+      });
+    } catch (_) {}
+    return assetCtrl;
   }
 
 

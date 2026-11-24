@@ -107,7 +107,7 @@ class BhajanTrackItem {
       title: title,
       singer: singer,
       imagePath: imagePath,
-      audioUrl: (bhajanMap['audioUrl'] ?? bhajanMap['audio'] ?? '').toString(),
+      audioUrl: ApiService.resolveImageUrl((bhajanMap['audioUrl'] ?? bhajanMap['audio'] ?? '').toString()),
       duration: formattedDuration,
       lyrics: LocalizedApiHelper.parse(bhajanMap['lyrics']),
       categoryId: (bhajanMap['categoryId'] is Map

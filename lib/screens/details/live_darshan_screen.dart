@@ -1,5 +1,7 @@
 import 'dart:async';
-import 'dart:ui';
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,6 +11,8 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import '../../services/api_service.dart';
 
 class LiveDarshanScreen extends StatefulWidget {
@@ -43,6 +47,8 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
   String _token = '';
   String _userName = '';
   String _userAvatar = '';
+  String _bannerImageUrl = '';
+  File? _cachedBannerFile;
 
   // Social Stats States
   int _viewerCount = 0;
@@ -56,6 +62,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
   // Video Streaming State
   String _youtubeVideoId = '';
   YoutubePlayerController? _youtubeController;
+  StreamSubscription<YoutubePlayerValue>? _youtubeSubscription;
 
   // Fullscreen / Landscape State
   bool _isLandscape = false;
@@ -84,6 +91,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
   void initState() {
     super.initState();
     _darshanId = widget.darshanId;
+    _bannerImageUrl = widget.imageUrl;
     _loadProfileAndInit();
   }
 
@@ -177,6 +185,21 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
       // 1. Fetch live details (joins stream as well)
       final details = await ApiService.getLiveDarshanDetails(_token, _darshanId);
 
+      // Extract temple banner image immediately so it's always ready for sharing
+      final templeBanner = (details['temple_details']?['bannerImage'] ?? 
+                            details['temple_details']?['thumbnailImage'] ?? 
+                            details['darshan_details']?['banner'] ?? 
+                            details['darshan_details']?['image'] ?? 
+                            details['banner'] ?? 
+                            details['image'] ?? '').toString().trim();
+      if (templeBanner.isNotEmpty) {
+        _bannerImageUrl = templeBanner;
+      }
+      final String templeTitle = widget.templeName.isNotEmpty 
+          ? widget.templeName 
+          : ((details['temple_details']?['name'] ?? 'Live Darshan').toString());
+      _resolveBannerImageFile(templeTitle);
+
       // Extract Youtube Video ID
       if (details['youtube_darshan_details'] != null) {
         _youtubeVideoId = (details['youtube_darshan_details']['youtubeVideoId'] ?? 
@@ -252,6 +275,8 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
 
       // Initialize YouTube Player
       if (_youtubeVideoId.isNotEmpty) {
+        _youtubeSubscription?.cancel();
+        _youtubeController?.close();
         _youtubeController = YoutubePlayerController.fromVideoId(
           videoId: _youtubeVideoId,
           autoPlay: true,
@@ -261,6 +286,31 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
             mute: false,
           ),
         );
+
+        // Auto-detect when live stream ends on YouTube or becomes unplayable
+        _youtubeSubscription = _youtubeController!.listen((event) {
+          if (!mounted) return;
+
+          // 1. YouTube Live broadcast has ended
+          if (event.playerState == PlayerState.ended) {
+            debugPrint('[LiveDarshan] YouTube live stream has ended on YouTube');
+            setState(() {
+              _isOffline = true;
+              _viewerCount = 0;
+            });
+            _socket?.emit('leave_stream');
+          }
+
+          // 2. Video unavailable, marked private, or unplayable
+          if (event.error != YoutubeError.none && event.error != YoutubeError.unknown) {
+            debugPrint('[LiveDarshan] YouTube player error: ${event.error}');
+            setState(() {
+              _isOffline = true;
+              _viewerCount = 0;
+            });
+            _socket?.emit('leave_stream');
+          }
+        });
       }
 
       // 2. Fetch current status (likes, favourite)
@@ -525,6 +575,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
     _socket?.emit('leave_stream');
     _socket?.disconnect();
     _socket?.dispose();
+    _youtubeSubscription?.cancel();
     _youtubeController?.close();
     _commentController.dispose();
     _chatScrollController.dispose();
@@ -617,24 +668,260 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
     }
   }
 
+  Future<Uint8List?> _createBrandedBannerBytes(Uint8List sourceBytes, String templeTitle) async {
+    try {
+      final ui.Image image = await decodeImageFromList(sourceBytes);
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      final width = image.width.toDouble();
+      final height = image.height.toDouble();
+
+      // 1. Draw source background image
+      canvas.drawImage(image, Offset.zero, Paint());
+
+      // 2. Bottom shadow / gradient overlay for text readability
+      final gradientPaint = Paint()
+        ..shader = ui.Gradient.linear(
+          Offset(0, height * 0.4),
+          Offset(0, height),
+          [
+            Colors.transparent,
+            Colors.black.withOpacity(0.55),
+            Colors.black.withOpacity(0.92),
+          ],
+          [0.0, 0.45, 1.0],
+        );
+      canvas.drawRect(Rect.fromLTWH(0, height * 0.4, width, height * 0.6), gradientPaint);
+
+      // 3. Top subtle vignette for top badge contrast
+      final topGradient = Paint()
+        ..shader = ui.Gradient.linear(
+          const Offset(0, 0),
+          Offset(0, height * 0.28),
+          [Colors.black.withOpacity(0.65), Colors.transparent],
+        );
+      canvas.drawRect(Rect.fromLTWH(0, 0, width, height * 0.28), topGradient);
+
+      // Scale factor based on image width (relative to standard 720p)
+      final scale = (width / 720.0).clamp(0.7, 2.5);
+
+      // 4. "🔴 LIVE DARSHAN" Pill Badge on Top Left
+      final badgeHeight = 44.0 * scale;
+      final badgeWidth = 178.0 * scale;
+      final margin = 24.0 * scale;
+      final badgeRRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(margin, margin, badgeWidth, badgeHeight),
+        Radius.circular(22.0 * scale),
+      );
+      final badgePaint = Paint()
+        ..color = const Color(0xFFD32F2F)
+        ..style = PaintingStyle.fill;
+      canvas.drawRRect(badgeRRect, badgePaint);
+
+      // White circle dot
+      final dotPaint = Paint()..color = Colors.white;
+      canvas.drawCircle(
+        Offset(margin + 20.0 * scale, margin + badgeHeight / 2),
+        5.5 * scale,
+        dotPaint,
+      );
+
+      // "LIVE DARSHAN" text
+      final badgeTextPainter = TextPainter(
+        text: TextSpan(
+          text: 'LIVE DARSHAN',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 15.0 * scale,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      badgeTextPainter.paint(
+        canvas,
+        Offset(margin + 34.0 * scale, margin + (badgeHeight - badgeTextPainter.height) / 2),
+      );
+
+      // Bharat Pray Branding Top Right
+      final brandPainter = TextPainter(
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: 'Bharat',
+              style: TextStyle(
+                color: const Color(0xFFFF9933),
+                fontSize: 17.0 * scale,
+                fontWeight: FontWeight.w900,
+                shadows: const [
+                  Shadow(color: Colors.black87, blurRadius: 4, offset: Offset(0, 1)),
+                ],
+              ),
+            ),
+            TextSpan(
+              text: 'Pray',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 17.0 * scale,
+                fontWeight: FontWeight.w900,
+                shadows: const [
+                  Shadow(color: Colors.black87, blurRadius: 4, offset: Offset(0, 1)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      brandPainter.paint(
+        canvas,
+        Offset(width - brandPainter.width - margin, margin + 12.0 * scale),
+      );
+
+      // 5. Temple Title Bottom Left
+      final titlePainter = TextPainter(
+        text: TextSpan(
+          text: templeTitle,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 26.0 * scale,
+            fontWeight: FontWeight.bold,
+            shadows: const [
+              Shadow(color: Colors.black, blurRadius: 8, offset: Offset(0, 2)),
+            ],
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 2,
+      )..layout(maxWidth: width - (margin * 2));
+      titlePainter.paint(
+        canvas,
+        Offset(margin, height - titlePainter.height - (margin * 1.2)),
+      );
+
+      final picture = recorder.endRecording();
+      final renderedImage = await picture.toImage(image.width, image.height);
+      final byteData = await renderedImage.toByteData(format: ui.ImageByteFormat.png);
+      return byteData?.buffer.asUint8List();
+    } catch (e) {
+      debugPrint('Error branding banner: $e');
+      return null;
+    }
+  }
+
+  Future<File?> _resolveBannerImageFile(String templeTitle) async {
+    try {
+      if (_cachedBannerFile != null && await _cachedBannerFile!.exists()) {
+        return _cachedBannerFile;
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final String cleanId = _darshanId.isNotEmpty ? _darshanId : 'current';
+      final cacheFile = File('${tempDir.path}/live_darshan_banner_$cleanId.png');
+      if (await cacheFile.exists() && await cacheFile.length() > 0) {
+        _cachedBannerFile = cacheFile;
+        return cacheFile;
+      }
+
+      // Candidate URLs in priority order
+      final List<String> candidateUrls = [];
+      if (_bannerImageUrl.isNotEmpty) {
+        candidateUrls.add(ApiService.resolveImageUrl(_bannerImageUrl));
+      }
+      if (widget.imageUrl.isNotEmpty) {
+        candidateUrls.add(ApiService.resolveImageUrl(widget.imageUrl));
+      }
+      if (_youtubeVideoId.isNotEmpty) {
+        candidateUrls.add('https://img.youtube.com/vi/$_youtubeVideoId/maxresdefault.jpg');
+        candidateUrls.add('https://img.youtube.com/vi/$_youtubeVideoId/hqdefault.jpg');
+      }
+
+      Uint8List? rawBytes;
+      for (final url in candidateUrls) {
+        try {
+          final uri = Uri.parse(url);
+          final response = await http.get(uri).timeout(const Duration(seconds: 4));
+          if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+            rawBytes = response.bodyBytes;
+            break;
+          }
+        } catch (e) {
+          debugPrint('Candidate banner url failed ($url): $e');
+        }
+      }
+
+      if (rawBytes == null || rawBytes.isEmpty) {
+        try {
+          final byteData = await rootBundle.load('assets/images/dwarka_temple.jpg');
+          rawBytes = byteData.buffer.asUint8List();
+        } catch (e) {
+          debugPrint('Fallback asset failed: $e');
+        }
+      }
+
+      if (rawBytes == null || rawBytes.isEmpty) {
+        return null;
+      }
+
+      Uint8List finalBytes = rawBytes;
+      try {
+        final branded = await _createBrandedBannerBytes(rawBytes, templeTitle);
+        if (branded != null && branded.isNotEmpty) {
+          finalBytes = branded;
+        }
+      } catch (e) {
+        debugPrint('Error branding banner image: $e');
+      }
+
+      await cacheFile.writeAsBytes(finalBytes, flush: true);
+      _cachedBannerFile = cacheFile;
+      return cacheFile;
+    } catch (e) {
+      debugPrint('Error resolving banner image: $e');
+      return null;
+    }
+  }
+
   Future<void> _shareStream() async {
     try {
       // Increment share counts on backend
-      final res = await ApiService.incrementShareCount(_token, _darshanId);
-      if (mounted) {
-        setState(() {
-          _shareCount = res['share_count'] ?? (_shareCount + 1);
-        });
-      }
+      ApiService.incrementShareCount(_token, _darshanId).then((res) {
+        if (mounted) {
+          setState(() {
+            _shareCount = res['share_count'] ?? (_shareCount + 1);
+          });
+        }
+      }).catchError((e) {
+        debugPrint('Failed to increment share count: $e');
+      });
 
       final String templeTitle = widget.templeName.isNotEmpty ? widget.templeName : 'Live Darshan';
       final String shareUrl = "https://bharatpray.com/live-darshan/$_darshanId";
       final String shareText = "🙏 Watch Live Darshan of $templeTitle on Bharat Pray app!\n\n$shareUrl";
 
-      // Trigger system share sheet with fallback to options modal
-      final result = await Share.share(shareText, subject: 'Live Darshan - $templeTitle');
-      if (result.status == ShareResultStatus.dismissed && mounted) {
-        _showShareOptionsBottomSheet(templeTitle, shareText, shareUrl);
+      // Resolve live banner image file
+      final bannerFile = await _resolveBannerImageFile(templeTitle);
+
+      if (bannerFile != null && await bannerFile.exists()) {
+        final xFile = XFile(
+          bannerFile.path,
+          mimeType: 'image/png',
+          name: 'live_darshan_banner.png',
+        );
+        final result = await Share.shareXFiles(
+          [xFile],
+          text: shareText,
+          subject: 'Live Darshan - $templeTitle',
+        );
+        if (result.status == ShareResultStatus.dismissed && mounted) {
+          _showShareOptionsBottomSheet(templeTitle, shareText, shareUrl, bannerFile);
+        }
+      } else {
+        final result = await Share.share(shareText, subject: 'Live Darshan - $templeTitle');
+        if (result.status == ShareResultStatus.dismissed && mounted) {
+          _showShareOptionsBottomSheet(templeTitle, shareText, shareUrl, null);
+        }
       }
     } catch (e) {
       debugPrint('Error sharing stream: $e');
@@ -642,15 +929,22 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
       final String shareUrl = "https://bharatpray.com/live-darshan/$_darshanId";
       final String shareText = "🙏 Watch Live Darshan of $templeTitle on Bharat Pray app!\n\n$shareUrl";
       if (mounted) {
-        _showShareOptionsBottomSheet(templeTitle, shareText, shareUrl);
+        _showShareOptionsBottomSheet(templeTitle, shareText, shareUrl, _cachedBannerFile);
       }
     }
   }
 
-  void _showShareOptionsBottomSheet(String templeTitle, String shareText, String shareUrl) {
+  void _showShareOptionsBottomSheet(
+    String templeTitle,
+    String shareText,
+    String shareUrl, [
+    File? bannerFile,
+  ]) {
+    final effectiveBanner = bannerFile ?? _cachedBannerFile;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) {
         return Container(
           decoration: const BoxDecoration(
@@ -678,7 +972,22 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+
+              // Banner preview at the top of the modal sheet
+              if (effectiveBanner != null && effectiveBanner.existsSync()) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: Image.file(
+                    effectiveBanner,
+                    height: 140,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
@@ -688,11 +997,19 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                     label: 'WhatsApp',
                     onTap: () async {
                       Navigator.pop(context);
-                      final waUrl = Uri.parse("whatsapp://send?text=${Uri.encodeComponent(shareText)}");
-                      if (await canLaunchUrl(waUrl)) {
-                        await launchUrl(waUrl);
+                      if (effectiveBanner != null && await effectiveBanner.exists()) {
+                        await Share.shareXFiles(
+                          [XFile(effectiveBanner.path, mimeType: 'image/png')],
+                          text: shareText,
+                          subject: 'Live Darshan - $templeTitle',
+                        );
                       } else {
-                        Share.share(shareText, subject: 'Live Darshan - $templeTitle');
+                        final waUrl = Uri.parse("whatsapp://send?text=${Uri.encodeComponent(shareText)}");
+                        if (await canLaunchUrl(waUrl)) {
+                          await launchUrl(waUrl);
+                        } else {
+                          Share.share(shareText, subject: 'Live Darshan - $templeTitle');
+                        }
                       }
                     },
                   ),
@@ -702,11 +1019,19 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                     label: 'Telegram',
                     onTap: () async {
                       Navigator.pop(context);
-                      final tgUrl = Uri.parse("https://t.me/share/url?url=${Uri.encodeComponent(shareUrl)}&text=${Uri.encodeComponent("🙏 Live Darshan of $templeTitle")}");
-                      if (await canLaunchUrl(tgUrl)) {
-                        await launchUrl(tgUrl, mode: LaunchMode.externalApplication);
+                      if (effectiveBanner != null && await effectiveBanner.exists()) {
+                        await Share.shareXFiles(
+                          [XFile(effectiveBanner.path, mimeType: 'image/png')],
+                          text: shareText,
+                          subject: 'Live Darshan - $templeTitle',
+                        );
                       } else {
-                        Share.share(shareText, subject: 'Live Darshan - $templeTitle');
+                        final tgUrl = Uri.parse("https://t.me/share/url?url=${Uri.encodeComponent(shareUrl)}&text=${Uri.encodeComponent("🙏 Live Darshan of $templeTitle")}");
+                        if (await canLaunchUrl(tgUrl)) {
+                          await launchUrl(tgUrl, mode: LaunchMode.externalApplication);
+                        } else {
+                          Share.share(shareText, subject: 'Live Darshan - $templeTitle');
+                        }
                       }
                     },
                   ),
@@ -733,7 +1058,15 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
                     label: 'More Apps',
                     onTap: () {
                       Navigator.pop(context);
-                      Share.share(shareText, subject: 'Live Darshan - $templeTitle');
+                      if (effectiveBanner != null && effectiveBanner.existsSync()) {
+                        Share.shareXFiles(
+                          [XFile(effectiveBanner.path, mimeType: 'image/png')],
+                          text: shareText,
+                          subject: 'Live Darshan - $templeTitle',
+                        );
+                      } else {
+                        Share.share(shareText, subject: 'Live Darshan - $templeTitle');
+                      }
                     },
                   ),
                 ],
