@@ -406,25 +406,6 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
 
             const SizedBox(height: 18),
 
-            Text(
-              LocalizedApiHelper.parse("Audio / Dhun Track Name:"),
-              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF2E2A36)),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _audioController,
-              style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF2E2A36)),
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.music_note_rounded, color: Color(0xFFFF7700), size: 22),
-                hintText: LocalizedApiHelper.parse("Add Audio Soundtrack"),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-              ),
-            ),
-
-            const SizedBox(height: 18),
-
             // AUTO-LINKED FESTIVAL BADGE
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -513,10 +494,10 @@ class _CreateMandalReelScreenState extends State<CreateMandalReelScreen> {
                   }
                   final newReel = ReelItem(
                     id: DateTime.now().millisecondsSinceEpoch.toString(),
-                    thumbnailUrl: "assets/images/devotional/navratri_garba_festival.jpg",
+                    thumbnailUrl: "",
                     videoUrl: _selectedVideoPath,
                     title: _titleController.text.trim(),
-                    audioTrack: _audioController.text.trim(),
+                    audioTrack: "",
                     festivalName: _festivalName,
                     views: "0",
                     likes: 0,

@@ -20,6 +20,117 @@ import 'create_mandal_reel_screen.dart';
 import 'go_live_studio_screen.dart';
 import 'mandal_registration_screen.dart';
 
+/// Renders the real first frame of a Reel's video (local file, network, or asset)
+/// instead of a hardcoded placeholder image.
+class ReelVideoThumbnail extends StatefulWidget {
+  final String? videoUrl;
+  final String? fallbackThumbnailUrl;
+
+  const ReelVideoThumbnail({
+    super.key,
+    required this.videoUrl,
+    this.fallbackThumbnailUrl,
+  });
+
+  @override
+  State<ReelVideoThumbnail> createState() => _ReelVideoThumbnailState();
+}
+
+class _ReelVideoThumbnailState extends State<ReelVideoThumbnail> {
+  VideoPlayerController? _controller;
+  bool _initialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initThumb();
+  }
+
+  @override
+  void didUpdateWidget(covariant ReelVideoThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.videoUrl != widget.videoUrl) {
+      _disposeController();
+      _initThumb();
+    }
+  }
+
+  Future<void> _initThumb() async {
+    final vUrl = (widget.videoUrl ?? '').trim();
+    if (vUrl.isEmpty) return;
+
+    VideoPlayerController? ctrl;
+    try {
+      if (vUrl.startsWith('http://') || vUrl.startsWith('https://')) {
+        ctrl = VideoPlayerController.networkUrl(Uri.parse(vUrl));
+      } else if (vUrl.startsWith('assets/')) {
+        ctrl = VideoPlayerController.asset(vUrl);
+      } else {
+        final f = File(vUrl);
+        if (f.existsSync()) {
+          ctrl = VideoPlayerController.file(f);
+        }
+      }
+
+      if (ctrl == null) return;
+      _controller = ctrl;
+      await ctrl.initialize();
+      await ctrl.setVolume(0);
+      await ctrl.pause();
+      if (mounted) {
+        setState(() => _initialized = true);
+      }
+    } catch (_) {
+      _disposeController();
+    }
+  }
+
+  void _disposeController() {
+    _controller?.dispose();
+    _controller = null;
+    _initialized = false;
+  }
+
+  @override
+  void dispose() {
+    _disposeController();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_initialized && _controller != null && _controller!.value.isInitialized) {
+      final size = _controller!.value.size;
+      return ClipRect(
+        child: FittedBox(
+          fit: BoxFit.cover,
+          child: SizedBox(
+            width: size.width > 0 ? size.width : 300,
+            height: size.height > 0 ? size.height : 500,
+            child: VideoPlayer(_controller!),
+          ),
+        ),
+      );
+    }
+
+    final fb = (widget.fallbackThumbnailUrl ?? '').trim();
+    final isFakePlaceholder = fb.isEmpty || fb.contains('navratri_garba_festival');
+    if (!isFakePlaceholder) {
+      return buildSmartImage(fb, fit: BoxFit.cover);
+    }
+
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF231138), Color(0xFF12081F)],
+        ),
+      ),
+    );
+  }
+}
+
 enum MandalStatus { approved, pending, notRegistered }
 
 Widget buildSmartImage(String? path, {BoxFit fit = BoxFit.cover, double? width, double? height}) {
@@ -97,7 +208,7 @@ Widget buildSmartImage(String? path, {BoxFit fit = BoxFit.cover, double? width, 
 class PostItem {
   final String id;
   final String imageUrl;
-  final String caption;
+  String caption;
   final String festivalName;
   final String location;
   final String timeAgo;
@@ -146,7 +257,7 @@ class ReelItem {
   final String id;
   final String thumbnailUrl;
   final String? videoUrl;
-  final String title;
+  String title;
   final String audioTrack;
   final String festivalName;
   final String views;
@@ -804,6 +915,9 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
 
   // FULLSCREEN POST VIEWER (INSTAGRAM-STYLE FEED)
   void _openPostViewer({int startIndex = 0}) {
+    final resolvedAvatar = (_avatarUrl != null && _avatarUrl!.trim().isNotEmpty)
+        ? _avatarUrl!
+        : (widget.avatarUrl ?? "assets/images/ram_bhajan.png");
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -811,9 +925,19 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
           startIndex: startIndex,
           posts: _posts,
           mandalName: _mandalName,
-          avatarUrl: widget.avatarUrl ?? "assets/images/ram_bhajan.png",
+          avatarUrl: resolvedAvatar,
           isOwnProfile: widget.isOwnProfile,
           isFromProfile: true,
+          onPostEdited: (postId, newCaption) async {
+            await UtsavService.updateMandalPostCaption(_mandalName, postId, newCaption);
+            if (mounted) {
+              setState(() {
+                for (final p in _posts) {
+                  if (p.id == postId) p.caption = newCaption;
+                }
+              });
+            }
+          },
           onPostDeleted: (postId) async {
             await UtsavService.deleteMandalPost(_mandalName, postId);
             setState(() {
@@ -836,6 +960,9 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
   }
 
   void _openReelViewer({int startIndex = 0}) {
+    final resolvedAvatar = (_avatarUrl != null && _avatarUrl!.trim().isNotEmpty)
+        ? _avatarUrl!
+        : (widget.avatarUrl ?? "assets/images/ram_bhajan.png");
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -843,7 +970,29 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
           startIndex: startIndex,
           reels: _reels,
           mandalName: _mandalName,
-          avatarUrl: widget.avatarUrl ?? "assets/images/ram_bhajan.png",
+          avatarUrl: resolvedAvatar,
+          isOwnProfile: widget.isOwnProfile,
+          onReelEdited: (reelId, newTitle) async {
+            await UtsavService.updateMandalReelTitle(_mandalName, reelId, newTitle);
+            if (mounted) {
+              setState(() {
+                for (final r in _reels) {
+                  if (r.id == reelId) r.title = newTitle;
+                }
+              });
+            }
+          },
+          onReelDeleted: (reelId) async {
+            await UtsavService.deleteMandalReel(_mandalName, reelId);
+            if (mounted) {
+              setState(() {
+                _reels.removeWhere((r) => r.id == reelId);
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Reel deleted")),
+              );
+            }
+          },
         ),
       ),
     ).then((_) {
@@ -1309,18 +1458,19 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                 _buildTabItem(0, Icons.grid_on_rounded, "${LocalizedApiHelper.parse("Posts")} (${_posts.length})"),
                 _buildTabItem(1, Icons.video_collection_rounded, "${LocalizedApiHelper.parse("Reels")} (${_reels.length})"),
                 _buildTabItem(2, Icons.live_tv_rounded, LocalizedApiHelper.parse("Live")),
-                _buildTabItem(3, Icons.info_outline_rounded, LocalizedApiHelper.parse("Mandal Info")),
+                if (widget.isOwnProfile)
+                  _buildTabItem(3, Icons.info_outline_rounded, LocalizedApiHelper.parse("Mandal Info")),
               ],
             ),
           ),
 
           IndexedStack(
-            index: _selectedTab,
+            index: (!widget.isOwnProfile && _selectedTab >= 3) ? 0 : _selectedTab,
             children: [
               _buildPostsGridTab(),
               _buildReelsGridTab(),
               _buildLiveEventsTab(),
-              _buildMandalInfoTab(),
+              if (widget.isOwnProfile) _buildMandalInfoTab(),
             ],
           ),
 
@@ -1501,7 +1651,10 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
           child: Stack(
             fit: StackFit.expand,
             children: [
-              buildSmartImage(reel.thumbnailUrl, fit: BoxFit.cover),
+              ReelVideoThumbnail(
+                videoUrl: reel.videoUrl,
+                fallbackThumbnailUrl: reel.thumbnailUrl,
+              ),
               Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -2386,6 +2539,7 @@ class MandalPostsFeedScreen extends StatefulWidget {
   final bool isOwnProfile;
   final bool isFromProfile;
   final Function(String postId)? onPostDeleted;
+  final Function(String postId, String newCaption)? onPostEdited;
 
   const MandalPostsFeedScreen({
     super.key,
@@ -2396,6 +2550,7 @@ class MandalPostsFeedScreen extends StatefulWidget {
     this.isOwnProfile = false,
     this.isFromProfile = false,
     this.onPostDeleted,
+    this.onPostEdited,
   });
 
   static final List<PostItem> defaultPosts = [];
@@ -2575,11 +2730,17 @@ class _MandalPostsFeedScreenState extends State<MandalPostsFeedScreen> {
                                           colors: [Color(0xFFFF9500), Color(0xFFFF5500)],
                                         ),
                                       ),
-                                      child: CircleAvatar(
-                                        radius: 18,
-                                        backgroundImage: widget.avatarUrl.startsWith('http')
-                                            ? NetworkImage(widget.avatarUrl) as ImageProvider
-                                            : AssetImage(widget.avatarUrl),
+                                      child: ClipOval(
+                                        child: SizedBox(
+                                          width: 36,
+                                          height: 36,
+                                          child: buildSmartImage(
+                                            widget.avatarUrl,
+                                            width: 36,
+                                            height: 36,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
                                       ),
                                     ),
                                     const SizedBox(width: 10),
@@ -2629,7 +2790,46 @@ class _MandalPostsFeedScreenState extends State<MandalPostsFeedScreen> {
                                 ),
                               ),
                             ),
-                            if (widget.isOwnProfile)
+                            if (widget.isOwnProfile) ...[
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined, color: Color(0xFFFF7700), size: 20),
+                                onPressed: () {
+                                  final editCtrl = TextEditingController(text: post.caption);
+                                  showDialog(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                      title: Text(LocalizedApiHelper.parse("Edit Description")),
+                                      content: TextField(
+                                        controller: editCtrl,
+                                        maxLines: 4,
+                                        decoration: InputDecoration(
+                                          hintText: LocalizedApiHelper.parse("Enter description..."),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                        ),
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(ctx),
+                                          child: Text(LocalizedApiHelper.parse("Cancel")),
+                                        ),
+                                        ElevatedButton(
+                                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF7700)),
+                                          onPressed: () {
+                                            final updated = editCtrl.text.trim();
+                                            Navigator.pop(ctx);
+                                            setState(() {
+                                              post.caption = updated;
+                                            });
+                                            widget.onPostEdited?.call(post.id, updated);
+                                          },
+                                          child: Text(LocalizedApiHelper.parse("Save"), style: const TextStyle(color: Colors.white)),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
                               IconButton(
                                 icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
                                 onPressed: () {
@@ -2657,6 +2857,7 @@ class _MandalPostsFeedScreenState extends State<MandalPostsFeedScreen> {
                                   );
                                 },
                               ),
+                            ],
                           ],
                         ),
                       ),
@@ -2804,26 +3005,19 @@ class _MandalPostsFeedScreenState extends State<MandalPostsFeedScreen> {
                           ),
                         ),
 
-                      // 5. Post Caption (Clear, Dark Text, High Contrast)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 6, 14, 16),
-                        child: RichText(
-                          text: TextSpan(
+                      // 5. Post Caption (Description only - no mandal name prefix)
+                      if (post.caption.trim().isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 6, 14, 16),
+                          child: Text(
+                            post.caption,
                             style: GoogleFonts.outfit(
                               fontSize: 13.5,
-                              color: const Color(0xFF2E2A36), // High contrast readable
+                              color: const Color(0xFF2E2A36),
                               height: 1.35,
                             ),
-                            children: [
-                              TextSpan(
-                                text: "${widget.mandalName} ",
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              TextSpan(text: post.caption),
-                            ],
                           ),
                         ),
-                      ),
                     ],
                   ),
                 );
@@ -2840,6 +3034,9 @@ class FullscreenReelViewer extends StatefulWidget {
   final List<ReelItem>? reels;
   final String mandalName;
   final String avatarUrl;
+  final bool isOwnProfile;
+  final Function(String reelId)? onReelDeleted;
+  final Function(String reelId, String newTitle)? onReelEdited;
 
   const FullscreenReelViewer({
     super.key,
@@ -2847,6 +3044,9 @@ class FullscreenReelViewer extends StatefulWidget {
     this.reels,
     this.mandalName = "Mandal",
     this.avatarUrl = "assets/images/ram_bhajan.png",
+    this.isOwnProfile = false,
+    this.onReelDeleted,
+    this.onReelEdited,
   });
 
   static final List<ReelItem> defaultReels = [];
@@ -2881,6 +3081,25 @@ class _FullscreenReelViewerState extends State<FullscreenReelViewer> {
 
   @override
   Widget build(BuildContext context) {
+    if (_reels.isEmpty) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        body: Center(
+          child: Text(
+            LocalizedApiHelper.parse("No Reels Yet"),
+            style: GoogleFonts.outfit(color: Colors.white70, fontSize: 16),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: PageView.builder(
@@ -2894,12 +3113,33 @@ class _FullscreenReelViewerState extends State<FullscreenReelViewer> {
           });
         },
         itemBuilder: (context, index) {
+          final reel = _reels[index];
           return _SingleReelView(
-            key: ValueKey(_reels[index].id),
-            reel: _reels[index],
+            key: ValueKey(reel.id),
+            reel: reel,
             isActive: index == _currentIndex,
             mandalName: widget.mandalName,
             avatarUrl: widget.avatarUrl,
+            isOwnProfile: widget.isOwnProfile,
+            onEdit: (newTitle) {
+              setState(() {
+                reel.title = newTitle;
+              });
+              widget.onReelEdited?.call(reel.id, newTitle);
+            },
+            onDelete: () {
+              final deletedId = reel.id;
+              widget.onReelDeleted?.call(deletedId);
+              setState(() {
+                _reels.removeWhere((r) => r.id == deletedId);
+                if (_currentIndex >= _reels.length && _reels.isNotEmpty) {
+                  _currentIndex = _reels.length - 1;
+                }
+              });
+              if (_reels.isEmpty && mounted) {
+                Navigator.pop(context);
+              }
+            },
           );
         },
       ),
@@ -2912,6 +3152,9 @@ class _SingleReelView extends StatefulWidget {
   final bool isActive;
   final String mandalName;
   final String avatarUrl;
+  final bool isOwnProfile;
+  final Function(String newTitle)? onEdit;
+  final VoidCallback? onDelete;
 
   const _SingleReelView({
     super.key,
@@ -2919,6 +3162,9 @@ class _SingleReelView extends StatefulWidget {
     required this.isActive,
     required this.mandalName,
     required this.avatarUrl,
+    this.isOwnProfile = false,
+    this.onEdit,
+    this.onDelete,
   });
 
   @override
@@ -2955,20 +3201,13 @@ class _SingleReelViewState extends State<_SingleReelView> {
   }
 
   void _setupVideo() {
-    final vUrl = widget.reel.videoUrl;
-    if (vUrl != null && vUrl.startsWith('http')) {
+    final vUrl = (widget.reel.videoUrl ?? '').trim();
+    if (vUrl.startsWith('http://') || vUrl.startsWith('https://')) {
       _controller = VideoPlayerController.networkUrl(Uri.parse(vUrl));
-    } else if (vUrl != null && (vUrl.startsWith('assets/') || vUrl.endsWith('.mp4'))) {
-      if (vUrl.startsWith('assets/')) {
-        _controller = VideoPlayerController.asset(vUrl);
-      } else {
-        final f = File(vUrl);
-        if (f.existsSync()) {
-          _controller = VideoPlayerController.file(f);
-        } else {
-          _controller = VideoPlayerController.asset(_pickFallbackVideo(widget.reel.id));
-        }
-      }
+    } else if (vUrl.startsWith('assets/')) {
+      _controller = VideoPlayerController.asset(vUrl);
+    } else if (vUrl.isNotEmpty && File(vUrl).existsSync()) {
+      _controller = VideoPlayerController.file(File(vUrl));
     } else {
       _controller = VideoPlayerController.asset(_pickFallbackVideo(widget.reel.id));
     }
@@ -2976,6 +3215,7 @@ class _SingleReelViewState extends State<_SingleReelView> {
     _controller!.initialize().then((_) {
       if (!mounted) return;
       _controller!.setLooping(true);
+      _controller!.setVolume(1.0); // Play the video's original audio cleanly
       setState(() {
         _isInitialized = true;
       });
@@ -3102,7 +3342,7 @@ class _SingleReelViewState extends State<_SingleReelView> {
               ),
             ),
 
-          // 4. Back Button at Top Left
+          // 4. Back Button at Top Left (+ Edit/Delete for Mandal Owner at Top Right)
           Positioned(
             top: MediaQuery.of(context).padding.top + 10,
             left: 12,
@@ -3111,6 +3351,96 @@ class _SingleReelViewState extends State<_SingleReelView> {
               onPressed: () => Navigator.pop(context),
             ),
           ),
+          if (widget.isOwnProfile)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 10,
+              right: 12,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.edit_outlined, color: Colors.white, size: 22),
+                      onPressed: () {
+                        final editCtrl = TextEditingController(text: widget.reel.title);
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            title: Text(LocalizedApiHelper.parse("Edit Reel Description")),
+                            content: TextField(
+                              controller: editCtrl,
+                              maxLines: 3,
+                              decoration: InputDecoration(
+                                hintText: LocalizedApiHelper.parse("Enter description..."),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx),
+                                child: Text(LocalizedApiHelper.parse("Cancel")),
+                              ),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF7700)),
+                                onPressed: () {
+                                  final updated = editCtrl.text.trim();
+                                  Navigator.pop(ctx);
+                                  setState(() {
+                                    widget.reel.title = updated;
+                                  });
+                                  widget.onEdit?.call(updated);
+                                },
+                                child: Text(LocalizedApiHelper.parse("Save"), style: const TextStyle(color: Colors.white)),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 22),
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            title: Text(LocalizedApiHelper.parse("Delete Reel?")),
+                            content: Text(LocalizedApiHelper.parse("Are you sure you want to delete this reel?")),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx),
+                                child: Text(LocalizedApiHelper.parse("Cancel")),
+                              ),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  _controller?.pause();
+                                  widget.onDelete?.call();
+                                },
+                                child: Text(LocalizedApiHelper.parse("Delete"), style: const TextStyle(color: Colors.white)),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // 5. Right Action Buttons (Like, Save, Share)
           Positioned(
@@ -3201,10 +3531,17 @@ class _SingleReelViewState extends State<_SingleReelView> {
               children: [
                 Row(
                   children: [
-                    CircleAvatar(
-                      radius: 16,
-                      backgroundImage: AssetImage(widget.avatarUrl),
-                      onBackgroundImageError: (_, __) {},
+                    ClipOval(
+                      child: SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: buildSmartImage(
+                          widget.avatarUrl,
+                          width: 32,
+                          height: 32,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -3225,21 +3562,6 @@ class _SingleReelViewState extends State<_SingleReelView> {
                   style: GoogleFonts.outfit(color: Colors.white, fontSize: 13, height: 1.25),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.music_note_rounded, color: Colors.white70, size: 14),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        widget.reel.audioTrack,
-                        style: GoogleFonts.outfit(color: Colors.white70, fontSize: 12),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),

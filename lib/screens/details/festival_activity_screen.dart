@@ -138,12 +138,45 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
         final festNameLower = widget.festivalName.trim().toLowerCase();
 
         final Set<String> myMandalNames = {};
+        final String festCustomId = (widget.festivalData?['customId'] ?? '').toString();
+        bool isFestivalActive =
+            (widget.festivalData?['status'] ?? '').toString().toLowerCase() == 'active';
+        if (!isFestivalActive && widget.festivalData == null) {
+          try {
+            final allFests = await UtsavService.getFestivals(status: 'ALL');
+            for (final f in allFests) {
+              final fn = (f['name'] ?? '').toString().toLowerCase().trim();
+              if (fn == festNameLower || fn.contains(festNameLower) || festNameLower.contains(fn)) {
+                isFestivalActive = (f['status'] ?? '').toString().toLowerCase() == 'active';
+                break;
+              }
+            }
+          } catch (_) {}
+        }
+
         for (final r in allMyRegs) {
-          final rFest = (r['festival']?['name'] ?? r['festival'] ?? r['festivalName'] ?? '').toString().toLowerCase();
-          final rFestId = (r['festivalId'] ?? r['festival']?['_id'] ?? '').toString();
+          final rawFest = r['festival'];
+          final rFest = (rawFest is Map
+                  ? (rawFest['name'] ?? '')
+                  : (rawFest ?? r['festivalName'] ?? ''))
+              .toString()
+              .toLowerCase()
+              .trim();
+          final rFestId = (r['festivalId'] ?? (rawFest is Map ? rawFest['_id'] : '') ?? '')
+              .toString()
+              .trim();
           final mName = (r['mandalName'] ?? r['name'] ?? '').toString().trim();
+          final bool isPlaceholderFest = rFestId.isEmpty ||
+              rFestId.toLowerCase() == 'fest-general' ||
+              rFest.isEmpty ||
+              rFest == 'cultural mahotsav';
+
           if (mName.isNotEmpty) {
-            if ((festId != null && rFestId == festId.toString()) || rFest.contains(festNameLower) || festNameLower.contains(rFest)) {
+            final bool matchesId = (festId != null && rFestId == festId.toString()) ||
+                (festCustomId.isNotEmpty && rFestId == festCustomId);
+            final bool matchesName = rFest.isNotEmpty &&
+                (rFest.contains(festNameLower) || festNameLower.contains(rFest));
+            if (matchesId || matchesName || (isFestivalActive && isPlaceholderFest)) {
               myMandalNames.add(mName);
             }
           }
@@ -153,9 +186,162 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
           festivalName: widget.festivalName,
           festivalId: festId?.toString(),
         );
+        final fallbackReg = singleReg ?? await UtsavService.getMyMandalRegistration();
         if (singleReg != null) {
           final sName = (singleReg['mandalName'] ?? '').toString().trim();
           if (sName.isNotEmpty) myMandalNames.add(sName);
+        } else if (isFestivalActive && fallbackReg != null) {
+          final fName = (fallbackReg['mandalName'] ?? '').toString().trim();
+          if (fName.isNotEmpty) myMandalNames.add(fName);
+        }
+
+        // Lookup table of all approved mandals & registrations by lowercase name
+        // so posts always display the exact Mandal Name & Profile Pic (logo).
+        final allMandalsList = await UtsavService.getMandals();
+        final Map<String, Map<String, dynamic>> mandalMetaByLower = {};
+        for (final m in allMandalsList) {
+          final n = (m['name'] ?? '').toString().trim();
+          if (n.isNotEmpty) mandalMetaByLower[n.toLowerCase()] = m;
+        }
+        for (final r in allMyRegs) {
+          final n = (r['mandalName'] ?? r['name'] ?? '').toString().trim();
+          if (n.isNotEmpty) {
+            final existing = mandalMetaByLower[n.toLowerCase()] ?? <String, dynamic>{};
+            mandalMetaByLower[n.toLowerCase()] = {
+              ...existing,
+              'name': n,
+              'logo': (r['logo'] ?? r['logoUrl'] ?? existing['logo'] ?? existing['avatarUrl'] ?? '').toString(),
+              'avatarUrl': (r['logo'] ?? r['logoUrl'] ?? existing['avatarUrl'] ?? existing['logo'] ?? '').toString(),
+              'city': (r['city'] ?? r['address'] ?? existing['city'] ?? existing['location'] ?? '').toString(),
+            };
+          }
+        }
+        if (fallbackReg != null) {
+          final n = (fallbackReg['mandalName'] ?? fallbackReg['name'] ?? '').toString().trim();
+          if (n.isNotEmpty) {
+            final existing = mandalMetaByLower[n.toLowerCase()] ?? <String, dynamic>{};
+            mandalMetaByLower[n.toLowerCase()] = {
+              ...existing,
+              'name': n,
+              'logo': (fallbackReg['logo'] ?? fallbackReg['logoUrl'] ?? existing['logo'] ?? existing['avatarUrl'] ?? '').toString(),
+              'avatarUrl': (fallbackReg['logo'] ?? fallbackReg['logoUrl'] ?? existing['avatarUrl'] ?? existing['logo'] ?? '').toString(),
+              'city': (fallbackReg['city'] ?? fallbackReg['address'] ?? existing['city'] ?? existing['location'] ?? '').toString(),
+            };
+          }
+        }
+
+        // Scan all saved mandal_posts_* and mandal_reels_* keys so locally published
+        // posts/reels for this festival (or active festival) are never missed.
+        final allPrefKeys = prefs.getKeys();
+        for (final key in allPrefKeys) {
+          if (key.startsWith('mandal_posts_') || key == 'my_mandal_posts') {
+            final raw = prefs.getString(key);
+            if (raw == null || raw.isEmpty) continue;
+            try {
+              final decoded = jsonDecode(raw) as List;
+              final rawDerived = key == 'my_mandal_posts'
+                  ? (fallbackReg?['mandalName']?.toString().trim().isNotEmpty == true
+                      ? fallbackReg!['mandalName'].toString().trim()
+                      : widget.festivalName)
+                  : key.substring('mandal_posts_'.length).replaceAll('_', ' ').trim();
+              final matchedMeta = mandalMetaByLower[rawDerived.toLowerCase()];
+              final displayMandalName = (matchedMeta?['name']?.toString().trim().isNotEmpty == true)
+                  ? matchedMeta!['name'].toString().trim()
+                  : rawDerived;
+              final logoImg = (matchedMeta?['logo'] ??
+                      matchedMeta?['avatarUrl'] ??
+                      fallbackReg?['logo'] ??
+                      fallbackReg?['logoUrl'] ??
+                      fallbackReg?['cover'] ??
+                      '')
+                  .toString();
+              final areaStr = (matchedMeta?['city'] ??
+                      fallbackReg?['city'] ??
+                      fallbackReg?['address'] ??
+                      'Gujarat, India')
+                  .toString();
+
+              for (final item in decoded) {
+                if (item is! Map) continue;
+                final p = Map<String, dynamic>.from(item);
+                final pFest = (p['festivalName'] ?? p['festival'] ?? '').toString().toLowerCase().trim();
+                final bool matchesFest = pFest.isEmpty ||
+                    pFest == festNameLower ||
+                    pFest.contains(festNameLower) ||
+                    festNameLower.contains(pFest) ||
+                    isFestivalActive;
+                if (!matchesFest) continue;
+
+                final pImg = (p['imageUrl'] ?? p['image'] ?? '').toString();
+                final pId = (p['id'] ?? '').toString();
+                final exists = allPosts.any((existing) =>
+                    (pId.isNotEmpty && existing['id']?.toString() == pId) ||
+                    (pImg.isNotEmpty && (existing['imageUrl'] == pImg || existing['image'] == pImg)));
+                if (!exists) {
+                  allPosts.add({
+                    ...p,
+                    'image': pImg,
+                    'imageUrl': pImg,
+                    'mandalName': (p['mandalName']?.toString().trim().isNotEmpty == true)
+                        ? p['mandalName'].toString().trim()
+                        : displayMandalName,
+                    'logo': logoImg.isNotEmpty ? logoImg : (p['logo'] ?? p['avatarUrl'] ?? ''),
+                    'avatarUrl': logoImg.isNotEmpty ? logoImg : (p['avatarUrl'] ?? p['logo'] ?? ''),
+                    'area': areaStr.isNotEmpty ? areaStr : (p['area'] ?? p['location'] ?? ''),
+                    'location': areaStr.isNotEmpty ? areaStr : (p['location'] ?? p['area'] ?? ''),
+                  });
+                }
+              }
+            } catch (_) {}
+          } else if (key.startsWith('mandal_reels_') || key == 'my_mandal_reels') {
+            final raw = prefs.getString(key);
+            if (raw == null || raw.isEmpty) continue;
+            try {
+              final decoded = jsonDecode(raw) as List;
+              final rawDerived = key == 'my_mandal_reels'
+                  ? (fallbackReg?['mandalName']?.toString().trim().isNotEmpty == true
+                      ? fallbackReg!['mandalName'].toString().trim()
+                      : widget.festivalName)
+                  : key.substring('mandal_reels_'.length).replaceAll('_', ' ').trim();
+              final matchedMeta = mandalMetaByLower[rawDerived.toLowerCase()];
+              final displayMandalName = (matchedMeta?['name']?.toString().trim().isNotEmpty == true)
+                  ? matchedMeta!['name'].toString().trim()
+                  : rawDerived;
+              final areaStr = (matchedMeta?['city'] ??
+                      fallbackReg?['city'] ??
+                      fallbackReg?['address'] ??
+                      'Gujarat, India')
+                  .toString();
+
+              for (final item in decoded) {
+                if (item is! Map) continue;
+                final r = Map<String, dynamic>.from(item);
+                final rFest = (r['festivalName'] ?? r['festival'] ?? '').toString().toLowerCase().trim();
+                final bool matchesFest = rFest.isEmpty ||
+                    rFest == festNameLower ||
+                    rFest.contains(festNameLower) ||
+                    festNameLower.contains(rFest) ||
+                    isFestivalActive;
+                if (!matchesFest) continue;
+
+                final rId = (r['id'] ?? '').toString();
+                if (!allReels.any((existing) => rId.isNotEmpty && existing['id'] == rId)) {
+                  allReels.add({
+                    'id': rId,
+                    'title': (r['title'] ?? '').toString(),
+                    'mandalName': (r['mandalName']?.toString().trim().isNotEmpty == true)
+                        ? r['mandalName'].toString().trim()
+                        : displayMandalName,
+                    'thumbnailUrl': (r['thumbnailUrl'] ?? r['imageUrl'] ?? '').toString(),
+                    'videoUrl': (r['videoUrl'] ?? '').toString(),
+                    'area': areaStr,
+                    'views': (r['views'] ?? '0').toString(),
+                    'likes': (r['likes'] ?? '0').toString(),
+                  });
+                }
+              }
+            } catch (_) {}
+          }
         }
 
         // Also check if any posts were saved under festival name or generic 'my_mandal_posts'
@@ -422,9 +608,14 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
 
             const SizedBox(height: 12),
 
-            // ── Body ──────────────────────────────────────────────────────
+            // ── Body (with Pull-to-Refresh) ───────────────────────────────
             Expanded(
-              child: hasQuery ? _buildSearchResults() : _buildDefaultFeed(),
+              child: RefreshIndicator(
+                color: const Color(0xFFFF7700),
+                backgroundColor: Colors.white,
+                onRefresh: _loadActivityData,
+                child: hasQuery ? _buildSearchResults() : _buildDefaultFeed(),
+              ),
             ),
           ],
         ),
@@ -438,50 +629,55 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
     final posts = _currentPosts;
 
     if (reels.isEmpty && posts.isEmpty) {
-      return Center(
-        child: SingleChildScrollView(
+      return LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFEAD8),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFFFF7700).withValues(alpha: 0.25), width: 2),
-                ),
-                child: const Icon(Icons.video_library_outlined, size: 44, color: Color(0xFFFF7700)),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 88,
+                    height: 88,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFEAD8),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xFFFF7700).withValues(alpha: 0.25), width: 2),
+                    ),
+                    child: const Icon(Icons.video_library_outlined, size: 44, color: Color(0xFFFF7700)),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'No Reels or Posts Yet',
+                    style: GoogleFonts.outfit(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF2E2A36),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Devotees and Mandals can share their Reels and Posts once the festival begins.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(
+                      fontSize: 13.5,
+                      color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
+                      height: 1.45,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
-              Text(
-                'No Reels or Posts Yet',
-                style: GoogleFonts.outfit(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF2E2A36),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Devotees and Mandals can share their Reels and Posts once the festival begins.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.outfit(
-                  fontSize: 13.5,
-                  color: const Color(0xFF2E2A36).withValues(alpha: 0.65),
-                  height: 1.45,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       );
     }
 
     return ListView(
-      physics: const BouncingScrollPhysics(),
+      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 24),
       children: [
         // Section: Popular Reels
@@ -827,9 +1023,9 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              buildSmartImage(
-                reel['thumbnailUrl'] ?? reel['imageUrl'] ?? reel['image'] ?? 'assets/images/new_year_card.png',
-                fit: BoxFit.cover,
+              ReelVideoThumbnail(
+                videoUrl: reel['videoUrl'],
+                fallbackThumbnailUrl: reel['thumbnailUrl'] ?? reel['imageUrl'] ?? reel['image'],
               ),
               // Gradient
               Container(
@@ -950,11 +1146,17 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
                         colors: [Color(0xFFFF9500), Color(0xFFFF5500)],
                       ),
                     ),
-                    child: CircleAvatar(
-                      radius: 18,
-                      backgroundImage: avatarUrl.startsWith('http')
-                          ? NetworkImage(avatarUrl) as ImageProvider
-                          : AssetImage(avatarUrl),
+                    child: ClipOval(
+                      child: SizedBox(
+                        width: 36,
+                        height: 36,
+                        child: buildSmartImage(
+                          avatarUrl.isNotEmpty ? avatarUrl : 'assets/images/new_year_card.png',
+                          width: 36,
+                          height: 36,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -1157,26 +1359,19 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
             ),
           ),
 
-          // 5. Post Caption (Clear, Dark Text, High Contrast)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 6, 14, 16),
-            child: RichText(
-              text: TextSpan(
+          // 5. Post Caption (Clear, Dark Text, High Contrast - description only, no mandal name prefix)
+          if (caption.trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 16),
+              child: Text(
+                caption,
                 style: GoogleFonts.outfit(
                   fontSize: 13.5,
                   color: const Color(0xFF2E2A36),
                   height: 1.35,
                 ),
-                children: [
-                  TextSpan(
-                    text: "${post['mandalName']} ",
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  TextSpan(text: caption),
-                ],
               ),
             ),
-          ),
         ],
       ),
     );

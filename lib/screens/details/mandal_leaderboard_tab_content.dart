@@ -69,6 +69,12 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
       }
 
       final data = await UtsavService.getLeaderboard(festivalId: targetFestId);
+      final allMandals = await UtsavService.getMandals();
+      final Map<String, Map<String, dynamic>> mandalByName = {
+        for (final m in allMandals)
+          if ((m['name'] ?? '').toString().trim().isNotEmpty)
+            (m['name'] ?? '').toString().trim().toLowerCase(): m,
+      };
 
       if (mounted) {
         setState(() {
@@ -82,10 +88,28 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
           } else {
             _festivalName = "";
           }
-          final list = (data['rankings'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+          final list = (data['rankings'] as List?)
+                  ?.map((e) => Map<String, dynamic>.from(e as Map))
+                  .toList() ??
+              [];
+          // Sync real likes/shares/votes from full mandals list (prevents 0-override for legacy fest-general mandals)
+          for (final m in list) {
+            final key = (m['name'] ?? '').toString().trim().toLowerCase();
+            final liveM = mandalByName[key];
+            if (liveM != null) {
+              final curLikes = _parseMetric(m['likes']);
+              final liveLikes = _parseMetric(liveM['likes']);
+              if (liveLikes > curLikes) m['likes'] = '$liveLikes';
+              final curShares = _parseMetric(m['shares']);
+              final liveShares = _parseMetric(liveM['shares']);
+              if (liveShares > curShares) m['shares'] = '$liveShares';
+              final curVotes = _parseMetric(m['votes']);
+              final liveVotes = _parseMetric(liveM['votes']);
+              if (liveVotes > curVotes) m['votes'] = liveVotes;
+            }
+          }
           _rankings = list;
-          final top = (data['topThree'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-          _topThree = top.isNotEmpty ? top : (_rankings.take(3).toList());
+          _recalculateRankings();
 
           for (final m in _rankings) {
             final n = (m['name'] ?? '').toString();
@@ -110,6 +134,34 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  int _parseMetric(dynamic val) {
+    if (val is num) return val.toInt();
+    return int.tryParse((val ?? '0').toString().replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+  }
+
+  void _recalculateRankings() {
+    _rankings.sort((a, b) {
+      final likesA = _parseMetric(a['likes']);
+      final sharesA = _parseMetric(a['shares']);
+      final votesA = _parseMetric(a['votes']);
+      final scoreA = likesA + sharesA + votesA;
+
+      final likesB = _parseMetric(b['likes']);
+      final sharesB = _parseMetric(b['shares']);
+      final votesB = _parseMetric(b['votes']);
+      final scoreB = likesB + sharesB + votesB;
+
+      if (scoreB != scoreA) return scoreB.compareTo(scoreA);
+      if (likesB != likesA) return likesB.compareTo(likesA);
+      return sharesB.compareTo(sharesA);
+    });
+
+    for (int i = 0; i < _rankings.length; i++) {
+      _rankings[i]['rank'] = i + 1;
+    }
+    _topThree = _rankings.take(3).toList();
   }
 
   void _updateCountdown(Map<String, dynamic>? fest) {
@@ -715,6 +767,7 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
                     if (item != null) {
                       item['likes'] = '$updatedLikes';
                     }
+                    _recalculateRankings();
                   });
                 },
                 child: Padding(
@@ -752,6 +805,7 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
                     if (item != null) {
                       item['shares'] = '$updatedShares';
                     }
+                    _recalculateRankings();
                   });
                 },
                 child: const Padding(

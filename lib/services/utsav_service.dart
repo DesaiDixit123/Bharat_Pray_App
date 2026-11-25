@@ -522,17 +522,27 @@ class UtsavService {
       }
     }
 
-    if (targetFestName.isEmpty && targetFestId.isEmpty) {
+    bool _isPlaceholderFestId(String id) {
+      final clean = id.trim().toLowerCase();
+      return clean.isEmpty || clean == 'fest-general' || clean == 'general';
+    }
+
+    if (targetFestName.isEmpty && _isPlaceholderFestId(targetFestId)) {
       if (mandalName != null && mandalName.isNotEmpty) {
         final m = await getMandalByName(mandalName);
         if (m != null) {
-          targetFestId = (m['festivalId'] ?? '').toString();
-          targetFestName = (m['festival'] ?? m['festivalName'] ?? m['category'] ?? '').toString();
+          final mFestId = (m['festivalId'] ?? '').toString();
+          if (!_isPlaceholderFestId(mFestId)) {
+            targetFestId = mFestId;
+          }
+          targetFestName = (m['festival'] ?? m['festivalName'] ?? '').toString();
         }
       }
     }
 
-    if (targetFestName.isEmpty && targetFestId.isEmpty) {
+    // If still missing real festivalId or festivalName (e.g. mandal had 'fest-general'),
+    // fall back to the user's registration record which stores the exact festival name/id.
+    if (targetFestName.isEmpty && _isPlaceholderFestId(targetFestId)) {
       final myReg = await getMyMandalRegistration();
       if (myReg != null) {
         final rName = (myReg['mandalName'] ?? '').toString().toLowerCase();
@@ -540,15 +550,18 @@ class UtsavService {
           targetFestId = 'fest-pre-navratri';
           targetFestName = 'Pre Navratri';
         } else {
-          targetFestId = (myReg['festivalId'] ?? '').toString();
-          targetFestName = (myReg['festival'] ?? myReg['festivalName'] ?? myReg['category'] ?? '').toString();
+          final regFestId = (myReg['festivalId'] ?? '').toString();
+          if (!_isPlaceholderFestId(regFestId)) {
+            targetFestId = regFestId;
+          }
+          targetFestName = (myReg['festival'] ?? myReg['festivalName'] ?? '').toString();
         }
       }
     }
 
-    final allFestivals = await getFestivals();
+    final allFestivals = await getFestivals(status: 'ALL');
 
-    if (targetFestId.isNotEmpty) {
+    if (!_isPlaceholderFestId(targetFestId)) {
       fest = allFestivals.firstWhere(
         (f) => f['_id']?.toString() == targetFestId || f['customId']?.toString() == targetFestId,
         orElse: () => <String, dynamic>{},
@@ -559,16 +572,22 @@ class UtsavService {
     if (fest == null && targetFestName.isNotEmpty) {
       final lower = targetFestName.toLowerCase().trim();
       for (final f in allFestivals) {
-        final fName = (f['name'] ?? '').toString().toLowerCase();
-        if (fName == lower || fName.contains(lower) || lower.contains(fName)) {
+        final fName = (f['name'] ?? '').toString().toLowerCase().trim();
+        if (fName.isNotEmpty && (fName == lower || fName.contains(lower) || lower.contains(fName))) {
           fest = f;
           break;
         }
       }
     }
 
-    // Default to the first festival if not matched
-    fest ??= allFestivals.isNotEmpty ? allFestivals.first : null;
+    // If still not matched (e.g., legacy 'fest-general'), prefer an Active festival over Upcoming
+    if (fest == null && allFestivals.isNotEmpty) {
+      final activeFest = allFestivals.firstWhere(
+        (f) => (f['status'] ?? '').toString().toLowerCase() == 'active',
+        orElse: () => <String, dynamic>{},
+      );
+      fest = activeFest.isNotEmpty ? activeFest : allFestivals.first;
+    }
 
     if (fest == null) {
       return {
@@ -1629,6 +1648,34 @@ class UtsavService {
     }
   }
 
+  static Future<void> updateMandalPostCaption(String mandalName, String postId, String newCaption) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = await getMandalPosts(mandalName);
+    bool changed = false;
+    for (final p in list) {
+      if (p['id']?.toString() == postId) {
+        p['caption'] = newCaption;
+        changed = true;
+      }
+    }
+    if (!changed) return;
+
+    final key = _mandalPostsKey(mandalName);
+    final jsonStr = jsonEncode(list);
+    await prefs.setString(key, jsonStr);
+
+    final myReg = await getMyMandalRegistration();
+    final regName = (myReg?['mandalName'] ?? '').toString().trim().toLowerCase();
+    final qName = mandalName.trim().toLowerCase();
+
+    if (myReg != null && (regName == qName || qName == 'mandal' || qName.isEmpty || qName.contains('khodal'))) {
+      await prefs.setString('my_mandal_posts', jsonStr);
+      if (regName.isNotEmpty) {
+        await prefs.setString(_mandalPostsKey(regName), jsonStr);
+      }
+    }
+  }
+
   // ─── Mandal Reels Persistence ───────────────────────────────────────────────
 
   static String _mandalReelsKey(String mandalName) {
@@ -1679,6 +1726,55 @@ class UtsavService {
     final list = await getMandalReels(mandalName);
     list.removeWhere((r) => r['id']?.toString() == reel['id']?.toString());
     list.insert(0, reel);
+
+    final key = _mandalReelsKey(mandalName);
+    final jsonStr = jsonEncode(list);
+    await prefs.setString(key, jsonStr);
+
+    final myReg = await getMyMandalRegistration();
+    final regName = (myReg?['mandalName'] ?? '').toString().trim().toLowerCase();
+    final qName = mandalName.trim().toLowerCase();
+
+    if (myReg != null && (regName == qName || qName == 'mandal' || qName.isEmpty || qName.contains('khodal'))) {
+      await prefs.setString('my_mandal_reels', jsonStr);
+      if (regName.isNotEmpty) {
+        await prefs.setString(_mandalReelsKey(regName), jsonStr);
+      }
+    }
+  }
+
+  static Future<void> deleteMandalReel(String mandalName, String reelId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = await getMandalReels(mandalName);
+    list.removeWhere((r) => r['id']?.toString() == reelId);
+
+    final key = _mandalReelsKey(mandalName);
+    final jsonStr = jsonEncode(list);
+    await prefs.setString(key, jsonStr);
+
+    final myReg = await getMyMandalRegistration();
+    final regName = (myReg?['mandalName'] ?? '').toString().trim().toLowerCase();
+    final qName = mandalName.trim().toLowerCase();
+
+    if (myReg != null && (regName == qName || qName == 'mandal' || qName.isEmpty || qName.contains('khodal'))) {
+      await prefs.setString('my_mandal_reels', jsonStr);
+      if (regName.isNotEmpty) {
+        await prefs.setString(_mandalReelsKey(regName), jsonStr);
+      }
+    }
+  }
+
+  static Future<void> updateMandalReelTitle(String mandalName, String reelId, String newTitle) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = await getMandalReels(mandalName);
+    bool changed = false;
+    for (final r in list) {
+      if (r['id']?.toString() == reelId) {
+        r['title'] = newTitle;
+        changed = true;
+      }
+    }
+    if (!changed) return;
 
     final key = _mandalReelsKey(mandalName);
     final jsonStr = jsonEncode(list);
