@@ -14,8 +14,11 @@ import java.io.FileOutputStream
 class MainActivity : FlutterActivity() {
 
     private val CHANNEL = "com.bharatpray/audio_picker"
+    private val DEEP_LINK_CHANNEL = "com.bharatpray/deep_links"
     private val AUDIO_PICK_CODE = 2001
     private var pendingResult: MethodChannel.Result? = null
+    private var deepLinkChannel: MethodChannel? = null
+    private var initialDeepLink: String? = null
 
     companion object {
         private const val MEDIA_CHANNEL = "com.bharatpray/native_media_player"
@@ -40,10 +43,37 @@ class MainActivity : FlutterActivity() {
         if (intent.getStringExtra("route") == "bhajan_now_playing") {
             mediaMethodChannel?.invokeMethod("openNowPlaying", null)
         }
+        val link = extractDeepLink(intent)
+        if (link != null) {
+            deepLinkChannel?.invokeMethod("onDeepLink", link)
+        }
+    }
+
+    private fun extractDeepLink(intent: Intent?): String? {
+        if (intent?.action == Intent.ACTION_VIEW) {
+            val data = intent.dataString
+            if (!data.isNullOrBlank()) {
+                return data
+            }
+        }
+        return null
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        initialDeepLink = extractDeepLink(intent)
+        deepLinkChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEEP_LINK_CHANNEL)
+        deepLinkChannel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getInitialLink" -> {
+                    val link = initialDeepLink
+                    initialDeepLink = null
+                    result.success(link)
+                }
+                else -> result.notImplemented()
+            }
+        }
 
         mediaMethodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MEDIA_CHANNEL)
         mediaMethodChannel?.setMethodCallHandler { call, result ->

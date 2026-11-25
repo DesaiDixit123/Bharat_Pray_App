@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
+import '../services/deep_link_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -215,6 +216,10 @@ class _SplashScreenState extends State<SplashScreen>
         transitionDuration: const Duration(milliseconds: 900),
       ),
     );
+
+    if (isLoggedIn && hasSelectedLanguage) {
+      DeepLinkService.instance.markAppReady();
+    }
   }
 
   @override

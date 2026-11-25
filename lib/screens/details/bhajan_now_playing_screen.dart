@@ -9,6 +9,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../services/share_service.dart';
 
 import '../../core/localization/localized_api_helper.dart';
 import '../../models/bhajan_track_item.dart';
@@ -297,13 +298,21 @@ class _BhajanNowPlayingScreenState extends State<BhajanNowPlayingScreen> with Si
 
     final box = context.findRenderObject() as RenderBox?;
     final subject = 'Listen to this beautiful bhajan: ${widget.currentTrack.title}';
-    final text =
-        'I am listening to "${widget.currentTrack.title}" by ${widget.currentTrack.singer} on BharatPray. '
-        'Join me in this divine experience!\n\n'
-        'Download the app: https://bharatpray.com/download'; // Example URL
+    final message =
+        '🙏 I am listening to "${widget.currentTrack.title}" by ${widget.currentTrack.singer} on Bharat Pray. Join me in this divine experience!';
 
     try {
-      await Share.share(text, subject: subject, sharePositionOrigin: box == null ? null : box.localToGlobal(Offset.zero) & box.size);
+      await AppShareService.shareContent(
+        type: 'bhajan',
+        id: widget.currentTrack.id,
+        title: widget.currentTrack.title,
+        subtitle: widget.currentTrack.singer,
+        badgeText: 'BHAJAN',
+        imageUrls: [widget.currentTrack.imagePath],
+        message: message,
+        subject: subject,
+        sharePositionOrigin: box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+      );
     } catch (e) {
       _showMessage('Could not open share sheet.');
     }

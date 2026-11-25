@@ -3422,48 +3422,50 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                         ),
-                      const SizedBox(width: 8),
+                      if (isLive) ...[
+                        const SizedBox(width: 8),
 
-                      // 2. Active Viewers Badge
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(47),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 4.6, sigmaY: 4.6),
-                          child: Container(
-                            height: 40,
-                            padding: const EdgeInsets.symmetric(horizontal: 13),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2A2A2A).withValues(alpha: 0.72),
-                              borderRadius: BorderRadius.circular(47),
-                              border: Border.all(
-                                color: const Color(0x66FFFFFF),
-                                width: 1.0,
+                        // 2. Active Viewers Badge (only shown when stream is Live)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(47),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 4.6, sigmaY: 4.6),
+                            child: Container(
+                              height: 40,
+                              padding: const EdgeInsets.symmetric(horizontal: 13),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A2A2A).withValues(alpha: 0.72),
+                                borderRadius: BorderRadius.circular(47),
+                                border: Border.all(
+                                  color: const Color(0x66FFFFFF),
+                                  width: 1.0,
+                                ),
                               ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SvgPicture.string(
-                                  _eyeIconSvg,
-                                  width: 22,
-                                  height: 13.33,
-                                  fit: BoxFit.contain,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  views,
-                                  style: GoogleFonts.outfit(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    height: 1.2,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SvgPicture.string(
+                                    _eyeIconSvg,
+                                    width: 22,
+                                    height: 13.33,
+                                    fit: BoxFit.contain,
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    views,
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      height: 1.2,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),

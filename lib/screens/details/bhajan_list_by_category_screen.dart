@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../services/share_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/bhajan_track_item.dart';
@@ -519,8 +520,16 @@ class _BhajanListByCategoryScreenState extends State<BhajanListByCategoryScreen>
         }
         break;
       case 'share':
-        final shareText = '🙏 Listen to divine bhajan "${track.title}" by ${track.singer} on Bharat Pray app!\nhttps://bharatpray.com/bhajan/${track.id}';
-        await Share.share(shareText, subject: track.title);
+        await AppShareService.shareContent(
+          type: 'bhajan',
+          id: track.id,
+          title: track.title,
+          subtitle: track.singer,
+          badgeText: 'BHAJAN',
+          imageUrls: [track.imagePath],
+          message: '🙏 Listen to divine bhajan "${track.title}" by ${track.singer} on Bharat Pray app!',
+          subject: track.title,
+        );
         break;
       case 'playlist':
         await BhajanLibraryService.showAddToPlaylistSheet(context, track);

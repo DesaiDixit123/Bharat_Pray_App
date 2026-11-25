@@ -3,6 +3,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../services/share_service.dart';
 import '../../core/localization/localized_api_helper.dart';
 import '../../services/utsav_service.dart';
 
@@ -369,9 +370,17 @@ class _GoLiveStudioScreenState extends State<GoLiveStudioScreen> {
                   IconButton(
                     icon: const Icon(Icons.send_rounded, color: Colors.white, size: 32),
                     onPressed: () {
-                      Share.share(
-                        "🔴 Join Shree Ram Yuvak Mandal LIVE Stream Broadcast on Bharat Pray!\n\n${_liveTitleController.text.trim()}\n\nWatch Live: https://bharatpray.app/live/stream_123",
-                        subject: "Bharat Pray Live Broadcast",
+                      final liveTitle = _liveTitleController.text.trim().isNotEmpty
+                          ? _liveTitleController.text.trim()
+                          : 'Shree Ram Yuvak Mandal LIVE Stream';
+                      AppShareService.shareContent(
+                        type: 'mandal',
+                        title: liveTitle,
+                        badgeText: 'LIVE STREAM',
+                        badgeColor: const Color(0xFFD32F2F),
+                        showLiveDot: true,
+                        message: '🔴 Join $liveTitle LIVE Broadcast on Bharat Pray!',
+                        subject: 'Bharat Pray Live Broadcast',
                       );
                     },
                   ),

@@ -7,6 +7,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../services/share_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'registration_success_screen.dart';
 import '../../services/utsav_service.dart';
@@ -1048,9 +1049,13 @@ class _MandalContactPickerSheetState extends State<_MandalContactPickerSheet> {
 
   void _inviteContact(Map<String, dynamic> contact) {
     final name = (contact['name'] ?? 'Devotee').toString();
-    Share.share(
-      "Namaste $name! 🙏 Join BharatPray app to participate with our Mandal in ${widget.festivalName}. Download BharatPray app now: https://bharatpray.com/download",
-      subject: "Join our Mandal on BharatPray",
+    AppShareService.shareContent(
+      type: 'invite',
+      title: widget.festivalName,
+      subtitle: 'Join our Mandal on Bharat Pray 🙏',
+      badgeText: 'UTSAV INVITE',
+      message: 'Namaste $name! 🙏 Join Bharat Pray app to participate with our Mandal in ${widget.festivalName}.',
+      subject: 'Join our Mandal on Bharat Pray',
     );
   }
 

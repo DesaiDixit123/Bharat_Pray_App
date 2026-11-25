@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../services/share_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/api_service.dart';
 import '../../services/yatra_personal_chat_service.dart';
@@ -193,10 +194,15 @@ class _MessagesScreenState extends State<MessagesScreen> {
   }
 
   void _shareWhatsAppInvite() {
-    Share.share(
-      "🙏 Jai Shree Ram!\n\n"
-      "Join me on Bharat Pray - The Sacred Devotional App for Live Temple Darshans, Holy Yatras, Sangha Groups & Mantra Japs.\n\n"
-      "Download now & connect with our Yatra Sangha: https://bharatpray.com/download",
+    AppShareService.shareContent(
+      type: 'invite',
+      title: 'Join Bharat Pray 🙏',
+      subtitle: 'Live Darshans, Holy Yatras & Sangha Groups',
+      badgeText: 'YATRA SANGHA',
+      message:
+          '🙏 Jai Shree Ram!\n\n'
+          'Join me on Bharat Pray - The Sacred Devotional App for Live Temple Darshans, Holy Yatras, Sangha Groups & Mantra Japs.',
+      subject: 'Join Bharat Pray',
     );
   }
 

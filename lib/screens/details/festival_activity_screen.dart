@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../services/share_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/saved_items_service.dart';
 import '../../services/utsav_service.dart';
@@ -1079,9 +1080,15 @@ class _FestivalActivityScreenState extends State<FestivalActivityScreen> {
                 IconButton(
                   icon: const Icon(Icons.send_rounded, color: Color(0xFF2E2A36), size: 22),
                   onPressed: () {
-                    Share.share(
-                      "🚩 Check out this post by ${post['mandalName']} on Bharat Pray!\n\n$caption\n\nDownload App: https://bharatpray.app",
-                      subject: "Bharat Pray Mandal Post",
+                    AppShareService.shareContent(
+                      type: 'post',
+                      id: postId,
+                      title: (post['mandalName'] ?? 'Bharat Pray').toString(),
+                      subtitle: caption,
+                      badgeText: 'UTSAV POST',
+                      imageUrls: postImage.isNotEmpty ? [postImage] : const [],
+                      message: '🚩 Check out this post by ${post['mandalName']} on Bharat Pray!\n\n$caption',
+                      subject: 'Bharat Pray Mandal Post',
                     );
                   },
                 ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:video_player/video_player.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../services/share_service.dart';
 import '../../models/jap_models.dart';
 import '../../models/darshan_model.dart';
 import '../../services/jap_session_controller.dart';
@@ -222,9 +223,13 @@ class _DarshanRuntimeScreenState extends State<DarshanRuntimeScreen>
   }
 
   void _shareBlessing() {
-    // ignore: deprecated_member_use
-    Share.share(
-      '🙏 Received Divine Darshan of ${widget.config.name} after completing 108 Sacred Japs on BharatPray! Har Har Mahadev! 🙏',
+    AppShareService.shareContent(
+      type: 'invite',
+      title: widget.config.name,
+      subtitle: '108 Sacred Japs Completed 🙏',
+      badgeText: 'DIVINE DARSHAN',
+      message: '🙏 Received Divine Darshan of ${widget.config.name} after completing 108 Sacred Japs on Bharat Pray! Har Har Mahadev! 🙏',
+      subject: 'Divine Darshan - ${widget.config.name}',
     );
   }
 

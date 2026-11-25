@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../services/share_service.dart';
 import '../../services/utsav_service.dart';
 import '../../core/localization/localized_api_helper.dart';
 import 'mandal_profile_screen.dart';
@@ -734,7 +735,18 @@ class _MandalLeaderboardTabContentState extends State<MandalLeaderboardTabConten
               child: InkWell(
                 borderRadius: BorderRadius.circular(20),
                 onTap: () async {
-                  await Share.share('🙏 Support $name in ${_festivalName.isNotEmpty ? _festivalName : "Festival"} on Bharat Pray app!\nhttps://bharatpray.com/mandal/${item?['_id'] ?? item?['customId'] ?? ''}');
+                  final mandalId = (item?['_id'] ?? item?['customId'] ?? '').toString();
+                  final mandalImg = (item?['bannerImage'] ?? item?['image'] ?? item?['logo'] ?? '').toString();
+                  await AppShareService.shareContent(
+                    type: 'mandal',
+                    id: mandalId,
+                    title: name,
+                    subtitle: _festivalName.isNotEmpty ? _festivalName : 'Festival',
+                    badgeText: 'UTSAV MANDAL',
+                    imageUrls: mandalImg.isNotEmpty ? [mandalImg] : const [],
+                    message: '🙏 Support $name in ${_festivalName.isNotEmpty ? _festivalName : "Festival"} on Bharat Pray app!',
+                    subject: 'Support $name on Bharat Pray',
+                  );
                   final updatedShares = await UtsavService.shareMandal(name);
                   setState(() {
                     if (item != null) {

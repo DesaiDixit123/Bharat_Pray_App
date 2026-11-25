@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../services/share_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/yatra_group_models.dart';
 import '../../services/api_service.dart';
@@ -180,8 +181,14 @@ class _ContactSyncScreenState extends State<ContactSyncScreen> {
   }
 
   void _shareInvite(ContactUserModel user) {
-    final shareMsg = 'Jai Shree Ram! 🙏 Join me on BharatPray for sacred Pilgrimage Yatras, Temple Darshans & Sangha Groups. Download BharatPray now: https://bharatpray.com/invite';
-    Share.share(shareMsg, subject: 'Join BharatPray Yatra');
+    AppShareService.shareContent(
+      type: 'invite',
+      title: 'Join Bharat Pray Yatra 🙏',
+      subtitle: 'Pilgrimage Yatras, Temple Darshans & Sangha',
+      badgeText: 'YATRA INVITE',
+      message: 'Jai Shree Ram! 🙏 Join me on Bharat Pray for sacred Pilgrimage Yatras, Temple Darshans & Sangha Groups.',
+      subject: 'Join Bharat Pray Yatra',
+    );
   }
 
   void _showNewContactDialog() {

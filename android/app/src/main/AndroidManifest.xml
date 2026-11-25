@@ -55,6 +55,33 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Custom Scheme Deep Links: bharatpray://live-darshan/<id>, etc. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="bharatpray" />
+            </intent-filter>
+            <!-- HTTPS App Links: https://api.bharatpray.com/share/... & https://bharatpray.com/... -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="api.bharatpray.com" android:pathPrefix="/share" />
+                <data android:scheme="https" android:host="api.bharatpray.com" android:pathPrefix="/live-darshan" />
+                <data android:scheme="https" android:host="bharatpray.com" android:pathPrefix="/live-darshan" />
+                <data android:scheme="https" android:host="bharatpray.com" android:pathPrefix="/share" />
+                <data android:scheme="https" android:host="bharatpray.com" android:pathPrefix="/bhajan" />
+                <data android:scheme="https" android:host="bharatpray.com" android:pathPrefix="/mandal" />
+                <data android:scheme="https" android:host="bharatpray.com" android:pathPrefix="/invite" />
+            </intent-filter>
+            <!-- Local Wi-Fi Dev Share Link Support -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" android:host="192.168.29.73" android:port="3020" android:pathPrefix="/share" />
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../services/share_service.dart';
 import 'package:video_player/video_player.dart';
 import '../../core/localization/dynamic_translation_service.dart';
 import '../../core/localization/language_manager.dart';
@@ -1273,9 +1274,18 @@ class _MandalProfileScreenState extends State<MandalProfileScreen> with SingleTi
                         style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14),
                       ),
                       onPressed: () {
-                        Share.share(
-                          "🚩 Join ${_mandalName} on Bharat Pray App!\nWatch Live Aarti & Daily Darshan.\n\nExplore Mandal: https://bharatpray.app/mandal",
-                          subject: "Share Mandal Profile",
+                        AppShareService.shareContent(
+                          type: 'mandal',
+                          id: _mandalName,
+                          title: _mandalName,
+                          subtitle: 'Watch Live Aarti & Daily Darshan 🙏',
+                          badgeText: 'UTSAV MANDAL',
+                          imageUrls: [
+                            if (widget.coverUrl != null && widget.coverUrl!.isNotEmpty) widget.coverUrl!,
+                            if (widget.avatarUrl != null && widget.avatarUrl!.isNotEmpty) widget.avatarUrl!,
+                          ],
+                          message: '🚩 Join $_mandalName on Bharat Pray App! Watch Live Aarti & Daily Darshan.',
+                          subject: 'Share Mandal Profile',
                         );
                       },
                     ),
@@ -2717,9 +2727,15 @@ class _MandalPostsFeedScreenState extends State<MandalPostsFeedScreen> {
                             IconButton(
                               icon: const Icon(Icons.send_rounded, color: Color(0xFF2E2A36), size: 22),
                               onPressed: () {
-                                Share.share(
-                                  "🚩 Check out this post by ${widget.mandalName} on Bharat Pray!\n\n${post.caption}\n\nDownload App: https://bharatpray.app/post/${post.id}",
-                                  subject: "Bharat Pray Mandal Post",
+                                AppShareService.shareContent(
+                                  type: 'post',
+                                  id: post.id,
+                                  title: widget.mandalName,
+                                  subtitle: post.caption,
+                                  badgeText: 'MANDAL POST',
+                                  imageUrls: [post.imageUrl],
+                                  message: '🚩 Check out this post by ${widget.mandalName} on Bharat Pray!\n\n${post.caption}',
+                                  subject: 'Bharat Pray Mandal Post',
                                 );
                               },
                             ),
@@ -3158,9 +3174,14 @@ class _SingleReelViewState extends State<_SingleReelView> {
                 IconButton(
                   icon: const Icon(Icons.send_rounded, color: Colors.white, size: 30),
                   onPressed: () {
-                    Share.share(
-                      "🕉️ Check out this Divine Reel by ${widget.mandalName} on Bharat Pray!\n\n${widget.reel.title}\n\nDownload App: https://bharatpray.app/reel/${widget.reel.id}",
-                      subject: "Bharat Pray Reel",
+                    AppShareService.shareContent(
+                      type: 'reel',
+                      id: widget.reel.id,
+                      title: widget.reel.title,
+                      subtitle: widget.mandalName,
+                      badgeText: 'DIVINE REEL',
+                      message: '🕉️ Check out this Divine Reel by ${widget.mandalName} on Bharat Pray!\n\n${widget.reel.title}',
+                      subject: 'Bharat Pray Reel',
                     );
                   },
                 ),

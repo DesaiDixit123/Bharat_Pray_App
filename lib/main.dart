@@ -7,6 +7,7 @@ import 'core/localization/dynamic_translation_service.dart';
 import 'l10n/app_localizations.dart';
 import 'screens/splash_screen.dart';
 import 'services/fcm_notification_service.dart';
+import 'services/deep_link_service.dart';
 
 import 'dart:io';
 
@@ -35,6 +36,9 @@ void main() async {
   } catch (e) {
     debugPrint('⚠️ Firebase Initialization Notice: $e');
   }
+
+  // Initialize Deep Link Service (handles share links on cold & warm start)
+  await DeepLinkService.instance.initialize();
 
   // Lock orientation to portrait
   SystemChrome.setPreferredOrientations([

@@ -14,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/share_service.dart';
 
 class LiveDarshanScreen extends StatefulWidget {
   final String darshanId;
@@ -48,6 +49,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
   String _userName = '';
   String _userAvatar = '';
   String _bannerImageUrl = '';
+  String _resolvedTempleName = '';
   File? _cachedBannerFile;
 
   // Social Stats States
@@ -197,7 +199,8 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
       }
       final String templeTitle = widget.templeName.isNotEmpty 
           ? widget.templeName 
-          : ((details['temple_details']?['name'] ?? 'Live Darshan').toString());
+          : ((details['temple_details']?['name'] ?? details['darshan_details']?['name'] ?? 'Live Darshan').toString());
+      _resolvedTempleName = templeTitle;
       _resolveBannerImageFile(templeTitle);
 
       // Extract Youtube Video ID
@@ -744,40 +747,110 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
         Offset(margin + 34.0 * scale, margin + (badgeHeight - badgeTextPainter.height) / 2),
       );
 
-      // Bharat Pray Branding Top Right
-      final brandPainter = TextPainter(
-        text: TextSpan(
-          children: [
-            TextSpan(
-              text: 'Bharat',
-              style: TextStyle(
-                color: const Color(0xFFFF9933),
-                fontSize: 17.0 * scale,
-                fontWeight: FontWeight.w900,
-                shadows: const [
-                  Shadow(color: Colors.black87, blurRadius: 4, offset: Offset(0, 1)),
-                ],
+      // Bharat Pray App Logo in Top-Right Corner
+      bool drewLogoImage = false;
+      try {
+        final logoByteData = await rootBundle.load('assets/images/app_logo.png');
+        final logoCodec = await ui.instantiateImageCodec(logoByteData.buffer.asUint8List());
+        final logoFrame = await logoCodec.getNextFrame();
+        final logoImage = logoFrame.image;
+
+        final double logoBoxSize = 76.0 * scale;
+        final double logoLeft = width - logoBoxSize - margin;
+        final double logoTop = margin;
+        final Rect logoBgRect = Rect.fromLTWH(logoLeft, logoTop, logoBoxSize, logoBoxSize);
+        final RRect logoBgRRect = RRect.fromRectAndRadius(
+          logoBgRect,
+          Radius.circular(18.0 * scale),
+        );
+
+        // Soft shadow behind logo badge
+        canvas.drawRRect(
+          logoBgRRect.shift(Offset(0, 4.0 * scale)),
+          Paint()
+            ..color = Colors.black.withOpacity(0.45)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, 8.0 * scale),
+        );
+
+        // Clean frosted dark-plum/white container so logo pops on any banner
+        canvas.drawRRect(
+          logoBgRRect,
+          Paint()..color = const Color(0xFF1A0D2E).withOpacity(0.88),
+        );
+
+        // Golden saffron border
+        canvas.drawRRect(
+          logoBgRRect,
+          Paint()
+            ..color = const Color(0xFFFF9933).withOpacity(0.85)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.2 * scale,
+        );
+
+        // Fit app_logo.png inside the badge with clean padding
+        final double pad = 8.0 * scale;
+        final double innerSize = logoBoxSize - (pad * 2);
+        final double srcW = logoImage.width.toDouble();
+        final double srcH = logoImage.height.toDouble();
+        final double fitScale = (innerSize / srcW) < (innerSize / srcH)
+            ? (innerSize / srcW)
+            : (innerSize / srcH);
+        final double drawW = srcW * fitScale;
+        final double drawH = srcH * fitScale;
+        final Rect dstRect = Rect.fromLTWH(
+          logoLeft + (logoBoxSize - drawW) / 2,
+          logoTop + (logoBoxSize - drawH) / 2,
+          drawW,
+          drawH,
+        );
+
+        canvas.drawImageRect(
+          logoImage,
+          Rect.fromLTWH(0, 0, srcW, srcH),
+          dstRect,
+          Paint()..filterQuality = FilterQuality.high,
+        );
+        drewLogoImage = true;
+      } catch (logoErr) {
+        debugPrint('Logo overlay fallback: $logoErr');
+      }
+
+      if (!drewLogoImage) {
+        // Fallback text branding if logo asset fails
+        final brandPainter = TextPainter(
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: 'Bharat',
+                style: TextStyle(
+                  color: const Color(0xFFFF9933),
+                  fontSize: 17.0 * scale,
+                  fontWeight: FontWeight.w900,
+                  shadows: const [
+                    Shadow(color: Colors.black87, blurRadius: 4, offset: Offset(0, 1)),
+                  ],
+                ),
               ),
-            ),
-            TextSpan(
-              text: 'Pray',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 17.0 * scale,
-                fontWeight: FontWeight.w900,
-                shadows: const [
-                  Shadow(color: Colors.black87, blurRadius: 4, offset: Offset(0, 1)),
-                ],
+              TextSpan(
+                text: 'Pray',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17.0 * scale,
+                  fontWeight: FontWeight.w900,
+                  shadows: const [
+                    Shadow(color: Colors.black87, blurRadius: 4, offset: Offset(0, 1)),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      brandPainter.paint(
-        canvas,
-        Offset(width - brandPainter.width - margin, margin + 12.0 * scale),
-      );
+            ],
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        brandPainter.paint(
+          canvas,
+          Offset(width - brandPainter.width - margin, margin + 12.0 * scale),
+        );
+      }
 
       // 5. Temple Title Bottom Left
       final titlePainter = TextPainter(
@@ -818,7 +891,7 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
 
       final tempDir = await getTemporaryDirectory();
       final String cleanId = _darshanId.isNotEmpty ? _darshanId : 'current';
-      final cacheFile = File('${tempDir.path}/live_darshan_banner_$cleanId.png');
+      final cacheFile = File('${tempDir.path}/live_darshan_banner_logo_$cleanId.png');
       if (await cacheFile.exists() && await cacheFile.length() > 0) {
         _cachedBannerFile = cacheFile;
         return cacheFile;
@@ -896,9 +969,11 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
         debugPrint('Failed to increment share count: $e');
       });
 
-      final String templeTitle = widget.templeName.isNotEmpty ? widget.templeName : 'Live Darshan';
-      final String shareUrl = "https://bharatpray.com/live-darshan/$_darshanId";
-      final String shareText = "🙏 Watch Live Darshan of $templeTitle on Bharat Pray app!\n\n$shareUrl";
+      final String templeTitle = widget.templeName.isNotEmpty
+          ? widget.templeName
+          : (_resolvedTempleName.isNotEmpty ? _resolvedTempleName : 'Live Darshan');
+      final String shareUrl = AppShareService.buildShareUrl(type: 'live-darshan', id: _darshanId);
+      final String shareText = "🙏 Watch Live Darshan of $templeTitle on Bharat Pray app!\n\nTap to open in Bharat Pray:\n$shareUrl";
 
       // Resolve live banner image file
       final bannerFile = await _resolveBannerImageFile(templeTitle);
@@ -909,28 +984,16 @@ class _LiveDarshanScreenState extends State<LiveDarshanScreen> {
           mimeType: 'image/png',
           name: 'live_darshan_banner.png',
         );
-        final result = await Share.shareXFiles(
+        await Share.shareXFiles(
           [xFile],
           text: shareText,
           subject: 'Live Darshan - $templeTitle',
         );
-        if (result.status == ShareResultStatus.dismissed && mounted) {
-          _showShareOptionsBottomSheet(templeTitle, shareText, shareUrl, bannerFile);
-        }
       } else {
-        final result = await Share.share(shareText, subject: 'Live Darshan - $templeTitle');
-        if (result.status == ShareResultStatus.dismissed && mounted) {
-          _showShareOptionsBottomSheet(templeTitle, shareText, shareUrl, null);
-        }
+        await Share.share(shareText, subject: 'Live Darshan - $templeTitle');
       }
     } catch (e) {
       debugPrint('Error sharing stream: $e');
-      final String templeTitle = widget.templeName.isNotEmpty ? widget.templeName : 'Live Darshan';
-      final String shareUrl = "https://bharatpray.com/live-darshan/$_darshanId";
-      final String shareText = "🙏 Watch Live Darshan of $templeTitle on Bharat Pray app!\n\n$shareUrl";
-      if (mounted) {
-        _showShareOptionsBottomSheet(templeTitle, shareText, shareUrl, _cachedBannerFile);
-      }
     }
   }
 

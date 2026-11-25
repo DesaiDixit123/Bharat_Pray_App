@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../services/share_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/localization/localized_api_helper.dart';
@@ -881,8 +882,16 @@ class _BhajanLibraryHubScreenState extends State<BhajanLibraryHubScreen> {
                 if (action == 'playlist') {
                   BhajanLibraryService.showAddToPlaylistSheet(context, track);
                 } else if (action == 'share') {
-                  final shareText = '🙏 Listen to divine bhajan "${track.title}" by ${track.singer} on Bharat Pray app!';
-                  await Share.share(shareText, subject: track.title);
+                  await AppShareService.shareContent(
+                    type: 'bhajan',
+                    id: track.id,
+                    title: track.title,
+                    subtitle: track.singer,
+                    badgeText: 'BHAJAN',
+                    imageUrls: [track.imagePath],
+                    message: '🙏 Listen to divine bhajan "${track.title}" by ${track.singer} on Bharat Pray app!',
+                    subject: track.title,
+                  );
                 } else if (action == 'remove_download') {
                   await BhajanLibraryService.instance.removeDownload(track.id);
                   if (mounted) {
