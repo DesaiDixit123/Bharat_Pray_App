@@ -81,6 +81,9 @@ flutter:
     - assets/images/
     - assets/images/devotional/
     - assets/images/jap/
+    - assets/audio/ram_special_voice_1.mp3
+    - assets/audio/ram_special_voice_2.mp3
+    - assets/audio/ram_special_voice_3.mp3
     # Heavy videos and audio are streamed directly from Database / Server CDN:
     # - assets/videos/
     # - assets/audio/

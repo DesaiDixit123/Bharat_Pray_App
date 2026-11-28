@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/jap_models.dart';
 import '../models/tts_voice_model.dart';
 import 'tts_service.dart';
 
@@ -132,6 +134,76 @@ class JapVoiceService {
     } catch (e) {
       debugPrint('[JapVoiceService] Error saving voice: $e');
     }
+  }
+
+  static String _perJapPrefKey(String japId) => '${_prefKey}_$japId';
+
+  Future<String> loadSelectedVoiceForJap(
+    String japId,
+    List<JapVoiceOption> options,
+  ) async {
+    if (options.isEmpty) return loadSelectedVoiceId();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_perJapPrefKey(japId));
+      if (saved != null && options.any((v) => v.id == saved)) return saved;
+    } catch (e) {
+      debugPrint('[JapVoiceService] Error loading per-jap voice: $e');
+    }
+    return options.first.id;
+  }
+
+  Future<void> saveSelectedVoiceForJap(String japId, String voiceId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_perJapPrefKey(japId), voiceId);
+    } catch (e) {
+      debugPrint('[JapVoiceService] Error saving per-jap voice: $e');
+    }
+  }
+
+  static Source? immediateFallbackSource(JapVoiceOption option) {
+    if (option.assetPath.isNotEmpty) {
+      return AssetSource(option.assetPath.replaceFirst('assets/', ''));
+    }
+    if (option.audioUrl.startsWith('assets/')) {
+      return AssetSource(option.audioUrl.replaceFirst('assets/', ''));
+    }
+    if (option.audioUrl.startsWith('http://') ||
+        option.audioUrl.startsWith('https://')) {
+      return UrlSource(option.audioUrl);
+    }
+    return null;
+  }
+
+  /// Resolves a custom per-Jap voice option to a local cached file when available,
+  /// falling back to the bundled asset or remote URL so playback never stalls.
+  Future<Source?> resolveVoiceOptionSource(JapVoiceOption option) async {
+    try {
+      if (option.audioUrl.startsWith('http://') ||
+          option.audioUrl.startsWith('https://')) {
+        final dir = await getTemporaryDirectory();
+        final clipDir = Directory('${dir.path}/jap_voice');
+        if (!clipDir.existsSync()) clipDir.createSync(recursive: true);
+
+        final safeId = option.id.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+        final clip = File('${clipDir.path}/opt_$safeId.mp3');
+        if (clip.existsSync() && clip.lengthSync() > 0) {
+          return DeviceFileSource(clip.path);
+        }
+
+        final response = await http
+            .get(Uri.parse(option.audioUrl))
+            .timeout(const Duration(seconds: 6));
+        if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+          await clip.writeAsBytes(response.bodyBytes, flush: true);
+          return DeviceFileSource(clip.path);
+        }
+      }
+    } catch (e) {
+      debugPrint('[JapVoiceService] Error resolving voice option ${option.id}: $e');
+    }
+    return immediateFallbackSource(option);
   }
 
   /// Maps deity mantra text (Gujarati/English/Hindi) to exact Devanagari with

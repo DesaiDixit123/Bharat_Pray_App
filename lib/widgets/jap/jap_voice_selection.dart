@@ -9,6 +9,7 @@ import '../../models/jap_theme_config.dart';
 import '../../services/api_service.dart';
 import '../../services/jap_voice_service.dart';
 import '../granth/granth_voice_selector_sheet.dart';
+import 'jap_custom_voice_selector_sheet.dart';
 
 /// Shared voice selection for the Jap screens: loads the chosen voice, prepares
 /// its mantra clip, and provides the button that opens the voice sheet.
@@ -16,8 +17,19 @@ mixin JapVoiceSelection<T extends StatefulWidget> on State<T> {
   final JapVoiceService _japVoiceService = JapVoiceService();
   String _japVoiceId = JapVoiceService.defaultVoiceId;
   String? japChantClipPath;
+  Source? _customVoiceSource;
 
   JapConfig get japEntry;
+
+  bool get _hasCustomVoiceOptions => japEntry.voiceOptions.isNotEmpty;
+
+  JapVoiceOption? get _selectedCustomVoiceOption {
+    if (!_hasCustomVoiceOptions) return null;
+    for (final opt in japEntry.voiceOptions) {
+      if (opt.id == _japVoiceId) return opt;
+    }
+    return japEntry.voiceOptions.first;
+  }
 
   late final JapThemeConfig _japTheme = JapThemeConfig.resolveFromEntry(
     name: japEntry.displayName.isNotEmpty ? japEntry.displayName : japEntry.name,
@@ -30,6 +42,9 @@ mixin JapVoiceSelection<T extends StatefulWidget> on State<T> {
   String get japEffectiveImageAsset {
     if (japEntry.isCustom && japEntry.darshanImageUrl.isNotEmpty) {
       return japEntry.darshanImageUrl;
+    }
+    if (japEntry.localDarshanAsset != null && japEntry.localDarshanAsset!.isNotEmpty) {
+      return japEntry.localDarshanAsset!;
     }
     if (japEntry.darshanImageUrl.isNotEmpty &&
         japEntry.darshanImageUrl.startsWith('assets/')) {
@@ -70,6 +85,15 @@ mixin JapVoiceSelection<T extends StatefulWidget> on State<T> {
 
   /// The selected voice's clip, or this mantra's bundled clip until it is ready.
   Source get japChantSource {
+    if (_hasCustomVoiceOptions) {
+      if (_customVoiceSource != null) return _customVoiceSource!;
+      final opt = _selectedCustomVoiceOption;
+      if (opt != null) {
+        final fallback = JapVoiceService.immediateFallbackSource(opt);
+        if (fallback != null) return fallback;
+      }
+    }
+
     // 1. If the selected voice clip is ready, ALWAYS use it!
     // This ensures whichever voice the user chooses (Charon, Fenrir, Puck, Kore, etc.) plays immediately
     final clip = japChantClipPath;
@@ -92,6 +116,28 @@ mixin JapVoiceSelection<T extends StatefulWidget> on State<T> {
   }
 
   Future<void> prepareJapVoice() async {
+    if (_hasCustomVoiceOptions) {
+      final voiceId = await _japVoiceService.loadSelectedVoiceForJap(
+        japEntry.id,
+        japEntry.voiceOptions,
+      );
+      if (!mounted) return;
+      final selectedOption = japEntry.voiceOptions.firstWhere(
+        (v) => v.id == voiceId,
+        orElse: () => japEntry.voiceOptions.first,
+      );
+      setState(() {
+        _japVoiceId = selectedOption.id;
+        _customVoiceSource = JapVoiceService.immediateFallbackSource(selectedOption);
+      });
+      final resolvedSource = await _japVoiceService.resolveVoiceOptionSource(selectedOption);
+      if (!mounted || selectedOption.id != _japVoiceId) return;
+      if (resolvedSource != null) {
+        setState(() => _customVoiceSource = resolvedSource);
+      }
+      return;
+    }
+
     final voiceId = await _japVoiceService.loadSelectedVoiceId();
     if (!mounted) return;
     setState(() => _japVoiceId = voiceId);
@@ -112,11 +158,27 @@ mixin JapVoiceSelection<T extends StatefulWidget> on State<T> {
 
   void _openJapVoiceSheet() {
     HapticFeedback.lightImpact();
+    if (_hasCustomVoiceOptions) {
+      JapCustomVoiceSelectorSheet.show(
+        context,
+        japId: japEntry.id,
+        voiceOptions: japEntry.voiceOptions,
+        onVoiceChanged: prepareJapVoice,
+      );
+      return;
+    }
     GranthVoiceSelectorSheet.show(
       context,
       japMantraText: _japTheme.mantraText,
       onVoiceChanged: prepareJapVoice,
     );
+  }
+
+  String get _activeVoiceButtonLabel {
+    if (_hasCustomVoiceOptions) {
+      return _selectedCustomVoiceOption?.name ?? 'Select Voice';
+    }
+    return JapVoiceService.voiceName(_japVoiceId);
   }
 
   Widget buildJapVoiceButton() {
@@ -147,7 +209,7 @@ mixin JapVoiceSelection<T extends StatefulWidget> on State<T> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Voice: ${JapVoiceService.voiceName(_japVoiceId)}',
+                  'Voice: $_activeVoiceButtonLabel',
                   style: GoogleFonts.outfit(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,

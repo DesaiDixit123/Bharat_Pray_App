@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../core/localization/localized_api_helper.dart';
+import 'tts_voice_model.dart';
 
 enum ParticleShapeType { petal, leaf, feather, spark, ash, flame, custom }
 enum DivineSymbolType { trishul, shankh, flute, bowArrow, lotus, chakra, om, none }
@@ -240,6 +241,58 @@ class EffectPack {
   }
 }
 
+class JapVoiceOption {
+  final String id;
+  final String name;
+  final String title;
+  final String description;
+  final String gender;
+  final String audioUrl;
+  final String assetPath;
+
+  const JapVoiceOption({
+    required this.id,
+    required this.name,
+    this.title = '',
+    this.description = '',
+    this.gender = 'Male',
+    this.audioUrl = '',
+    this.assetPath = '',
+  });
+
+  factory JapVoiceOption.fromJson(Map<String, dynamic> json) {
+    final rawAudio = (json['audioUrl'] ?? '').toString().trim();
+    final rawAsset = (json['assetPath'] ?? '').toString().trim();
+    return JapVoiceOption(
+      id: (json['id'] ?? json['_id'] ?? '').toString(),
+      name: (json['name'] ?? '').toString(),
+      title: (json['title'] ?? '').toString(),
+      description: (json['description'] ?? '').toString(),
+      gender: (json['gender'] ?? 'Male').toString(),
+      audioUrl: rawAudio.isNotEmpty ? ApiService.resolveImageUrl(rawAudio) : '',
+      assetPath: rawAsset,
+    );
+  }
+
+  TtsVoice toTtsVoice({bool isDefault = false}) {
+    return TtsVoice(
+      id: id,
+      name: name,
+      gender: gender.isNotEmpty ? gender : 'Male',
+      locale: 'hi-IN',
+      tier: 'Jap Voice',
+      languages: const ['Hindi', 'Gujarati'],
+      title: title,
+      description: description,
+      previewUrl: audioUrl,
+      defaultRate: 1.0,
+      isDefault: isDefault,
+      languageCategory: 'Hindi',
+      localAudioSample: assetPath.isNotEmpty ? assetPath : null,
+    );
+  }
+}
+
 class JapConfig {
   final String id;
   final String name;
@@ -251,6 +304,7 @@ class JapConfig {
   final String? templeId;
   final String thumbnailUrl;
   final String darshanImageUrl;
+  final String? localDarshanAsset;
   final String? backgroundMusic;
   final String shlokText;
   final String? shlokAudioUrl;
@@ -259,11 +313,13 @@ class JapConfig {
   final EffectPack effectPack;
   final String? particleShape;
   final bool isCustom;
+  final bool isTemporary;
   final String darshanVideoUrl;
   final bool voiceEnabled;
   final bool musicEnabled;
   final bool isActive;
   final int displayOrder;
+  final List<JapVoiceOption> voiceOptions;
 
   JapConfig({
     required this.id,
@@ -276,6 +332,7 @@ class JapConfig {
     this.templeId,
     required this.thumbnailUrl,
     required this.darshanImageUrl,
+    this.localDarshanAsset,
     this.backgroundMusic,
     required this.shlokText,
     this.shlokAudioUrl,
@@ -284,11 +341,13 @@ class JapConfig {
     required this.effectPack,
     this.particleShape,
     this.isCustom = false,
+    this.isTemporary = false,
     this.darshanVideoUrl = '',
     this.voiceEnabled = true,
     this.musicEnabled = true,
     this.isActive = true,
     this.displayOrder = 0,
+    this.voiceOptions = const [],
   })  : displayName = displayName ?? _resolveDisplayName(name),
         fullName = fullName ?? _resolveFullName(name),
         mantraText = mantraText ?? shlokText,
@@ -331,6 +390,9 @@ class JapConfig {
 
   static String defaultDeityThumbnail(String name) {
     final n = name.toLowerCase();
+    if (n.contains('ram voice') || n.contains('ram_special') || n.contains('voice edition')) {
+      return 'assets/images/jap/ram_special_cover.webp';
+    }
     if (n.contains('swaminarayan')) return 'assets/images/jap/swaminarayan_thumbnail.webp';
     if (n.contains('khatu') || n.contains('shyam')) return 'assets/images/jap/khatu_thumbnail.webp';
     if (n.contains('lakshmi') || n.contains('laxmi')) return 'assets/images/jap/lakshmi_thumbnail.webp';
@@ -348,6 +410,9 @@ class JapConfig {
 
   static String defaultDeityCover(String name) {
     final n = name.toLowerCase();
+    if (n.contains('ram voice') || n.contains('ram_special') || n.contains('voice edition')) {
+      return 'assets/images/jap/ram_special_cover.webp';
+    }
     if (n.contains('swaminarayan')) return 'assets/images/jap/swaminarayan_cover.webp';
     if (n.contains('khatu') || n.contains('shyam')) return 'assets/images/jap/khatu_cover.webp';
     if (n.contains('lakshmi') || n.contains('laxmi')) return 'assets/images/jap/lakshmi_cover.webp';
@@ -396,6 +461,18 @@ class JapConfig {
     final rawMantra = LocalizedApiHelper.parse(json['mantraText'] ?? json['mantra_text'] ?? json['shlokText'] ?? '');
     final rawVoice = json['voiceText']?.toString() ?? json['voice_text']?.toString() ?? rawMantra;
     final rawMusic = _sanitizeUrl(json['backgroundMusic']?.toString() ?? json['background_music']?.toString() ?? '');
+    final rawVoiceOptions = json['voiceOptions'];
+    final parsedVoiceOptions = rawVoiceOptions is List
+        ? rawVoiceOptions
+            .whereType<Map>()
+            .map((e) => JapVoiceOption.fromJson(Map<String, dynamic>.from(e)))
+            .where((v) => v.id.isNotEmpty)
+            .toList()
+        : const <JapVoiceOption>[];
+    final localDarshan = (darshan.contains('ram_special') ||
+            dispName.toUpperCase().contains('RAM VOICE'))
+        ? 'assets/images/jap/ram_special_cover.webp'
+        : null;
 
     return JapConfig(
       id: json['_id'] ?? json['id'] ?? '',
@@ -408,6 +485,7 @@ class JapConfig {
       templeId: json['temple'] is Map ? json['temple']['_id']?.toString() : json['temple']?.toString(),
       thumbnailUrl: thumb,
       darshanImageUrl: darshan,
+      localDarshanAsset: localDarshan,
       backgroundMusic: rawMusic.isNotEmpty ? rawMusic : null,
       shlokText: rawMantra,
       shlokAudioUrl: _sanitizeUrl(json['shlokAudio'] ?? json['shlokAudioUrl'] ?? ''),
@@ -416,11 +494,13 @@ class JapConfig {
       effectPack: effectPack,
       particleShape: pShape,
       isCustom: json['isCustom'] == true || json['is_custom'] == true || (json['_id'] ?? json['id'] ?? '').toString().startsWith('custom_'),
+      isTemporary: json['isTemporary'] == true,
       darshanVideoUrl: _sanitizeUrl(json['darshanVideo'] ?? ''),
       voiceEnabled: json['voiceEnabled'] ?? json['voice_enabled'] ?? true,
       musicEnabled: json['musicEnabled'] ?? json['music_enabled'] ?? true,
       isActive: json['isActive'] ?? json['is_active'] ?? json['status'] ?? true,
       displayOrder: (json['displayOrder'] is num) ? (json['displayOrder'] as num).toInt() : (json['display_order'] is num ? (json['display_order'] as num).toInt() : 0),
+      voiceOptions: parsedVoiceOptions,
     );
   }
 }

@@ -154,16 +154,7 @@ class _CinematicJapScreenState extends State<CinematicJapScreen>
       ? widget.entry.mantraText
       : (widget.entry.shlokText.isNotEmpty ? widget.entry.shlokText : _theme.mantraText);
 
-  String get _effectiveImageAsset {
-    if (widget.entry.isCustom && widget.entry.darshanImageUrl.isNotEmpty) {
-      return widget.entry.darshanImageUrl;
-    }
-    if (widget.entry.darshanImageUrl.isNotEmpty &&
-        widget.entry.darshanImageUrl.startsWith('assets/')) {
-      return widget.entry.darshanImageUrl;
-    }
-    return _theme.coverAsset;
-  }
+  String get _effectiveImageAsset => japEffectiveImageAsset;
 
   /// Returns the local asset path for the live darshan video of this deity.
   /// Returns null if no local video is available (e.g. custom jap or deity not yet produced).

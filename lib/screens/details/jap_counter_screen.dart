@@ -1506,7 +1506,12 @@ class _JapCard extends StatelessWidget {
               child: SizedBox(
                 width: 140,
                 height: double.infinity,
-                child: _buildImage(entry.thumbnailUrl, deityName: entry.name),
+                child: _buildImage(
+                  (entry.localDarshanAsset != null && entry.localDarshanAsset!.isNotEmpty)
+                      ? entry.localDarshanAsset!
+                      : entry.thumbnailUrl,
+                  deityName: entry.name,
+                ),
               ),
             ),
 
